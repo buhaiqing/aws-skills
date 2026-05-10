@@ -150,7 +150,67 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml    # 密钥策略/配置示例
 │
-└── aws-[service]-ops/             # 后续服务技能...
+├── aws-route53-ops/               # Route53 操作技能
+│   ├── SKILL.md                   # 精简版 - DNS/Hosted Zone 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Route53 CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # Route53 SDK 代码示例
+│   │   ├── core-concepts.md       # DNS, 路由策略
+│   │   └── troubleshooting.md     # Route53 故障排查
+│   └── assets/
+│       └── example-config.yaml    # DNS/健康检查配置示例
+│
+├── aws-secretsmanager-ops/        # Secrets Manager 操作技能
+│   ├── SKILL.md                   # 精简版 - Secret/Rotation 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Secrets Manager CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # Secrets Manager SDK 代码示例
+│   │   ├── core-concepts.md       # 密钥, 自动轮换
+│   │   └── troubleshooting.md     # Secrets Manager 故障排查
+│   └── assets/
+│       └── example-config.yaml    # 密钥/轮换配置示例
+│
+├── aws-sqs-ops/                   # SQS 操作技能
+│   ├── SKILL.md                   # 精简版 - Queue/Message 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SQS CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # SQS SDK 代码示例
+│   │   ├── core-concepts.md       # 队列, 死信队列, FIFO
+│   │   └── troubleshooting.md     # SQS 故障排查
+│   └── assets/
+│       └── example-config.yaml    # 队列/消息配置示例
+│
+├── aws-sns-ops/                   # SNS 操作技能
+│   ├── SKILL.md                   # 精简版 - Topic/Subscription 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SNS CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # SNS SDK 代码示例
+│   │   ├── core-concepts.md       # 主题, 订阅, 过滤
+│   │   └── troubleshooting.md     # SNS 故障排查
+│   └── assets/
+│       └── example-config.yaml    # 主题/订阅配置示例
+│
+├── aws-cloudfront-ops/              # CloudFront 操作技能
+│   ├── SKILL.md                     # 精简版 - CDN 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md         # CloudFront CLI 命令详解
+│   │   ├── boto3-sdk-usage.md       # CloudFront SDK 代码示例
+│   │   ├── core-concepts.md         # CDN, 缓存行为
+│   │   └── troubleshooting.md       # CloudFront 故障排查
+│   └── assets/
+│       └── example-config.yaml      # 缓存/来源配置示例
+│
+├── aws-stepfunctions-ops/           # Step Functions 操作技能
+│   ├── SKILL.md                     # 精简版 - 状态机操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md         # Step Functions CLI 命令详解
+│   │   ├── boto3-sdk-usage.md       # Step Functions SDK 代码示例
+│   │   ├── core-concepts.md         # 状态机, 工作流
+│   │   └── troubleshooting.md       # Step Functions 故障排查
+│   └── assets/
+│       └── example-config.yaml      # 工作流配置示例
+│
+└── aws-[service]-ops/               # 后续服务技能...
 ```
 
 ## 设计原则
@@ -240,6 +300,12 @@ aws sts get-caller-identity --output json
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 |
 | aws-kms-ops | KMS (加密) | ✅ 完成 |
+| aws-route53-ops | Route53 (DNS) | ✅ 完成 |
+| aws-secretsmanager-ops | Secrets Manager | ✅ 完成 |
+| aws-sqs-ops | SQS (消息队列) | ✅ 完成 |
+| aws-sns-ops | SNS (通知) | ✅ 完成 |
+| aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 |
+| aws-stepfunctions-ops | Step Functions | ✅ 完成 |
 
 ## 参考
 

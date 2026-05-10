@@ -1,0 +1,238 @@
+# Route53 Example Configurations
+
+Configuration examples for AWS Route53 operations.
+
+## Hosted Zone Configuration
+
+### Public Zone
+```yaml
+hosted_zone:
+  name: "example.com"
+  caller_reference: "unique-uuid-12345"
+  
+  config:
+    comment: "Production domain"
+    private_zone: false
+  
+  name_servers:
+    - ns-1234.awsdns-56.net
+    - ns-5678.awsdns-90.com
+    - ns-9012.awsdns-34.org
+    - ns-3456.awsdns-78.co.uk
+```
+
+### Private Zone
+```yaml
+hosted_zone:
+  name: "internal.example.com"
+  caller_reference: "unique-uuid-67890"
+  
+  vpc:
+    vpc_region: "us-east-1"
+    vpc_id: "vpc-12345678"
+  
+  config:
+    comment: "Internal VPC DNS"
+    private_zone: true
+```
+
+## Record Sets
+
+### A Record
+```yaml
+record_set:
+  zone_id: "Z123456789"
+  name: "www.example.com"
+  type: "A"
+  ttl: 300
+  resource_records:
+    - value: "192.0.2.1"
+    - value: "192.0.2.2"
+```
+
+### CNAME Record
+```yaml
+record_set:
+  zone_id: "Z123456789"
+  name: "blog.example.com"
+  type: "CNAME"
+  ttl: 300
+  resource_records:
+    - value: "myblog.wordpress.com"
+```
+
+### Alias Record (ELB)
+```yaml
+record_set:
+  zone_id: "Z123456789"
+  name: "app.example.com"
+  type: "A"
+  alias_target:
+    hosted_zone_id: "Z35SXDOTRQ7X7K"  # ELB hosted zone ID
+    dns_name: "my-alb-1234567890.us-east-1.elb.amazonaws.com"
+    evaluate_target_health: true
+```
+
+### MX Record
+```yaml
+record_set:
+  zone_id: "Z123456789"
+  name: "example.com"
+  type: "MX"
+  ttl: 300
+  resource_records:
+    - value: "10 mail1.example.com"
+    - value: "20 mail2.example.com"
+```
+
+## Failover Configuration
+
+### Primary/Secondary Failover
+```yaml
+failover_records:
+  zone_id: "Z123456789"
+  health_check_id: "12345678-abcd-1234-abcd-123456789012"
+  
+  primary:
+    name: "api.example.com"
+    type: "A"
+    failover: "PRIMARY"
+    ttl: 60
+    resource_records:
+      - value: "192.0.2.1"
+    health_check_id: "{{health-check-id-1}}"
+  
+  secondary:
+    name: "api.example.com"
+    type: "A"
+    failover: "SECONDARY"
+    ttl: 60
+    resource_records:
+      - value: "192.0.2.2"
+    health_check_id: "{{health-check-id-2}}"
+```
+
+## Health Check Configuration
+
+### HTTP Health Check
+```yaml
+health_check:
+  caller_reference: "unique-uuid-health-1"
+  
+  config:
+    ip_address: "192.0.2.1"
+    port: 80
+    type: "HTTP"
+    resource_path: "/health"
+    fully_qualified_domain_name: "api.example.com"
+    request_interval: 30
+    failure_threshold: 3
+```
+
+### HTTPS Health Check
+```yaml
+health_check:
+  caller_reference: "unique-uuid-health-2"
+  
+  config:
+    ip_address: "192.0.2.1"
+    port: 443
+    type: "HTTPS"
+    resource_path: "/api/health"
+    fully_qualified_domain_name: "api.example.com"
+    request_interval: 30
+    failure_threshold: 3
+    enable_sni: true
+```
+
+## Complete Workflow
+
+### Create Web Application DNS
+```yaml
+workflow:
+  name: "create-web-dns"
+  
+  steps:
+    # 1. Create hosted zone (if new domain)
+    - step: "create_zone"
+      config:
+        name: "{{user.Domain}}"
+        caller_reference: "{{uuid}}"
+    
+    # 2. Create health check
+    - step: "create_health_check"
+      config:
+        type: "HTTPS"
+        port: 443
+        path: "/health"
+    
+    # 3. Create alias record
+    - step: "create_alias_record"
+      name: "www.{{user.Domain}}"
+      target: "{{user.ELBDNS}}"
+      evaluate_health: true
+    
+    # 4. Create failover records (if multi-region)
+    - step: "create_failover"
+      primary: "{{user.PrimaryIP}}"
+      secondary: "{{user.SecondaryIP}}"
+    
+    # 5. Test DNS
+    - step: "test_dns"
+      name: "www.{{user.Domain}}"
+      expected: "{{user.ExpectedIP}}"
+```
+
+## Latency-based Routing
+
+### Multi-Region Latency Routing
+```yaml
+latency_routing:
+  zone_id: "Z123456789"
+  name: "api.example.com"
+  type: "A"
+  ttl: 60
+  
+  regions:
+    - region: "us-east-1"
+      set_identifier: "us-east"
+      resource_records:
+        - value: "192.0.1.1"
+    
+    - region: "eu-west-1"
+      set_identifier: "eu-west"
+      resource_records:
+        - value: "192.0.2.1"
+    
+    - region: "ap-southeast-1"
+      set_identifier: "ap-southeast"
+      resource_records:
+        - value: "192.0.3.1"
+```
+
+## Geolocation Routing
+
+### Geographic Distribution
+```yaml
+geo_routing:
+  zone_id: "Z123456789"
+  name: "shop.example.com"
+  type: "A"
+  ttl: 60
+  
+  locations:
+    - country_code: "US"
+      set_identifier: "us-store"
+      resource_records:
+        - value: "192.0.1.1"
+    
+    - continent_code: "EU"
+      set_identifier: "europe-store"
+      resource_records:
+        - value: "192.0.2.1"
+    
+    - location: "default"
+      set_identifier: "global-store"
+      resource_records:
+        - value: "192.0.3.1"
+```

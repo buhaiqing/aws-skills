@@ -1,0 +1,129 @@
+# SQS Example Configurations
+
+Configuration examples for AWS SQS.
+
+## Queue Configuration
+
+### Standard Queue
+```yaml
+queue:
+  name: "my-standard-queue"
+  attributes:
+    VisibilityTimeout: "30"
+    MessageRetentionPeriod: "345600"  # 4 days
+    ReceiveMessageWaitTimeSeconds: "20"  # Long polling
+    DelaySeconds: "0"
+```
+
+### FIFO Queue
+```yaml
+queue:
+  name: "my-fifo-queue.fifo"
+  fifo: true
+  attributes:
+    FifoQueue: "true"
+    ContentBasedDeduplication: "true"
+    VisibilityTimeout: "60"
+    MessageRetentionPeriod: "1209600"  # 14 days
+```
+
+### Dead Letter Queue
+```yaml
+queue:
+  name: "my-main-queue"
+  attributes:
+    VisibilityTimeout: "30"
+    RedrivePolicy: |
+      {
+        "deadLetterTargetArn": "arn:aws:sqs:{{region}}:{{account}}:my-dlq",
+        "maxReceiveCount": 3
+      }
+```
+
+## Message Operations
+
+### Send Message
+```yaml
+message:
+  queue_url: "https://sqs.{{region}}.amazonaws.com/{{account}}/my-queue"
+  body: "{{user.MessageBody}}"
+  attributes:
+    type:
+      DataType: String
+      StringValue: order
+    priority:
+      DataType: Number
+      StringValue: "1"
+```
+
+### Receive and Process
+```yaml
+processing:
+  queue_url: "https://sqs.{{region}}.amazonaws.com/{{account}}/my-queue"
+  
+  receive:
+    max_messages: 10
+    wait_time: 20
+    visibility_timeout: 300
+  
+  process:
+    - step: "parse_message"
+    - step: "process_data"
+    - step: "delete_message"
+      condition: "success"
+    - step: "dlq_message"
+      condition: "failure"
+```
+
+## Lambda Trigger
+
+### Lambda Event Source Mapping
+```yaml
+lambda_trigger:
+  function_name: "my-consumer-function"
+  event_source_arn: "arn:aws:sqs:{{region}}:{{account}}:my-queue"
+  
+  batch_size: 10
+  maximum_batching_window_in_seconds: 5
+  
+  function_response_types:
+    - "ReportBatchItemFailures"
+```
+
+## Complete Workflow
+
+### Message Processing Pipeline
+```yaml
+workflow:
+  name: "sqs-processing-pipeline"
+  
+  components:
+    # 1. Producer
+    producer:
+      queue: "input-queue"
+      message_format:
+        id: "{{uuid}}"
+        timestamp: "{{now}}"
+        data: "{{payload}}"
+    
+    # 2. Consumer with DLQ
+    consumer:
+      queue: "input-queue"
+      dlq: "input-queue-dlq"
+      max_receives: 3
+      
+      processing:
+        - validate
+        - transform
+        - store
+      
+      error_handling:
+        retry: 3
+        dlq_after_max_retries: true
+    
+    # 3. Monitor
+    monitoring:
+      queue_depth_alarm: 1000
+      age_of_oldest_message_alarm: 300
+      dlq_alarm: 1
+```

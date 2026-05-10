@@ -1,0 +1,114 @@
+# AWS Secrets Manager Ops Skill
+
+AWS Secrets Manager operational skill for AI Agent automation.
+
+## Triggers
+
+**SHOULD activate when:**
+- User requests secret creation, rotation, or deletion
+- User needs to retrieve secret values
+- User asks about Secrets Manager
+- User needs to configure automatic rotation
+- User mentions "secret", "credential", "password", "API key"
+- User needs cross-account secret access
+
+**SHOULD-NOT activate when:**
+- Parameter Store operations (use `aws-ssm-ops`)
+- KMS key operations (use `aws-kms-ops`)
+
+**Delegation:**
+- KMS → `aws-kms-ops` (encryption key)
+- Lambda → `aws-lambda-ops` (rotation function)
+- IAM → `aws-iam-ops` (access policies)
+
+## Scope
+
+| Operation | Supported | Safety Gate |
+|-----------|-----------|-------------|
+| Create Secret | Yes | None |
+| Get Secret Value | Yes | None |
+| Update Secret | Yes | None |
+| Delete Secret | Yes | **Human confirmation** |
+| Restore Secret | Yes | None |
+| Rotate Secret | Yes | None |
+| Cancel Rotation | Yes | None |
+| Replicate Secret | Yes | None |
+| Tag Secret | Yes | None |
+
+## Variable Convention
+
+| Variable | Source | Example |
+|----------|--------|---------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
+| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
+| `{{user.SecretId}}` | User input | my-secret-id or ARN |
+| `{{user.SecretName}}` | User input | prod/db/password |
+| `{{user.SecretString}}` | User input | Secret value (plain text) |
+| `{{user.SecretBinary}}` | User input | Binary secret (base64) |
+| `{{user.KmsKeyId}}` | User input | alias/aws/secretsmanager |
+
+## Execution Flow
+
+### Pre-flight
+```
+1. Check AWS CLI: aws --version
+2. Validate credentials: aws sts get-caller-identity
+3. Check KMS key exists: aws kms describe-key --key-id {{user.KmsKeyId}}
+4. Verify IAM permissions for secretsmanager:GetSecretValue
+```
+
+### Execute (Primary: CLI)
+```
+aws secretsmanager create-secret \
+  --name {{user.SecretName}} \
+  --description "{{user.Description}}" \
+  --secret-string '{{user.SecretString}}' \
+  --kms-key-id {{user.KmsKeyId}} \
+  --output json
+```
+
+### Execute (Fallback: boto3)
+```python
+import boto3
+sm = boto3.client('secretsmanager', region_name='{{env.AWS_DEFAULT_REGION}}')
+response = sm.create_secret(
+    Name='{{user.SecretName}}',
+    SecretString='{{user.SecretString}}'
+)
+```
+
+## Safety Gates
+
+### Secret Deletion
+```
+BEFORE delete-secret:
+1. Display: "Deleting {{user.SecretName}} will remove all versions"
+2. Ask: "Type 'DELETE {{user.SecretName}}' to confirm"
+3. Require exact confirmation
+```
+
+## Output Convention
+
+Key JSON paths:
+- `.ARN` - secret ARN
+- `.Name` - secret name
+- `.VersionId` - current version
+- `.SecretString` - secret value (plain text)
+- `.SecretBinary` - secret value (base64)
+- `.CreatedDate` - creation timestamp
+- `.DeletedDate` - deletion timestamp (if pending)
+
+## Related Skills
+
+- `aws-kms-ops` - Encryption key management
+- `aws-lambda-ops` - Rotation function
+- `aws-iam-ops` - Access policies
+
+## Reference Files
+
+- `references/aws-cli-usage.md`
+- `references/boto3-sdk-usage.md`
+- `references/core-concepts.md`
+- `references/troubleshooting.md`
+- `assets/example-config.yaml`

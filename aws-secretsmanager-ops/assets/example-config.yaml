@@ -1,0 +1,94 @@
+# Secrets Manager Example Configurations
+
+Configuration examples for AWS Secrets Manager.
+
+## Basic Secret
+
+### Database Credential
+```yaml
+secret:
+  name: "prod/rds/master-password"
+  description: "RDS master password"
+  secret_string: "{{user.Password}}"
+  kms_key_id: "alias/aws/secretsmanager"
+  
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Service
+      Value: rds
+```
+
+### API Key
+```yaml
+secret:
+  name: "prod/api/third-party-key"
+  description: "Third-party API key"
+  secret_string: "{{user.ApiKey}}"
+  
+  tags:
+    - Key: Type
+      Value: api-key
+```
+
+## Rotation Configuration
+
+### Automatic Rotation
+```yaml
+rotation:
+  secret_id: "prod/rds/master-password"
+  lambda_arn: "arn:aws:lambda:{{region}}:{{account}}:function:RDSCredentialRotation"
+  
+  rules:
+    automatically_after_days: 30
+  
+  # Lambda must have permissions:
+  # - secretsmanager:DescribeSecret
+  # - secretsmanager:GetSecretValue
+  # - secretsmanager:PutSecretValue
+  # - secretsmanager:UpdateSecretVersionStage
+  # - RDS database permissions
+```
+
+## Replication
+
+### Cross-Region Replication
+```yaml
+replication:
+  secret_id: "prod/rds/master-password"
+  
+  replica_regions:
+    - region: "eu-west-1"
+      kms_key_id: "alias/aws/secretsmanager"
+    
+    - region: "ap-southeast-1"
+      kms_key_id: "alias/aws/secretsmanager"
+```
+
+## Complete Workflow
+
+### Create and Rotate Secret
+```yaml
+workflow:
+  name: "create-rotating-secret"
+  
+  steps:
+    # 1. Create secret
+    - step: "create_secret"
+      name: "prod/db/credentials"
+      secret_string: "{{user.InitialPassword}}"
+    
+    # 2. Configure rotation
+    - step: "configure_rotation"
+      lambda_arn: "{{user.RotationLambdaArn}}"
+      rotation_days: 30
+    
+    # 3. Test rotation
+    - step: "rotate_secret"
+      immediate: true
+    
+    # 4. Verify new version
+    - step: "verify"
+      get_secret: "prod/db/credentials"
+      version_stage: "AWSCURRENT"
+```

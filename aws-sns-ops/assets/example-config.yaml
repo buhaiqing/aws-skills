@@ -1,0 +1,211 @@
+# SNS Example Configurations
+
+Configuration examples for AWS SNS.
+
+## Topic Configuration
+
+### Standard Topic
+```yaml
+topic:
+  name: "my-notifications"
+  
+  attributes:
+    DisplayName: "My App Notifications"
+    Policy: |
+      {
+        "Version": "2008-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "SNS:Publish",
+            "Resource": "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+          }
+        ]
+      }
+```
+
+### FIFO Topic
+```yaml
+topic:
+  name: "my-ordered-events.fifo"
+  fifo: true
+  
+  attributes:
+    FifoTopic: "true"
+    ContentBasedDeduplication: "true"
+    DisplayName: "Ordered Events"
+```
+
+## Subscription Configuration
+
+### Email Subscription
+```yaml
+subscription:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+  protocol: email
+  endpoint: "admin@example.com"
+  
+  # Requires confirmation
+  confirmation_required: true
+```
+
+### Lambda Subscription
+```yaml
+subscription:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+  protocol: lambda
+  endpoint: "arn:aws:lambda:{{region}}:{{account}}:function:notification-handler"
+  
+  # Lambda needs permission
+  lambda_permission:
+    action: "lambda:InvokeFunction"
+    principal: "sns.amazonaws.com"
+    source_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+```
+
+### SQS Subscription
+```yaml
+subscription:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+  protocol: sqs
+  endpoint: "arn:aws:sqs:{{region}}:{{account}}:notification-queue"
+  
+  # SQS queue policy needed
+  sqs_policy:
+    version: "2012-10-17"
+    statement:
+      - effect: Allow
+        principal:
+          Service: sns.amazonaws.com
+        action: SQS:SendMessage
+        resource: "arn:aws:sqs:{{region}}:{{account}}:notification-queue"
+```
+
+### Filtered Subscription
+```yaml
+subscription:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+  protocol: sqs
+  endpoint: "arn:aws:sqs:{{region}}:{{account}}:priority-queue"
+  
+  filter_policy:
+    priority:
+      - high
+      - critical
+    source:
+      - payment
+      - security
+```
+
+## Message Publishing
+
+### Basic Message
+```yaml
+message:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-notifications"
+  subject: "Order Processed"
+  body: |
+    Order #{{order_id}} has been processed successfully.
+    
+    Items: {{item_count}}
+    Total: ${{total}}
+  
+  attributes:
+    order_id:
+      DataType: String
+      StringValue: "{{order_id}}"
+    priority:
+      DataType: String
+      StringValue: "high"
+```
+
+### FIFO Message
+```yaml
+message:
+  topic_arn: "arn:aws:sns:{{region}}:{{account}}:my-ordered-events.fifo"
+  subject: "Event"
+  body: "{{event_data}}"
+  
+  # Required for FIFO
+  message_group_id: "{{user_id}}"
+  message_deduplication_id: "{{unique_event_id}}"
+  
+  attributes:
+    event_type:
+      DataType: String
+      StringValue: "user_action"
+```
+
+## Complete Workflow
+
+### Notification Pipeline
+```yaml
+workflow:
+  name: "notification-pipeline"
+  
+  components:
+    # 1. Topic
+    topic:
+      name: "app-events"
+      encryption:
+        kms_key: "alias/aws/sns"
+    
+    # 2. Subscriptions
+    subscriptions:
+      # Email for alerts
+      - protocol: email
+        endpoint: "alerts@example.com"
+        filter_policy:
+          severity:
+            - critical
+      
+      # Lambda for processing
+      - protocol: lambda
+        endpoint: "arn:aws:lambda:{{region}}:{{account}}:function:event-processor"
+        filter_policy:
+          type:
+            - order
+            - payment
+      
+      # SQS for queuing
+      - protocol: sqs
+        endpoint: "arn:aws:sqs:{{region}}:{{account}}:event-queue"
+      
+      # HTTP for webhook
+      - protocol: https
+        endpoint: "https://api.example.com/webhooks/notifications"
+        confirmation_required: true
+    
+    # 3. Monitoring
+    monitoring:
+      delivery_failures_alarm: 10
+      no_subscribers_alarm: true
+```
+
+### Multi-Protocol Fanout
+```yaml
+fanout:
+  topic: "multi-channel-alerts"
+  
+  channels:
+    email:
+      protocol: email
+      endpoint: "team@example.com"
+      use_for: [urgent, critical]
+    
+    sms:
+      protocol: sms
+      endpoint: "+1234567890"
+      use_for: [critical]
+    
+    slack:
+      protocol: lambda
+      endpoint: "arn:aws:lambda:{{region}}:{{account}}:function:slack-notifier"
+      use_for: [all]
+    
+    log:
+      protocol: sqs
+      endpoint: "arn:aws:sqs:{{region}}:{{account}}:audit-log"
+      use_for: [all]
+```

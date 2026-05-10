@@ -1,0 +1,218 @@
+# Step Functions Example Configurations
+
+Configuration examples for AWS Step Functions.
+
+## State Machine Configuration
+
+### Basic Lambda Workflow
+```yaml
+state_machine:
+  name: "process-order"
+  type: "STANDARD"
+  
+  definition:
+    StartAt: ValidateOrder
+    States:
+      ValidateOrder:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:validate-order"
+        Next: ProcessPayment
+        Catch:
+          - ErrorEquals: ["States.TaskFailed"]
+            Next: HandleError
+      
+      ProcessPayment:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:process-payment"
+        Next: SendNotification
+        Retry:
+          - ErrorEquals: ["PaymentError"]
+            IntervalSeconds: 1
+            MaxAttempts: 3
+            BackoffRate: 2
+      
+      SendNotification:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:send-notification"
+        End: true
+      
+      HandleError:
+        Type: Fail
+        Error: "OrderProcessingFailed"
+  
+  role_arn: "arn:aws:iam::{{account}}:role/StepFunctionsExecutionRole"
+  
+  tags:
+    - Key: Application
+      Value: order-processing
+```
+
+### Parallel Processing
+```yaml
+state_machine:
+  name: "parallel-processing"
+  type: "STANDARD"
+  
+  definition:
+    StartAt: ProcessInParallel
+    States:
+      ProcessInParallel:
+        Type: Parallel
+        Branches:
+          - StartAt: ProcessA
+            States:
+              ProcessA:
+                Type: Task
+                Resource: "arn:aws:lambda:{{region}}:{{account}}:function:process-a"
+                End: true
+          - StartAt: ProcessB
+            States:
+              ProcessB:
+                Type: Task
+                Resource: "arn:aws:lambda:{{region}}:{{account}}:function:process-b"
+                End: true
+        End: true
+```
+
+### Map State for Batch Processing
+```yaml
+state_machine:
+  name: "batch-process"
+  type: "STANDARD"
+  
+  definition:
+    StartAt: BatchProcess
+    States:
+      BatchProcess:
+        Type: Map
+        ItemsPath: "$.items"
+        MaxConcurrency: 5
+        Iterator:
+          StartAt: ProcessItem
+          States:
+            ProcessItem:
+              Type: Task
+              Resource: "arn:aws:lambda:{{region}}:{{account}}:function:process-item"
+              End: true
+        End: true
+```
+
+### Choice State for Conditional Routing
+```yaml
+state_machine:
+  name: "conditional-routing"
+  
+  definition:
+    StartAt: CheckStatus
+    States:
+      CheckStatus:
+        Type: Choice
+        Choices:
+          - Variable: "$.status"
+            StringEquals: "approved"
+            Next: Approved
+          - Variable: "$.status"
+            StringEquals: "rejected"
+            Next: Rejected
+          - Variable: "$.status"
+            StringEquals: "pending"
+            Next: WaitApproval
+        Default: UnknownStatus
+      
+      Approved:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:handle-approved"
+        End: true
+      
+      Rejected:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:handle-rejected"
+        End: true
+      
+      WaitApproval:
+        Type: Wait
+        Seconds: 60
+        Next: CheckStatus
+      
+      UnknownStatus:
+        Type: Fail
+        Error: "UnknownStatusError"
+```
+
+### Human Approval Pattern
+```yaml
+state_machine:
+  name: "human-approval"
+  
+  definition:
+    StartAt: RequestApproval
+    States:
+      RequestApproval:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:send-approval-request"
+        Next: WaitForDecision
+      
+      WaitForDecision:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:wait-for-decision"
+        TimeoutSeconds: 86400  # 24 hours
+        Next: EvaluateDecision
+        Retry:
+          - ErrorEquals: ["States.Timeout"]
+            MaxAttempts: 0
+          Next: ApprovalTimeout
+      
+      EvaluateDecision:
+        Type: Choice
+        Choices:
+          - Variable: "$.decision"
+            StringEquals: "approve"
+            Next: Approved
+          - Variable: "$.decision"
+            StringEquals: "reject"
+            Next: Rejected
+        Default: EvaluateDecision
+      
+      ApprovalTimeout:
+        Type: Fail
+        Error: "ApprovalTimeout"
+      
+      Approved:
+        Type: Task
+        Resource: "arn:aws:lambda:{{region}}:{{account}}:function:process-approved"
+        End: true
+      
+      Rejected:
+        Type: Fail
+        Error: "RequestRejected"
+```
+
+## Execution Example
+```yaml
+execution:
+  state_machine_arn: "arn:aws:states:{{region}}:{{account}}:stateMachine:{{name}}"
+  name: "order-{{uuid}}"
+  input:
+    order_id: "ORD-001"
+    items:
+      - product_id: "P001"
+        quantity: 2
+```
+
+## IAM Role for Execution
+```yaml
+iam_role:
+  name: "StepFunctionsExecutionRole"
+  
+  trust_policy:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Principal:
+          Service: states.amazonaws.com
+        Action: "sts:AssumeRole"
+  
+  policies:
+    - lambda:InvokeFunction:
+        - "arn:aws:lambda:{{region}}:{{account}}:function:*"
+```

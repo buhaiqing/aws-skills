@@ -1,0 +1,131 @@
+# CloudFront Example Configurations
+
+Configuration examples for AWS CloudFront.
+
+## Distribution Configuration
+
+### S3 Static Website
+```yaml
+distribution:
+  id: ""
+  price_class: "PriceClass_100"  # US/Europe/Canada
+  enabled: true
+  
+  default_root_object: "index.html"
+  origin:
+    id: "s3-website"
+    domain_name: "{{bucket}}.s3.amazonaws.com"
+    s3_origin_config:
+      origin_access_identity: ""
+  
+  default_cache_behavior:
+    target_origin_id: "s3-website"
+    viewer_protocol_policy: "redirect-to-https"
+    allowed_methods: ["GET", "HEAD"]
+    forwarded_values:
+      query_string: false
+      cookies:
+        forward: "none"
+    default_ttl: 86400  # 1 day
+    min_ttl: 0
+    max_ttl: 31536000  # 1 year
+  
+  origins:
+    - id: "s3-website"
+      domain_name: "{{bucket}}.s3.amazonaws.com"
+  
+  tags:
+    - Key: Environment
+      Value: production
+```
+
+### Web Application with Custom Origin
+```yaml
+distribution:
+  comment: "Web Application CDN"
+  price_class: "PriceClass_200"  # All regions
+  enabled: true
+  
+  origin:
+    id: "web-server"
+    domain_name: "app.example.com"
+    custom_origin_config:
+      http_port: 80
+      https_port: 443
+      origin_protocol_policy: "https-only"
+      origin_ssl_protocols: ["TLSv1.2"]
+  
+  default_cache_behavior:
+    target_origin_id: "web-server"
+    viewer_protocol_policy: "redirect-to-https"
+    allowed_methods: ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    forwarded_values:
+      query_string: true
+      cookies:
+        forward: "all"
+    default_ttl: 0  # No caching for dynamic content
+    min_ttl: 0
+    max_ttl: 0
+  
+  tags:
+    - Key: Application
+      Value: web-app
+```
+
+### Multiple Origins with Path Patterns
+```yaml
+distribution:
+  comment: "Multi-origin CDN"
+  enabled: true
+  
+  origins:
+    - id: "s3-static"
+      domain_name: "{{bucket}}.s3.amazonaws.com"
+    - id: "elb-dynamic"
+      domain_name: "{{load_balancer}}.elb.amazonaws.com"
+      custom_origin_config:
+        http_port: 80
+        https_port: 443
+        origin_protocol_policy: "http-only"
+  
+  cache_behaviors:
+    - path_pattern: "/static/*"
+      target_origin_id: "s3-static"
+      default_ttl: 86400
+    
+    - path_pattern: "/api/*"
+      target_origin_id: "elb-dynamic"
+      default_ttl: 0
+  
+  default_cache_behavior:
+    target_origin_id: "s3-static"
+    default_ttl: 86400
+```
+
+## Invalidation Example
+```yaml
+invalidation:
+  distribution_id: "{{dist_id}}"
+  paths:
+    - "/*"
+```
+
+## Complete Workflow
+```yaml
+workflow:
+  name: "deploy-cdn"
+  
+  steps:
+    - step: "create_distribution"
+      config:
+        s3_origin: "{{bucket}}.s3.amazonaws.com"
+        enabled: true
+    
+    - step: "wait_deployment"
+      status: "Deployed"
+    
+    - step: "update_dns"
+      alias:
+        hosted_zone: "Z2FDTNDATAQYW2"  # CloudFront hosted zone
+        value: "{{domain_name}}"
+```

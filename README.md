@@ -150,7 +150,67 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml    # Key policy/configuration examples
 │
-└── aws-[service]-ops/             # More service skills...
+├── aws-route53-ops/               # Route53 Operations Skill
+│   ├── SKILL.md                   # Concise - DNS/Hosted Zone operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Route53 CLI commands
+│   │   ├── boto3-sdk-usage.md     # Route53 SDK code examples
+│   │   ├── core-concepts.md       # DNS, routing policies
+│   │   └── troubleshooting.md     # Route53 troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # DNS/Health Check examples
+│
+├── aws-secretsmanager-ops/        # Secrets Manager Operations Skill
+│   ├── SKILL.md                   # Concise - Secret/Rotation operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Secrets Manager CLI commands
+│   │   ├── boto3-sdk-usage.md     # Secrets Manager SDK code examples
+│   │   ├── core-concepts.md       # Secrets, rotation
+│   │   └── troubleshooting.md     # Secrets Manager troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Secret/Rotation examples
+│
+├── aws-sqs-ops/                   # SQS Operations Skill
+│   ├── SKILL.md                   # Concise - Queue/Message operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SQS CLI commands
+│   │   ├── boto3-sdk-usage.md     # SQS SDK code examples
+│   │   ├── core-concepts.md       # Queues, DLQ, FIFO
+│   │   └── troubleshooting.md     # SQS troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Queue/Message examples
+│
+├── aws-sns-ops/                   # SNS Operations Skill
+│   ├── SKILL.md                   # Concise - Topic/Subscription operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SNS CLI commands
+│   │   ├── boto3-sdk-usage.md     # SNS SDK code examples
+│   │   ├── core-concepts.md       # Topics, subscriptions, filtering
+│   │   └── troubleshooting.md     # SNS troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Topic/Subscription examples
+│
+├── aws-cloudfront-ops/              # CloudFront Operations Skill
+│   ├── SKILL.md                     # Concise - CDN operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md         # CloudFront CLI commands
+│   │   ├── boto3-sdk-usage.md       # CloudFront SDK code examples
+│   │   ├── core-concepts.md         # CDN, cache behaviors
+│   │   └── troubleshooting.md       # CloudFront troubleshooting
+│   └── assets/
+│       └── example-config.yaml      # Cache/Origin examples
+│
+├── aws-stepfunctions-ops/           # Step Functions Operations Skill
+│   ├── SKILL.md                     # Concise - State machine operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md         # Step Functions CLI commands
+│   │   ├── boto3-sdk-usage.md       # Step Functions SDK code examples
+│   │   ├── core-concepts.md         # State machines, workflows
+│   │   └── troubleshooting.md       # Step Functions troubleshooting
+│   └── assets/
+│       └── example-config.yaml      # Workflow examples
+│
+└── aws-[service]-ops/               # More service skills...
 ```
 
 ## Design Principles
@@ -240,6 +300,12 @@ aws sts get-caller-identity --output json
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete |
 | aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete |
 | aws-kms-ops | KMS (Encryption) | ✅ Complete |
+| aws-route53-ops | Route53 (DNS) | ✅ Complete |
+| aws-secretsmanager-ops | Secrets Manager | ✅ Complete |
+| aws-sqs-ops | SQS (Message Queue) | ✅ Complete |
+| aws-sns-ops | SNS (Notification) | ✅ Complete |
+| aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete |
+| aws-stepfunctions-ops | Step Functions | ✅ Complete |
 
 ## References
 
