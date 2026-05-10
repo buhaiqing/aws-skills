@@ -1,0 +1,81 @@
+# CloudWatch Alarm Configuration Examples
+
+# High CPU Alarm (EC2)
+alarm_config:
+  AlarmName: HighCPU-Instance
+  MetricName: CPUUtilization
+  Namespace: AWS/EC2
+  Dimensions:
+    - Name: InstanceId
+      Value: i-1234567890abcdef0
+  Statistic: Average
+  Period: 60
+  Threshold: 80
+  ComparisonOperator: GreaterThanThreshold
+  EvaluationPeriods: 3
+  DatapointsToAlarm: 2
+  AlarmActions:
+    - arn:aws:sns:us-east-1:123456789012:my-topic
+
+# S3 Bucket Size Alarm
+alarm_config:
+  AlarmName: BucketSizeWarning
+  MetricName: BucketSizeBytes
+  Namespace: AWS/S3
+  Dimensions:
+    - Name: BucketName
+      Value: my-bucket
+    - Name: StorageType
+      Value: StandardStorage
+  Statistic: Average
+  Period: 86400
+  Threshold: 10737418240  # 10GB
+  ComparisonOperator: GreaterThanThreshold
+  EvaluationPeriods: 1
+  TreatMissingData: notBreaching
+
+# RDS Connection Count Alarm
+alarm_config:
+  AlarmName: RDS-HighConnections
+  MetricName: DatabaseConnections
+  Namespace: AWS/RDS
+  Dimensions:
+    - Name: DBInstanceIdentifier
+      Value: my-db-instance
+  Statistic: Average
+  Period: 300
+  Threshold: 100
+  ComparisonOperator: GreaterThanThreshold
+  EvaluationPeriods: 2
+
+# Lambda Error Rate Alarm
+alarm_config:
+  AlarmName: Lambda-HighErrorRate
+  MetricName: Errors
+  Namespace: AWS/Lambda
+  Dimensions:
+    - Name: FunctionName
+      Value: my-function
+  Statistic: Sum
+  Period: 60
+  Threshold: 5
+  ComparisonOperator: GreaterThanThreshold
+  EvaluationPeriods: 3
+
+# Dashboard Widget Example
+dashboard_widget:
+  type: metric
+  x: 0
+  y: 0
+  width: 12
+  height: 6
+  properties:
+    metrics:
+      - ["AWS/EC2", "CPUUtilization", "InstanceId", "i-xxx"]
+    period: 300
+    stat: Average
+    title: EC2 CPU Utilization
+    yAxis:
+      left:
+        min: 0
+        max: 100
