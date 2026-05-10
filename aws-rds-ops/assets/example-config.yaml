@@ -1,0 +1,587 @@
+# RDS Example Configurations
+
+Configuration examples for AWS RDS operations.
+
+## MySQL Instance
+
+### Development MySQL
+```yaml
+db_instance:
+  identifier: "dev-mysql-main"
+  engine: "mysql"
+  engine_version: "8.0.35"
+  instance_class: "db.t3.micro"
+  allocated_storage: 20
+  storage_type: "gp3"
+  master_username: "admin"
+  master_user_password: "{{user.MasterPassword}}"
+  vpc_security_group_ids:
+    - "sg-dev-mysql"
+  db_subnet_group_name: "dev-db-subnets"
+  availability_zone: "us-east-1a"
+  multi_az: false
+  backup_retention_period: 1
+  preferred_backup_window: "03:00-04:00"
+  preferred_maintenance_window: "sun:04:00-sun:05:00"
+  storage_encrypted: false
+  deletion_protection: false
+  publicly_accessible: false
+  auto_minor_version_upgrade: true
+  performance_insights:
+    enabled: false
+  tags:
+    - Key: Environment
+      Value: development
+    - Key: Application
+      Value: backend-api
+```
+
+### Production MySQL
+```yaml
+db_instance:
+  identifier: "prod-mysql-orders"
+  engine: "mysql"
+  engine_version: "8.0.35"
+  instance_class: "db.r6g.xlarge"
+  allocated_storage: 500
+  storage_type: "gp3"
+  storage_iops: 3000  # Provisioned IOPS for gp3
+  master_username: "admin"
+  master_user_password: "{{user.MasterPassword}}"  # Use Secrets Manager
+  vpc_security_group_ids:
+    - "sg-prod-mysql-orders"
+  db_subnet_group_name: "prod-db-subnets"
+  multi_az: true
+  backup_retention_period: 14
+  preferred_backup_window: "02:00-03:00"
+  preferred_maintenance_window: "sun:03:00-sun:04:00"
+  storage_encrypted: true
+  kms_key_id: "{{user.KmsKeyId}}"
+  deletion_protection: true
+  publicly_accessible: false
+  auto_minor_version_upgrade: false
+  monitoring_interval: 60
+  monitoring_role_arn: "{{user.MonitoringRoleArn}}"
+  performance_insights:
+    enabled: true
+    retention_period: 7
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: orders-service
+    - Key: CostCenter
+      Value: operations
+```
+
+## PostgreSQL Instance
+
+### Development PostgreSQL
+```yaml
+db_instance:
+  identifier: "dev-postgres-analytics"
+  engine: "postgres"
+  engine_version: "15.4"
+  instance_class: "db.t4g.micro"
+  allocated_storage: 20
+  storage_type: "gp3"
+  master_username: "postgres"
+  master_user_password: "{{user.MasterPassword}}"
+  vpc_security_group_ids:
+    - "sg-dev-postgres"
+  db_subnet_group_name: "dev-db-subnets"
+  availability_zone: "us-east-1a"
+  multi_az: false
+  backup_retention_period: 1
+  storage_encrypted: false
+  deletion_protection: false
+  tags:
+    - Key: Environment
+      Value: development
+    - Key: Application
+      Value: analytics
+```
+
+### Production PostgreSQL
+```yaml
+db_instance:
+  identifier: "prod-postgres-users"
+  engine: "postgres"
+  engine_version: "15.4"
+  instance_class: "db.r6g.2xlarge"
+  allocated_storage: 200
+  storage_type: "io1"
+  iops: 1000
+  master_username: "postgres"
+  master_user_password: "{{user.MasterPassword}}"
+  vpc_security_group_ids:
+    - "sg-prod-postgres-users"
+  db_subnet_group_name: "prod-db-subnets"
+  multi_az: true
+  backup_retention_period: 30
+  storage_encrypted: true
+  kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/abcd-1234"
+  deletion_protection: true
+  monitoring_interval: 60
+  monitoring_role_arn: "arn:aws:iam::123456789012:role/RDSMonitoringRole"
+  performance_insights:
+    enabled: true
+    retention_period: 7
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: user-service
+```
+
+## Aurora MySQL Cluster
+
+### Production Aurora Cluster
+```yaml
+aurora_cluster:
+  identifier: "prod-aurora-catalog"
+  engine: "aurora-mysql"
+  engine_version: "8.0.mysql_aurora.3.02.2"
+  cluster_parameter_group_name: "aurora-mysql8.0-prod"
+  master_username: "admin"
+  master_user_password: "{{user.MasterPassword}}"
+  vpc_security_group_ids:
+    - "sg-prod-aurora-catalog"
+  db_subnet_group_name: "prod-db-subnets"
+  backup_retention_period: 14
+  preferred_backup_window: "02:00-03:00"
+  preferred_maintenance_window: "sun:03:00-sun:04:00"
+  storage_encrypted: true
+  kms_key_id: "{{user.KmsKeyId}}"
+  deletion_protection: true
+  enable_global_write_forwarding: false
+
+  instances:
+    - identifier: "prod-aurora-catalog-writer"
+      instance_class: "db.r6g.xlarge"
+      promotion_tier: 1
+
+    - identifier: "prod-aurora-catalog-reader-1"
+      instance_class: "db.r6g.large"
+      promotion_tier: 2
+
+    - identifier: "prod-aurora-catalog-reader-2"
+      instance_class: "db.r6g.large"
+      promotion_tier: 2
+
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: catalog-service
+```
+
+### Aurora Serverless v2
+```yaml
+aurora_cluster:
+  identifier: "aurora-serverless-analytics"
+  engine: "aurora-mysql"
+  engine_version: "8.0.mysql_aurora.3.02.2"
+  master_username: "admin"
+  master_user_password: "{{user.MasterPassword}}"
+  vpc_security_group_ids:
+    - "sg-analytics-aurora"
+  db_subnet_group_name: "analytics-db-subnets"
+
+  instances:
+    - identifier: "aurora-analytics-serverless"
+      instance_class: "db.serverless"
+      serverless_v2_scaling_configuration:
+        min_capacity: 0.5  # ACU (Aurora Capacity Units)
+        max_capacity: 32
+
+  tags:
+    - Key: WorkloadType
+      Value: unpredictable
+```
+
+## Parameter Groups
+
+### MySQL Production Parameter Group
+```yaml
+parameter_group:
+  name: "mysql8.0-prod-optimized"
+  family: "mysql8.0"
+  description: "Production-optimized MySQL 8.0 parameters"
+
+  parameters:
+    # Connection settings
+    - name: "max_connections"
+      value: "1000"
+      apply_method: "immediate"
+
+    # Buffer pool (50-80% of memory for production)
+    - name: "innodb_buffer_pool_size"
+      value: "13421772800"  # 12.5 GB (for 16GB instance)
+      apply_method: "pending-reboot"
+
+    # Log settings
+    - name: "slow_query_log"
+      value: "1"
+      apply_method: "immediate"
+
+    - name: "long_query_time"
+      value: "2"
+      apply_method: "immediate"
+
+    # InnoDB settings
+    - name: "innodb_flush_log_at_trx_commit"
+      value: "1"
+      apply_method: "immediate"
+
+    - name: "innodb_log_file_size"
+      value: "134217728"  # 128 MB
+      apply_method: "pending-reboot"
+
+    # Query cache (disabled in MySQL 8.0)
+    # Note: query_cache_* parameters deprecated in MySQL 8.0
+
+    # Timeout settings
+    - name: "wait_timeout"
+      value: "600"
+      apply_method: "immediate"
+
+    - name: "interactive_timeout"
+      value: "600"
+      apply_method: "immediate"
+```
+
+### PostgreSQL Production Parameter Group
+```yaml
+parameter_group:
+  name: "postgres15-prod-optimized"
+  family: "postgres15"
+  description: "Production-optimized PostgreSQL 15 parameters"
+
+  parameters:
+    # Connection settings
+    - name: "max_connections"
+      value: "300"
+      apply_method: "pending-reboot"
+
+    # Memory settings (25% of instance memory)
+    - name: "shared_buffers"
+      value: "4194304"  # 4 GB (kB units, for 16GB instance)
+      apply_method: "pending-reboot"
+
+    - name: "effective_cache_size"
+      value: "12582912"  # 12 GB (kB units)
+      apply_method: "immediate"
+
+    # WAL settings
+    - name: "wal_buffers"
+      value: "64"  # MB
+      apply_method: "pending-reboot"
+
+    # Work memory
+    - name: "work_mem"
+      value: "25600"  # 25 MB (kB units)
+      apply_method: "immediate"
+
+    - name: "maintenance_work_mem"
+      value: "1048576"  # 1 GB (kB units)
+      apply_method: "immediate"
+
+    # Logging
+    - name: "log_min_duration_statement"
+      value: "500"  # Log queries > 500ms
+      apply_method: "immediate"
+
+    # Autovacuum
+    - name: "autovacuum"
+      value: "on"
+      apply_method: "immediate"
+
+    - name: "autovacuum_vacuum_scale_factor"
+      value: "0.1"
+      apply_method: "immediate"
+```
+
+### Aurora MySQL Parameter Group
+```yaml
+parameter_group:
+  name: "aurora-mysql8.0-prod"
+  family: "aurora-mysql8.0"
+  description: "Production Aurora MySQL parameters"
+
+  parameters:
+    - name: "max_connections"
+      value: "2000"
+      apply_method: "immediate"
+
+    - name: "innodb_buffer_pool_size"
+      value: "21474836480"  # 20 GB
+      apply_method: "pending-reboot"
+
+    # Aurora-specific
+    - name: "aurora_disable_backtracking"
+      value: "0"
+      apply_method: "immediate"
+
+    - name: "aurora_enable_replica_log_level"
+      value: "INFO"
+      apply_method: "immediate"
+```
+
+## Read Replica Configuration
+
+### Cross-AZ Read Replica (MySQL)
+```yaml
+read_replica:
+  source_identifier: "prod-mysql-orders"
+  replica_identifier: "prod-mysql-orders-reader-1"
+  instance_class: "db.r6g.large"
+  availability_zone: "us-east-1b"  # Different AZ than source
+  vpc_security_group_ids:
+    - "sg-prod-mysql-readers"
+
+  # Replica-specific options
+  storage_type: "gp3"
+  auto_minor_version_upgrade: true
+
+  # For scaling read traffic
+  tags:
+    - Key: Role
+      Value: read-replica
+    - Key: SourceInstance
+      Value: prod-mysql-orders
+```
+
+### Cross-Region Read Replica
+```yaml
+read_replica:
+  source_identifier: "arn:aws:rds:us-east-1:123456789012:db:prod-mysql-orders"
+  replica_identifier: "prod-mysql-orders-eu-reader"
+  region: "eu-west-1"  # Different region
+  instance_class: "db.r6g.large"
+  vpc_security_group_ids:
+    - "sg-prod-mysql-eu-readers"
+  db_subnet_group_name: "eu-prod-db-subnets"
+
+  # Cross-region replica specific
+  kms_key_id: "{{user.EuKmsKeyId}}"  # KMS key in destination region
+
+  tags:
+    - Key: Role
+      Value: cross-region-replica
+    - Key: DisasterRecovery
+      Value: true
+```
+
+## Snapshot Operations
+
+### Manual Snapshot Creation
+```yaml
+snapshot:
+  operation: "create"
+  instance_identifier: "prod-mysql-orders"
+  snapshot_identifier: "prod-mysql-orders-pre-upgrade-20260510"
+
+  tags:
+    - Key: Purpose
+      Value: pre-upgrade-backup
+    - Key: CreatedBy
+      Value: ops-team
+```
+
+### Snapshot Restore
+```yaml
+restore:
+  operation: "restore"
+  snapshot_identifier: "prod-mysql-orders-pre-upgrade-20260510"
+
+  new_instance:
+    identifier: "prod-mysql-orders-restored"
+    instance_class: "db.r6g.xlarge"
+    # Optional: different configuration than original
+    multi_az: false
+    vpc_security_group_ids:
+      - "sg-temp-mysql-restore"
+
+    # Restore to test environment
+    tags:
+      - Key: Purpose
+        Value: restore-test
+      - Key: Temporary
+        Value: true
+```
+
+### Cross-Region Snapshot Copy
+```yaml
+snapshot_copy:
+  operation: "copy"
+  source_snapshot_identifier: "arn:aws:rds:us-east-1:123456789012:snapshot:prod-mysql-orders-backup"
+  destination_region: "eu-west-1"
+  target_snapshot_identifier: "prod-mysql-orders-backup-eu"
+
+  # Copy to different region for disaster recovery
+  kms_key_id: "{{user.EuKmsKeyId}}"  # KMS key in destination region
+
+  tags:
+    - Key: DisasterRecovery
+      Value: true
+    - Key: SourceRegion
+      Value: us-east-1
+```
+
+## DB Subnet Group
+
+### Multi-AZ Subnet Group
+```yaml
+subnet_group:
+  name: "prod-db-subnets"
+  description: "Production DB subnet group with Multi-AZ support"
+  subnets:
+    - subnet_id: "subnet-private-a"
+      availability_zone: "us-east-1a"
+    - subnet_id: "subnet-private-b"
+      availability_zone: "us-east-1b"
+    - subnet_id: "subnet-private-c"
+      availability_zone: "us-east-1c"
+
+  # All subnets must be in same VPC
+  vpc_id: "vpc-production"
+
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Purpose
+      Value: database-subnets
+```
+
+## Instance Modification
+
+### Scale Instance
+```yaml
+modification:
+  operation: "modify"
+  instance_identifier: "prod-mysql-orders"
+
+  changes:
+    instance_class: "db.r6g.2xlarge"  # Scale up compute
+    allocated_storage: 600  # Scale up storage (can only increase)
+    storage_iops: 4000  # Increase IOPS for gp3
+
+  apply_immediately: false  # Apply during next maintenance window
+
+  # Note: Storage reduction not supported
+  # Note: Multi-AZ changes require apply_immediately
+```
+
+### Change Parameter Group
+```yaml
+modification:
+  operation: "modify"
+  instance_identifier: "prod-mysql-orders"
+
+  changes:
+    db_parameter_group_name: "mysql8.0-prod-optimized"
+
+  apply_immediately: true
+
+  # Static parameters require reboot after parameter group change
+  reboot_required: true
+```
+
+## Instance Deletion (with Safety)
+
+### Delete with Final Snapshot
+```yaml
+deletion:
+  operation: "delete"
+  instance_identifier: "old-mysql-instance"
+
+  # REQUIRED: Create final snapshot before deletion
+  final_snapshot_identifier: "old-mysql-instance-final-20260510"
+
+  # Safety gate: human confirmation required
+  confirmation_required: true
+  confirmation_string: "DELETE old-mysql-instance"
+
+  # If skip_final_snapshot: true, data is permanently lost
+  # NEVER recommend skip_final_snapshot for production
+```
+
+### Delete Temporary Instance (no snapshot)
+```yaml
+deletion:
+  operation: "delete"
+  instance_identifier: "temp-restore-test"
+
+  skip_final_snapshot: true  # Only for temporary/test instances
+
+  # Safety gate still required
+  confirmation_required: true
+  confirmation_string: "DELETE temp-restore-test"
+
+  # WARNING: All data will be permanently lost
+```
+
+## Complete Workflow Example
+
+### Create Production DB Flow
+```yaml
+workflow:
+  name: "create-production-mysql"
+
+  steps:
+    # 1. Pre-flight checks
+    - step: "preflight"
+      actions:
+        - "Verify CLI available"
+        - "Check credentials"
+        - "Verify region"
+        - "Check quota (instances, storage)"
+        - "Verify engine version available"
+
+    # 2. Create subnet group if needed
+    - step: "create_subnet_group"
+      config:
+        name: "prod-db-subnets"
+        subnets:
+          - "{{user.SubnetA}}"
+          - "{{user.SubnetB}}"
+
+    # 3. Create parameter group
+    - step: "create_parameter_group"
+      config:
+        name: "mysql8.0-prod-optimized"
+        family: "mysql8.0"
+        parameters: "{{mysql_prod_params}}"
+
+    # 4. Create DB instance
+    - step: "create_instance"
+      config:
+        identifier: "prod-mysql-orders"
+        engine: "mysql"
+        engine_version: "8.0.35"
+        instance_class: "db.r6g.xlarge"
+        parameter_group: "mysql8.0-prod-optimized"
+        # ... full configuration
+
+    # 5. Wait for available
+    - step: "wait"
+      waiter: "db_instance_available"
+      max_wait: 1800  # 30 minutes
+
+    # 6. Validate
+    - step: "validate"
+      actions:
+        - "Describe instance"
+        - "Get endpoint"
+        - "Test connectivity (optional)"
+
+    # 7. Create initial snapshot
+    - step: "create_snapshot"
+      config:
+        identifier: "prod-mysql-orders-initial"
+
+    # 8. Output result
+    - step: "output"
+      format: "endpoint, port, arn, status"
+```

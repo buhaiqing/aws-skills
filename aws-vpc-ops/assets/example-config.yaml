@@ -1,0 +1,663 @@
+# VPC Configuration Examples
+
+Example configurations for common VPC scenarios.
+
+## Basic VPC with Public/Private Subnets
+
+```yaml
+# Basic VPC configuration
+vpc:
+  name: "production-vpc"
+  cidr_block: "10.0.0.0/16"
+  region: "{{env.AWS_DEFAULT_REGION}}"
+  enable_dns_support: true
+  enable_dns_hostnames: true
+
+  # Internet Gateway
+  internet_gateway:
+    name: "production-igw"
+
+  # Subnets
+  subnets:
+    - name: "production-public-1a"
+      cidr_block: "10.0.1.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "public"
+      auto_assign_public_ip: true
+
+    - name: "production-public-1b"
+      cidr_block: "10.0.2.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}b"
+      type: "public"
+      auto_assign_public_ip: true
+
+    - name: "production-private-1a"
+      cidr_block: "10.0.3.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "private"
+
+    - name: "production-private-1b"
+      cidr_block: "10.0.4.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}b"
+      type: "private"
+
+  # Route Tables
+  route_tables:
+    - name: "production-public-rt"
+      subnet_associations:
+        - "production-public-1a"
+        - "production-public-1b"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "production-igw"  # Internet Gateway
+
+    - name: "production-private-rt"
+      subnet_associations:
+        - "production-private-1a"
+        - "production-private-1b"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "production-natgw-1a"  # NAT Gateway
+
+  # NAT Gateway (optional for private subnet internet access)
+  nat_gateways:
+    - name: "production-natgw-1a"
+      subnet: "production-public-1a"
+      elastic_ip:
+        name: "production-eip-1a"
+```
+
+## Complete Multi-Tier VPC with NAT Gateway
+
+```yaml
+# Complete VPC with application tiers
+vpc:
+  name: "multi-tier-vpc"
+  cidr_block: "10.10.0.0/16"
+  region: "{{env.AWS_DEFAULT_REGION}}"
+  enable_dns_support: true
+  enable_dns_hostnames: true
+
+  # Internet Gateway
+  internet_gateway:
+    name: "multi-tier-igw"
+
+  # Public Tier - Load Balancers, Bastion
+  subnets:
+    - name: "lb-public-1a"
+      cidr_block: "10.10.1.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "public"
+      auto_assign_public_ip: true
+      tags:
+        Tier: "public"
+        Purpose: "load-balancer"
+
+    - name: "lb-public-1b"
+      cidr_block: "10.10.2.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}b"
+      type: "public"
+      auto_assign_public_ip: true
+      tags:
+        Tier: "public"
+        Purpose: "load-balancer"
+
+    - name: "bastion-public-1a"
+      cidr_block: "10.10.10.0/27"  # Small subnet for bastion
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "public"
+      auto_assign_public_ip: true
+      tags:
+        Tier: "public"
+        Purpose: "bastion"
+
+  # Application Tier - Web/App Servers
+    - name: "app-private-1a"
+      cidr_block: "10.10.100.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "private"
+      tags:
+        Tier: "application"
+
+    - name: "app-private-1b"
+      cidr_block: "10.10.101.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}b"
+      type: "private"
+      tags:
+        Tier: "application"
+
+  # Data Tier - Databases
+    - name: "data-private-1a"
+      cidr_block: "10.10.200.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "private"
+      tags:
+        Tier: "data"
+
+    - name: "data-private-1b"
+      cidr_block: "10.10.201.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}b"
+      type: "private"
+      tags:
+        Tier: "data"
+
+  # NAT Gateways for HA (one per AZ)
+  nat_gateways:
+    - name: "natgw-1a"
+      subnet: "lb-public-1a"
+      elastic_ip:
+        name: "eip-natgw-1a"
+
+    - name: "natgw-1b"
+      subnet: "lb-public-1b"
+      elastic_ip:
+        name: "eip-natgw-1b"
+
+  # Route Tables
+  route_tables:
+    # Public route table - direct internet access
+    - name: "public-rt"
+      subnet_associations:
+        - "lb-public-1a"
+        - "lb-public-1b"
+        - "bastion-public-1a"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "multi-tier-igw"
+
+    # Private route table AZ-1a - NAT Gateway 1a
+    - name: "private-rt-1a"
+      subnet_associations:
+        - "app-private-1a"
+        - "data-private-1a"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "natgw-1a"
+
+    # Private route table AZ-1b - NAT Gateway 1b
+    - name: "private-rt-1b"
+      subnet_associations:
+        - "app-private-1b"
+        - "data-private-1b"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "natgw-1b"
+
+  # Security Groups
+  security_groups:
+    - name: "bastion-sg"
+      description: "Security group for bastion host"
+      ingress_rules:
+        - protocol: "tcp"
+          port: 22
+          cidr: "{{user.admin_ip}}/32"  # Admin IP only
+          description: "SSH from admin IP"
+
+    - name: "lb-sg"
+      description: "Security group for load balancers"
+      ingress_rules:
+        - protocol: "tcp"
+          port: 80
+          cidr: "0.0.0.0/0"
+          description: "HTTP from internet"
+        - protocol: "tcp"
+          port: 443
+          cidr: "0.0.0.0/0"
+          description: "HTTPS from internet"
+
+    - name: "app-sg"
+      description: "Security group for application servers"
+      ingress_rules:
+        - protocol: "tcp"
+          port: 8080
+          source_group: "lb-sg"
+          description: "App port from LB"
+        - protocol: "tcp"
+          port: 22
+          source_group: "bastion-sg"
+          description: "SSH from bastion"
+
+    - name: "data-sg"
+      description: "Security group for database servers"
+      ingress_rules:
+        - protocol: "tcp"
+          port: 3306  # MySQL
+          source_group: "app-sg"
+          description: "MySQL from app tier"
+        - protocol: "tcp"
+          port: 5432  # PostgreSQL
+          source_group: "app-sg"
+          description: "PostgreSQL from app tier"
+```
+
+## Security Group Rules Examples
+
+```yaml
+# Common security group configurations
+security_groups:
+  # Web Server - Internet-facing
+  - name: "web-server-sg"
+    description: "Security group for web servers"
+    vpc_id: "{{user.vpc_id}}"
+    ingress_rules:
+      # HTTP from internet
+      - protocol: "tcp"
+        from_port: 80
+        to_port: 80
+        cidr_blocks:
+          - "0.0.0.0/0"
+        description: "Allow HTTP from internet"
+
+      # HTTPS from internet
+      - protocol: "tcp"
+        from_port: 443
+        to_port: 443
+        cidr_blocks:
+          - "0.0.0.0/0"
+        description: "Allow HTTPS from internet"
+
+    egress_rules:
+      # Allow all outbound
+      - protocol: "-1"  # All protocols
+        from_port: 0
+        to_port: 0
+        cidr_blocks:
+          - "0.0.0.0/0"
+        description: "Allow all outbound traffic"
+
+  # SSH Access - Restricted
+  - name: "ssh-restricted-sg"
+    description: "SSH access limited to specific IPs"
+    vpc_id: "{{user.vpc_id}}"
+    ingress_rules:
+      - protocol: "tcp"
+        from_port: 22
+        to_port: 22
+        cidr_blocks:
+          - "{{user.admin_cidr}}/24"  # Admin subnet
+          - "{{user.vpn_ip}}/32"      # VPN IP
+        description: "SSH from admin IPs only"
+
+  # Application Layer - Internal Only
+  - name: "application-sg"
+    description: "Application tier security group"
+    vpc_id: "{{user.vpc_id}}"
+    ingress_rules:
+      # From load balancer
+      - protocol: "tcp"
+        from_port: 8080
+        to_port: 8080
+        source_security_groups:
+          - "{{user.lb_sg_id}}"
+        description: "App port from load balancer"
+
+      # SSH from bastion
+      - protocol: "tcp"
+        from_port: 22
+        to_port: 22
+        source_security_groups:
+          - "{{user.bastion_sg_id}}"
+        description: "SSH from bastion host"
+
+    egress_rules:
+      # To database tier
+      - protocol: "tcp"
+        from_port: 3306
+        to_port: 3306
+        cidr_blocks:
+          - "{{user.db_subnet_cidr}}"
+        description: "MySQL to database tier"
+
+  # Database Layer - No Internet Access
+  - name: "database-sg"
+    description: "Database tier security group - no internet"
+    vpc_id: "{{user.vpc_id}}"
+    ingress_rules:
+      # MySQL from application tier
+      - protocol: "tcp"
+        from_port: 3306
+        to_port: 3306
+        source_security_groups:
+          - "{{user.app_sg_id}}"
+        description: "MySQL from application tier"
+
+      # PostgreSQL from application tier
+      - protocol: "tcp"
+        from_port: 5432
+        to_port: 5432
+        source_security_groups:
+          - "{{user.app_sg_id}}"
+        description: "PostgreSQL from application tier"
+
+    egress_rules:
+      # No outbound internet access
+      - protocol: "-1"
+        from_port: 0
+        to_port: 0
+        cidr_blocks:
+          - "{{user.vpc_cidr}}"
+        description: "Only outbound to VPC internal"
+```
+
+## VPC Peering Configuration
+
+```yaml
+# VPC Peering between two VPCs
+vpc_peering:
+  # Requester VPC
+  requester:
+    vpc_id: "{{user.vpc_a_id}}"
+    vpc_name: "production-vpc"
+    cidr_block: "10.0.0.0/16"
+    region: "{{env.AWS_DEFAULT_REGION}}"
+
+  # Accepter VPC
+  accepter:
+    vpc_id: "{{user.vpc_b_id}}"
+    vpc_name: "development-vpc"
+    cidr_block: "10.1.0.0/16"
+    region: "{{env.AWS_DEFAULT_REGION}}"  # Same region
+    # For cross-region:
+    # region: "us-west-2"
+
+  # Peering connection
+  connection:
+    name: "prod-to-dev-peering"
+    auto_accept: false  # Manual acceptance required for cross-account
+
+  # Route table updates (both sides must add routes)
+  routes:
+    # Requester routes to accepter CIDR
+    requester_route_table:
+      - destination: "10.1.0.0/16"  # Accepter CIDR
+        target: "{{user.peer_conn_id}}"
+
+    # Accepter routes to requester CIDR
+    accepter_route_table:
+      - destination: "10.0.0.0/16"  # Requester CIDR
+        target: "{{user.peer_conn_id}}"
+
+  # Security group updates
+  security_group_updates:
+    requester_sg:
+      - description: "Allow traffic from development VPC"
+        protocol: "tcp"
+        port: 8080
+        peer_cidr: "10.1.0.0/16"
+
+    accepter_sg:
+      - description: "Allow traffic from production VPC"
+        protocol: "tcp"
+        port: 3306
+        peer_cidr: "10.0.0.0/16"
+
+# Cross-region VPC Peering example
+cross_region_peering:
+  requester:
+    vpc_id: "{{user.vpc_east_id}}"
+    region: "us-east-1"
+    cidr_block: "10.10.0.0/16"
+
+  accepter:
+    vpc_id: "{{user.vpc_west_id}}"
+    region: "us-west-2"
+    cidr_block: "10.20.0.0/16"
+
+  connection:
+    name: "east-west-peering"
+    peer_region: "us-west-2"  # Specify peer region
+```
+
+## Route Table Examples
+
+```yaml
+# Route table configurations
+route_tables:
+  # Public route table - Internet Gateway
+  - name: "public-route-table"
+    vpc_id: "{{user.vpc_id}}"
+    routes:
+      # Local route (automatic)
+      - destination: "{{user.vpc_cidr}}"
+        target: "local"
+
+      # Internet access
+      - destination: "0.0.0.0/0"
+        target: "{{user.igw_id}}"
+        description: "Route to Internet Gateway"
+
+    subnet_associations:
+      - "{{user.public_subnet_a_id}}"
+      - "{{user.public_subnet_b_id}}"
+
+  # Private route table - NAT Gateway
+  - name: "private-route-table"
+    vpc_id: "{{user.vpc_id}}"
+    routes:
+      # Local route (automatic)
+      - destination: "{{user.vpc_cidr}}"
+        target: "local"
+
+      # Internet via NAT Gateway
+      - destination: "0.0.0.0/0"
+        target: "{{user.natgw_id}}"
+        description: "Route to NAT Gateway for internet access"
+
+    subnet_associations:
+      - "{{user.private_subnet_a_id}}"
+      - "{{user.private_subnet_b_id}}"
+
+  # Route table with VPC Peering
+  - name: "peering-route-table"
+    vpc_id: "{{user.vpc_id}}"
+    routes:
+      # Local route
+      - destination: "{{user.vpc_cidr}}"
+        target: "local"
+
+      # VPC Peering
+      - destination: "{{user.peer_vpc_cidr}}"
+        target: "{{user.peer_conn_id}}"
+        description: "Route to peered VPC"
+
+      # Internet via NAT Gateway
+      - destination: "0.0.0.0/0"
+        target: "{{user.natgw_id}}"
+
+  # Route table with VPN Gateway
+  - name: "vpn-route-table"
+    vpc_id: "{{user.vpc_id}}"
+    routes:
+      # Local route
+      - destination: "{{user.vpc_cidr}}"
+        target: "local"
+
+      # Corporate network via VPN
+      - destination: "{{user.corporate_cidr}}"
+        target: "{{user.vpn_gw_id}}"
+        description: "Route to corporate network via VPN"
+
+      # Internet
+      - destination: "0.0.0.0/0"
+        target: "{{user.igw_id}}"
+```
+
+## Development/Testing VPC
+
+```yaml
+# Minimal VPC for development/testing
+vpc:
+  name: "dev-vpc"
+  cidr_block: "192.168.0.0/16"  # Smaller range
+  region: "{{env.AWS_DEFAULT_REGION}}"
+  enable_dns_support: true
+  enable_dns_hostnames: true
+
+  # Single Internet Gateway
+  internet_gateway:
+    name: "dev-igw"
+
+  # Single AZ for cost savings
+  subnets:
+    - name: "dev-public"
+      cidr_block: "192.168.1.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "public"
+      auto_assign_public_ip: true
+
+    - name: "dev-private"
+      cidr_block: "192.168.2.0/24"
+      availability_zone: "{{env.AWS_DEFAULT_REGION}}a"
+      type: "private"
+
+  # Single NAT Gateway (cost savings - not HA)
+  nat_gateways:
+    - name: "dev-natgw"
+      subnet: "dev-public"
+      elastic_ip:
+        name: "dev-eip"
+
+  # Route tables
+  route_tables:
+    - name: "dev-public-rt"
+      subnet_associations:
+        - "dev-public"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "dev-igw"
+
+    - name: "dev-private-rt"
+      subnet_associations:
+        - "dev-private"
+      routes:
+        - destination: "0.0.0.0/0"
+          target: "dev-natgw"
+
+  # Security groups
+  security_groups:
+    - name: "dev-allow-all"
+      description: "Development - allow all for testing"
+      ingress_rules:
+        - protocol: "-1"
+          cidr: "0.0.0.0/0"
+          description: "Allow all inbound (dev only)"
+
+      egress_rules:
+        - protocol: "-1"
+          cidr: "0.0.0.0/0"
+          description: "Allow all outbound"
+```
+
+## VPC Endpoint Configuration
+
+```yaml
+# VPC Endpoints for AWS services
+vpc_endpoints:
+  # Gateway Endpoints (S3, DynamoDB) - Free
+  gateway_endpoints:
+    - service: "s3"
+      route_table_ids:
+        - "{{user.public_rt_id}}"
+        - "{{user.private_rt_id}}"
+      policy: {
+        "Version": "2008-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": "*"
+          }
+        ]
+      }
+
+    - service: "dynamodb"
+      route_table_ids:
+        - "{{user.private_rt_id}}"
+
+  # Interface Endpoints (PrivateLink) - Charged
+  interface_endpoints:
+    - service: "ec2"
+      subnet_ids:
+        - "{{user.private_subnet_a_id}}"
+        - "{{user.private_subnet_b_id}}"
+      security_group_ids:
+        - "{{user.endpoint_sg_id}}"
+      private_dns_enabled: true
+
+    - service: "secretsmanager"
+      subnet_ids:
+        - "{{user.private_subnet_a_id}}"
+      security_group_ids:
+        - "{{user.endpoint_sg_id}}"
+      private_dns_enabled: true
+
+    - service: "ssm"  # Systems Manager
+      subnet_ids:
+        - "{{user.private_subnet_a_id}}"
+        - "{{user.private_subnet_b_id}}"
+      security_group_ids:
+        - "{{user.endpoint_sg_id}}"
+      private_dns_enabled: true
+```
+
+## CIDR Planning Template
+
+```yaml
+# CIDR allocation planning
+cidr_planning:
+  organization_prefix: "10.0.0.0/8"
+
+  regions:
+    us-east-1:
+      vpc_range: "10.0.0.0/12"  # 10.0.0.0 - 10.15.255.255
+      vpcs:
+        - name: "production"
+          cidr: "10.0.0.0/16"
+          subnets:
+            public: "10.0.0.0/18"    # 10.0.0.0 - 10.0.63.255
+            private: "10.0.64.0/18"  # 10.0.64.0 - 10.0.127.255
+            data: "10.0.128.0/18"    # 10.0.128.0 - 10.0.191.255
+
+        - name: "staging"
+          cidr: "10.1.0.0/16"
+          subnets:
+            public: "10.1.0.0/18"
+            private: "10.1.64.0/18"
+
+        - name: "development"
+          cidr: "10.2.0.0/16"
+          subnets:
+            public: "10.2.0.0/24"
+            private: "10.2.1.0/24"
+
+    us-west-2:
+      vpc_range: "10.16.0.0/12"  # 10.16.0.0 - 10.31.255.255
+      vpcs:
+        - name: "production"
+          cidr: "10.16.0.0/16"
+          subnets:
+            public: "10.16.0.0/18"
+            private: "10.16.64.0/18"
+
+    eu-west-1:
+      vpc_range: "10.32.0.0/12"  # 10.32.0.0 - 10.47.255.255
+      vpcs:
+        - name: "production"
+          cidr: "10.32.0.0/16"
+
+  # Peering considerations
+  peering_allowed:
+    - requester: "10.0.0.0/16"
+      accepter: "10.1.0.0/16"
+      # No overlap - OK
+
+    - requester: "10.0.0.0/16"
+      accepter: "10.16.0.0/16"
+      # No overlap - OK (cross-region)
+
+  peering_blocked:
+    - requester: "10.0.0.0/16"
+      accepter: "10.0.128.0/17"
+      # Overlap - NOT ALLOWED
+```

@@ -1,0 +1,585 @@
+# EKS Example Configurations
+
+## Basic EKS Cluster
+
+```yaml
+cluster:
+  name: my-eks-cluster
+  version: "1.30"
+  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
+
+  vpc_config:
+    subnet_ids:
+      - subnet-aaa  # us-east-1a
+      - subnet-bbb  # us-east-1b
+      - subnet-ccc  # us-east-1c
+    security_group_ids:
+      - sg-eks-cluster
+    endpoint_public_access: true
+    endpoint_private_access: true
+    public_access_cidrs:
+      - "10.0.0.0/8"  # Restrict to known IPs
+
+  kubernetes_network_config:
+    service_ipv4_cidr: "10.100.0.0/16"
+    ip_family: ipv4
+
+  logging:
+    cluster_logging:
+      - types:
+          - api
+          - audit
+          - authenticator
+        enabled: true
+
+  tags:
+    Environment: production
+    Team: platform
+```
+
+## Managed Node Group
+
+```yaml
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: production-ng
+  scaling_config:
+    min_size: 2
+    max_size: 10
+    desired_size: 3
+
+  instance_types:
+    - t3.medium
+    - t3.large
+
+  ami_type: AL2_x86_64
+  capacity_type: ON_DEMAND
+  disk_size: 50
+
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+    - subnet-ccc
+
+  labels:
+    env: production
+    node-type: general
+
+  tags:
+    Environment: production
+    NodeGroup: production-ng
+```
+
+## Node Group with Spot Instances
+
+```yaml
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: spot-ng
+  scaling_config:
+    min_size: 0
+    max_size: 20
+    desired_size: 5
+
+  instance_types:
+    - m5.large
+    - m5a.large
+    - m5d.large
+    - m5n.large
+    - m5dn.large
+
+  capacity_type: SPOT
+  ami_type: AL2_x86_64
+
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+    - subnet-ccc
+
+  labels:
+    env: production
+    capacity-type: spot
+
+  taints:
+    - key: spot
+      value: true
+      effect: NO_SCHEDULE
+```
+
+## GPU Node Group
+
+```yaml
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: gpu-ng
+  scaling_config:
+    min_size: 1
+    max_size: 5
+    desired_size: 2
+
+  instance_types:
+    - g4dn.xlarge
+    - g4dn.2xlarge
+
+  ami_type: AL2_x86_64_GPU
+
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+  labels:
+    gpu: nvidia
+    node-type: gpu
+
+  taints:
+    - key: nvidia.com/gpu
+      value: present
+      effect: NO_SCHEDULE
+```
+
+## ARM64 Node Group (Graviton)
+
+```yaml
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: arm-ng
+  scaling_config:
+    min_size: 1
+    max_size: 10
+    desired_size: 3
+
+  instance_types:
+    - m6g.medium
+    - m6g.large
+    - c6g.large
+
+  ami_type: AL2_ARM_64
+
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+    - subnet-ccc
+
+  labels:
+    arch: arm64
+    processor: graviton
+```
+
+## Bottlerocket Node Group
+
+```yaml
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: bottlerocket-ng
+  scaling_config:
+    min_size: 2
+    max_size: 10
+    desired_size: 3
+
+  ami_type: BOTTLEROCKET_x86_64
+
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+  labels:
+    os: bottlerocket
+    security: hardened
+
+  launch_template:
+    id: lt-xxx
+    version: "1"
+```
+
+## Custom Launch Template Node Group
+
+```yaml
+launch_template:
+  name: eks-custom-node
+  version: "1"
+  instance_type: t3.medium
+  iam_instance_profile:
+    name: eksNodeProfile
+  block_device_mappings:
+    - device_name: /dev/xvda
+      ebs:
+        volume_size: 100
+        volume_type: gp3
+        encrypted: true
+  user_data: |
+    #!/bin/bash
+    /etc/eks/bootstrap.sh my-eks-cluster
+
+nodegroup:
+  cluster_name: my-eks-cluster
+  nodegroup_name: custom-ng
+  launch_template:
+    id: "{{launch_template_id}}"
+    version: "1"
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+```
+
+## Fargate Profile
+
+```yaml
+fargate_profile:
+  cluster_name: my-eks-cluster
+  profile_name: default-profile
+  pod_execution_role_arn: arn:aws:iam::123456789012:role/eksFargateRole
+
+  selectors:
+    - namespace: default
+      labels:
+        app: web-service
+    - namespace: backend
+      labels:
+        tier: application
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+  tags:
+    Profile: serverless
+```
+
+## Fargate Profile for CoreDNS
+
+```yaml
+fargate_profile:
+  cluster_name: my-eks-cluster
+  profile_name: coredns-profile
+  pod_execution_role_arn: arn:aws:iam::123456789012:role/eksFargateRole
+
+  selectors:
+    - namespace: kube-system
+      labels:
+        k8s-app: coredns
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+```
+
+## EKS Addons
+
+```yaml
+addons:
+  - addon_name: vpc-cni
+    addon_version: v1.12.6-eksbuild.1
+    service_account_role_arn: arn:aws:iam::123456789012:role/eksVPCCniRole
+    resolve_conflicts: OVERWRITE
+    configuration_values: |
+      {
+        "env": {
+          "AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG": "true",
+          "ENI_CONFIG_LABEL_DEF": "topology.kubernetes.io/zone"
+        }
+      }
+
+  - addon_name: coredns
+    addon_version: v1.9.3-eksbuild.5
+    resolve_conflicts: OVERWRITE
+
+  - addon_name: kube-proxy
+    addon_version: v1.28.4-eksbuild.1
+    resolve_conflicts: OVERWRITE
+
+  - addon_name: aws-ebs-csi-driver
+    addon_version: v1.24.0-eksbuild.1
+    service_account_role_arn: arn:aws:iam::123456789012:role/eksEbsCsiRole
+    resolve_conflicts: OVERWRITE
+
+  - addon_name: aws-efs-csi-driver
+    addon_version: v1.5.8-eksbuild.1
+    service_account_role_arn: arn:aws:iam::123456789012:role/eksEfsCsiRole
+    resolve_conflicts: OVERWRITE
+```
+
+## Cluster with Encryption
+
+```yaml
+cluster:
+  name: secure-eks-cluster
+  version: "1.30"
+  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
+
+  vpc_config:
+    subnet_ids:
+      - subnet-aaa
+      - subnet-bbb
+    security_group_ids:
+      - sg-eks-cluster
+
+  encryption_config:
+    - resources:
+        - secrets
+      provider:
+        key_arn: arn:aws:kms:us-east-1:123456789012:key/abc-123-def-456
+
+  logging:
+    cluster_logging:
+      - types:
+          - api
+          - audit
+          - authenticator
+          - controllerManager
+          - scheduler
+        enabled: true
+```
+
+## Cluster with Private Endpoint Only
+
+```yaml
+cluster:
+  name: private-eks-cluster
+  version: "1.30"
+  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
+
+  vpc_config:
+    subnet_ids:
+      - subnet-private-aaa
+      - subnet-private-bbb
+    security_group_ids:
+      - sg-eks-cluster
+    endpoint_public_access: false
+    endpoint_private_access: true
+
+  logging:
+    cluster_logging:
+      - types:
+          - api
+          - audit
+        enabled: true
+```
+
+## IAM Role Definitions
+
+### Cluster IAM Role
+
+```yaml
+cluster_role:
+  role_name: eksClusterRole
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "eks.amazonaws.com"
+          },
+          "Action": "sts:AssumeRole"
+        }
+      ]
+    }
+  managed_policies:
+    - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+    - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+  inline_policies:
+    - name: CloudWatchLogs
+      policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:PutRetentionPolicy"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+```
+
+### Node IAM Role
+
+```yaml
+node_role:
+  role_name: eksNodeRole
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "ec2.amazonaws.com"
+          },
+          "Action": "sts:AssumeRole"
+        }
+      ]
+    }
+  managed_policies:
+    - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+    - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+    - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+    - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+```
+
+### Fargate Pod Execution Role
+
+```yaml
+fargate_role:
+  role_name: eksFargateRole
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "eks-fargate-pods.amazonaws.com"
+          },
+          "Action": "sts:AssumeRole"
+        }
+      ]
+    }
+  managed_policies:
+    - arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
+  inline_policies:
+    - name: ECRAccess
+      policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+```
+
+### VPC CNI Addon Role (IRSA)
+
+```yaml
+vpc_cni_role:
+  role_name: eksVPCCniRole
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:aws-node",
+              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:aud": "sts.amazonaws.com"
+            }
+          }
+        }
+      ]
+    }
+  managed_policies:
+    - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+```
+
+### EBS CSI Driver Addon Role (IRSA)
+
+```yaml
+ebs_csi_role:
+  role_name: eksEbsCsiRole
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            }
+          }
+        }
+      ]
+    }
+  managed_policies:
+    - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+```
+
+## Kubernetes Deployment Example
+
+```yaml
+# Example Kubernetes Deployment (for reference)
+deployment:
+  name: web-app
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+        - name: web-container
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/web-app:v1.0
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: AWS_REGION
+              value: "us-east-1"
+
+service:
+  name: web-service
+  type: LoadBalancer
+  selector:
+    app: web-app
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+## Update kubeconfig Command
+
+```bash
+# After cluster creation, update local kubeconfig
+aws eks update-kubeconfig \
+  --name my-eks-cluster \
+  --region us-east-1 \
+  --role-arn arn:aws:iam::123456789012:role/eksAdminRole
+
+# Verify
+kubectl cluster-info
+kubectl get nodes
+kubectl get pods -A
+```

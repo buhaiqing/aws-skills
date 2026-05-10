@@ -1,0 +1,473 @@
+# ElastiCache Example Configurations
+
+## Redis Replication Group (Primary + Read Replicas)
+
+```yaml
+replication_group:
+  replication_group_id: prod-redis-cluster
+  description: "Production Redis cache cluster"
+  engine: redis
+  engine_version: "7.0"
+  cache_node_type: cache.m5.large
+  num_cache_clusters: 3  # Primary + 2 replicas
+
+  cache_subnet_group_name: prod-cache-subnet
+  security_group_ids:
+    - sg-redis-access
+
+  automatic_failover_enabled: true
+  multi_az_enabled: true
+
+  at_rest_encryption_enabled: true
+  transit_encryption_enabled: true
+  auth_token: "{{user.redis_auth_token}}"
+
+  snapshot_retention_limit: 7
+  snapshot_window: "03:00-05:00"
+
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Service
+      Value: cache
+```
+
+## Redis Cluster Mode Enabled (Sharding)
+
+```yaml
+replication_group:
+  replication_group_id: prod-redis-sharded
+  description: "Redis Cluster Mode - Sharded"
+  engine: redis
+  engine_version: "7.0"
+  cache_node_type: cache.r5.large
+
+  # Cluster mode configuration
+  cluster_mode: enabled
+  num_node_groups: 3  # 3 shards
+  replicas_per_node_group: 2  # 2 replicas per shard
+
+  cache_subnet_group_name: prod-cache-subnet
+  security_group_ids:
+    - sg-redis-access
+
+  automatic_failover_enabled: true
+  multi_az_enabled: true
+
+  # Total nodes: 3 × (1 + 2) = 9 nodes
+```
+
+## Single Redis Node (No Replication)
+
+```yaml
+cache_cluster:
+  cache_cluster_id: dev-redis-single
+  engine: redis
+  engine_version: "7.0"
+  cache_node_type: cache.t3.medium
+
+  cache_subnet_group_name: dev-cache-subnet
+  security_group_ids:
+    - sg-dev-access
+
+  num_cache_nodes: 1
+
+  tags:
+    - Key: Environment
+      Value: development
+```
+
+## Memcached Cluster
+
+```yaml
+cache_cluster:
+  cache_cluster_id: prod-memcached
+  engine: memcached
+  engine_version: "1.6.22"
+  cache_node_type: cache.m5.large
+
+  cache_subnet_group_name: prod-cache-subnet
+  security_group_ids:
+    - sg-memcached-access
+
+  num_cache_nodes: 3
+  az_mode: cross-az  # Distribute across AZs
+
+  tags:
+    - Key: Engine
+      Value: memcached
+```
+
+## Cache Subnet Group
+
+```yaml
+cache_subnet_group:
+  cache_subnet_group_name: prod-cache-subnet
+  description: "Production ElastiCache subnet group"
+
+  subnet_ids:
+    - subnet-aaa  # us-east-1a
+    - subnet-bbb  # us-east-1b
+    - subnet-ccc  # us-east-1c
+```
+
+## Redis Parameter Group
+
+```yaml
+cache_parameter_group:
+  cache_parameter_group_name: prod-redis-params
+  cache_parameter_group_family: redis7
+  description: "Production Redis parameters"
+
+  parameters:
+    - parameter_name: maxmemory-policy
+      parameter_value: allkeys-lru
+    - parameter_name: timeout
+      parameter_value: "300"
+    - parameter_name: tcp-keepalive
+      parameter_value: "60"
+    - parameter_name: cluster-enabled
+      parameter_value: yes
+    - parameter_name: lazy-expire
+      parameter_value: yes
+    - parameter_name: lazy-eviction
+      parameter_value: yes
+```
+
+## Memcached Parameter Group
+
+```yaml
+cache_parameter_group:
+  cache_parameter_group_name: prod-memcached-params
+  cache_parameter_group_family: memcached1.6
+  description: "Production Memcached parameters"
+
+  parameters:
+    - parameter_name: max_item_size
+      parameter_value: "10485760"  # 10MB
+    - parameter_name: slab_page_size
+      parameter_value: "1048576"  # 1MB
+```
+
+## Redis with Persistence (AOF)
+
+```yaml
+cache_parameter_group:
+  cache_parameter_group_name: redis-persistent-params
+  cache_parameter_group_family: redis7
+  description: "Redis with AOF persistence"
+
+  parameters:
+    - parameter_name: appendonly
+      parameter_value: yes
+    - parameter_name: appendfsync
+      parameter_value: everysec
+    - parameter_name: maxmemory-policy
+      parameter_value: noeviction
+
+replication_group:
+  replication_group_id: persistent-redis
+  engine: redis
+  cache_node_type: cache.r5.large
+  num_cache_clusters: 2
+  cache_parameter_group_name: redis-persistent-params
+```
+
+## Redis with Pub/Sub Focus
+
+```yaml
+cache_parameter_group:
+  cache_parameter_group_name: redis-pubsub-params
+  cache_parameter_group_family: redis7
+  description: "Redis optimized for Pub/Sub"
+
+  parameters:
+    - parameter_name: notify-keyspace-events
+      parameter_value: Ex  # Key expiration events
+    - parameter_name: client-output-buffer-limit
+      parameter_value: "pubsub 256mb 64mb 60"
+    - parameter_name: maxmemory-policy
+      parameter_value: volatile-lru
+
+replication_group:
+  replication_group_id: pubsub-redis
+  engine: redis
+  cache_node_type: cache.m5.large
+  num_cache_clusters: 3
+  cache_parameter_group_name: redis-pubsub-params
+```
+
+## Snapshot Configuration
+
+```yaml
+replication_group:
+  replication_group_id: prod-redis
+  # Automatic snapshots
+  snapshot_retention_limit: 14  # Keep 14 days
+  snapshot_window: "05:00-07:00"  # Daily at 5am UTC
+```
+
+## Manual Snapshot
+
+```yaml
+snapshot:
+  snapshot_name: manual-snapshot-20260510-pre-upgrade
+  replication_group_id: prod-redis-cluster
+  # Optional: cache_cluster_id for single node
+```
+
+## Restore from Snapshot
+
+```yaml
+replication_group:
+  replication_group_id: restored-redis
+  description: "Restored from snapshot"
+  engine: redis
+  cache_node_type: cache.m5.large
+  num_cache_clusters: 3
+
+  snapshot_name: manual-snapshot-20260510-pre-upgrade
+
+  cache_subnet_group_name: prod-cache-subnet
+  security_group_ids:
+    - sg-redis-access
+```
+
+## Security Group Rules
+
+```yaml
+security_group:
+  group_name: sg-redis-access
+  description: "Redis access from application"
+
+  ingress_rules:
+    - protocol: tcp
+      port: 6379
+      source: sg-application  # Application SG
+      description: Redis from app servers
+
+    - protocol: tcp
+      port: 6379
+      source: 10.0.0.0/8  # VPC CIDR
+      description: Redis from VPC
+
+security_group:
+  group_name: sg-memcached-access
+  description: "Memcached access"
+
+  ingress_rules:
+    - protocol: tcp
+      port: 11211
+      source: sg-application
+      description: Memcached from app servers
+```
+
+## IAM Role for ElastiCache (Redis Auth)
+
+```yaml
+iam_role:
+  role_name: elasticache-redis-auth-role
+  assume_role_policy: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "elasticache.amazonaws.com"
+          },
+          "Action": "sts:AssumeRole"
+        }
+      ]
+    }
+
+replication_group:
+  replication_group_id: iam-auth-redis
+  engine: redis
+  user_group_id: default  # Uses IAM auth
+  # Users defined in User Group
+```
+
+## Redis User and User Group
+
+```yaml
+redis_user:
+  user_id: app-user
+  user_name: application-user
+  access_string: "on ~* +@all -@dangerous"
+  authentication_mode:
+    type: password
+    passwords:
+      - "{{user.redis_password}}"
+
+redis_user_group:
+  user_group_id: app-user-group
+  user_ids:
+    - app-user
+    - default  # Default user for fallback
+
+replication_group:
+  replication_group_id: multi-user-redis
+  engine: redis
+  user_group_id: app-user-group
+```
+
+## Global Datastore (Cross-Region Replication)
+
+```yaml
+global_replication_group:
+  global_replication_group_id: global-redis
+
+  primary_cluster:
+    region: us-east-1
+    replication_group_id: primary-redis-us-east
+    engine: redis
+    cache_node_type: cache.r5.large
+    num_cache_clusters: 3
+
+  secondary_clusters:
+    - region: us-west-2
+      replication_group_id: secondary-redis-us-west
+      cache_node_type: cache.r5.large
+      num_cache_clusters: 3
+```
+
+## Scale-Up Configuration
+
+```yaml
+# Check allowed modifications first
+list_allowed_node_type_modifications:
+  replication_group_id: prod-redis
+
+# Typical scale-up path
+scale_sequence:
+  - from: cache.m5.large
+    to: cache.m5.xlarge
+  - from: cache.m5.xlarge
+    to: cache.r5.xlarge
+  - from: cache.r5.xlarge
+    to: cache.r5.2xlarge
+
+modify_replication_group:
+  replication_group_id: prod-redis
+  cache_node_type: cache.m5.xlarge
+  apply_immediately: true  # Or false for maintenance window
+```
+
+## Cluster Scaling (Add Shards)
+
+```yaml
+modify_replication_group:
+  replication_group_id: prod-redis-sharded
+  # Current: 3 node groups
+  # Scale to 5 node groups
+  node_group_configuration:
+    - node_group_id: 1
+      replica_count: 2
+    - node_group_id: 2
+      replica_count: 2
+    - node_group_id: 3
+      replica_count: 2
+    - node_group_id: 4  # New shard
+      replica_count: 2
+    - node_group_id: 5  # New shard
+      replica_count: 2
+  apply_immediately: true
+```
+
+## Development/Test Configuration
+
+```yaml
+cache_cluster:
+  cache_cluster_id: dev-redis
+  engine: redis
+  engine_version: "7.0"
+  cache_node_type: cache.t3.micro
+
+  cache_subnet_group_name: dev-cache-subnet
+  security_group_ids:
+    - sg-dev-access
+
+  num_cache_nodes: 1
+
+  snapshot_retention_limit: 0  # No automatic snapshots
+
+  tags:
+    - Key: Environment
+      Value: development
+    - Key: AutoDelete
+      Value: "7-days"
+
+cache_subnet_group:
+  cache_subnet_group_name: dev-cache-subnet
+  description: "Dev ElastiCache subnet"
+  subnet_ids:
+    - subnet-dev-aaa
+```
+
+## Connection Examples
+
+### Redis Connection (Python)
+
+```python
+import redis
+
+# Basic connection
+r = redis.Redis(
+    host='prod-redis-cluster.xxx.cache.amazonaws.com',
+    port=6379,
+    decode_responses=True
+)
+
+# With auth token
+r = redis.Redis(
+    host='prod-redis-cluster.xxx.cache.amazonaws.com',
+    port=6379,
+    password='my-auth-token',
+    decode_responses=True
+)
+
+# With TLS
+r = redis.Redis(
+    host='prod-redis-cluster.xxx.cache.amazonaws.com',
+    port=6379,
+    password='my-auth-token',
+    ssl=True,
+    ssl_cert_reqs=None,
+    decode_responses=True
+)
+
+# Cluster mode enabled
+from redis.cluster import RedisCluster
+rc = RedisCluster(
+    host='prod-redis-sharded.xxx.cache.amazonaws.com',
+    port=6379,
+    password='my-auth-token',
+    ssl=True
+)
+```
+
+### Memcached Connection (Python)
+
+```python
+import pymemcache.client.base
+
+client = pymemcache.client.base.Client(
+    ('prod-memcached.xxx.cache.amazonaws.com', 11211)
+)
+
+# Set
+client.set('key', 'value', expire=3600)
+
+# Get
+value = client.get('key')
+
+# Multiple nodes
+from pymemcache.client.hash import HashClient
+
+client = HashClient([
+    ('prod-memcached.xxx.cache.amazonaws.com', 11211),
+    ('prod-memcached-002.xxx.cache.amazonaws.com', 11211),
+    ('prod-memcached-003.xxx.cache.amazonaws.com', 11211)
+])
+```

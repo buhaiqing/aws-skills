@@ -1,0 +1,510 @@
+# ELB Example Configurations
+
+## Application Load Balancer (ALB)
+
+### Basic ALB Setup
+
+```yaml
+load_balancer:
+  name: my-web-alb
+  type: application
+  scheme: internet-facing
+  ip_address_type: ipv4
+
+  subnets:
+    - subnet-aaa  # us-east-1a
+    - subnet-bbb  # us-east-1b
+
+  security_groups:
+    - sg-web  # Allow HTTP/HTTPS inbound
+
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: web-service
+
+target_group:
+  name: web-servers
+  protocol: HTTP
+  port: 80
+  vpc_id: vpc-xxx
+  target_type: instance
+
+  health_check:
+    protocol: HTTP
+    path: /health
+    port: 80
+    interval_seconds: 30
+    timeout_seconds: 5
+    healthy_threshold: 5
+    unhealthy_threshold: 2
+    matcher:
+      http_code: "200"
+
+listener:
+  protocol: HTTP
+  port: 80
+
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+### HTTPS ALB with SSL
+
+```yaml
+load_balancer:
+  name: my-secure-alb
+  type: application
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+  security_groups:
+    - sg-https
+
+listener:
+  protocol: HTTPS
+  port: 443
+
+  certificates:
+    - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
+
+  ssl_policy: ELBSecurityPolicy-2016-08
+
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+### Path-Based Routing (ALB)
+
+```yaml
+listener:
+  protocol: HTTPS
+  port: 443
+  certificates:
+    - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
+
+  default_action:
+    type: forward
+    target_group_arn: arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/default/xxx
+
+rules:
+  - priority: 1
+    conditions:
+      - field: path-pattern
+        values:
+          - "/api/*"
+    actions:
+      - type: forward
+        target_group_arn: arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/api-service/xxx
+
+  - priority: 2
+    conditions:
+      - field: path-pattern
+        values:
+          - "/static/*"
+    actions:
+      - type: forward
+        target_group_arn: arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/static-content/xxx
+
+  - priority: 3
+    conditions:
+      - field: host-header
+        values:
+          - "admin.example.com"
+    actions:
+      - type: forward
+        target_group_arn: arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/admin-service/xxx
+```
+
+### Redirect Rule (ALB)
+
+```yaml
+rule:
+  priority: 10
+  conditions:
+    - field: path-pattern
+      values:
+        - "/old-path/*"
+  actions:
+    - type: redirect
+      redirect_config:
+        protocol: HTTPS
+        port: 443
+        host: "{{host}}"
+        path: "/new-path/#{path}"
+        query: "#{query}"
+        status_code: HTTP_301
+```
+
+### Fixed Response Rule (ALB)
+
+```yaml
+rule:
+  priority: 100
+  conditions:
+    - field: path-pattern
+      values:
+        - "/maintenance"
+  actions:
+    - type: fixed-response
+      fixed_response_config:
+        content_type: text/plain
+        message_body: "Service under maintenance"
+        status_code: "503"
+```
+
+### Lambda as Target (ALB)
+
+```yaml
+target_group:
+  name: lambda-targets
+  target_type: lambda
+
+targets:
+  - id: arn:aws:lambda:us-east-1:123456789:function:my-function
+
+listener:
+  protocol: HTTP
+  port: 80
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+### Authentication with Cognito (ALB)
+
+```yaml
+rule:
+  priority: 1
+  conditions:
+    - field: path-pattern
+      values:
+        - "/secure/*"
+  actions:
+    - type: authenticate-cognito
+      authenticate_cognito_config:
+        user_pool_arn: arn:aws:cognito-idp:us-east-1:123:userpool/us-east-1_XXX
+        user_pool_client_id: abc123
+        user_pool_domain: my-domain
+        scope: openid
+        session_timeout_in_seconds: 3600
+        authentication_request_extra_params:
+          display: page
+          prompt: login
+    - type: forward
+      target_group_arn: "{{output.target_group_arn}}"
+```
+
+## Network Load Balancer (NLB)
+
+### Basic NLB Setup
+
+```yaml
+load_balancer:
+  name: my-nlb
+  type: network
+  scheme: internet-facing
+  ip_address_type: ipv4
+
+  subnets:
+    - subnet-aaa  # us-east-1a
+    - subnet-bbb  # us-east-1b
+
+  # Note: NLB does not use security groups
+
+target_group:
+  name: tcp-servers
+  protocol: TCP
+  port: 8080
+  vpc_id: vpc-xxx
+  target_type: instance
+
+  health_check:
+    protocol: TCP
+    port: 8080
+    interval_seconds: 30
+    healthy_threshold: 5
+    unhealthy_threshold: 2
+
+listener:
+  protocol: TCP
+  port: 80
+
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+### NLB with TLS Termination
+
+```yaml
+load_balancer:
+  name: my-tls-nlb
+  type: network
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+target_group:
+  name: tls-targets
+  protocol: TLS
+  port: 443
+  vpc_id: vpc-xxx
+  target_type: instance
+
+  health_check:
+    protocol: TCP
+    port: 443
+
+listener:
+  protocol: TLS
+  port: 443
+
+  certificates:
+    - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
+
+  ssl_policy: ELBSecurityPolicy-2016-08
+
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+### NLB with IP Targets (for ECS/Fargate)
+
+```yaml
+load_balancer:
+  name: ecs-nlb
+  type: network
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+target_group:
+  name: ecs-containers
+  protocol: TCP
+  port: 8080
+  vpc_id: vpc-xxx
+  target_type: ip  # Use IP addresses
+
+  health_check:
+    protocol: HTTP
+    port: 8080
+    path: /health
+
+targets:
+  # Register ECS task IPs
+  - id: 10.0.1.10
+    port: 8080
+  - id: 10.0.2.20
+    port: 8080
+```
+
+### UDP Load Balancing (NLB)
+
+```yaml
+load_balancer:
+  name: gaming-nlb
+  type: network
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+target_group:
+  name: udp-targets
+  protocol: UDP
+  port: 12345
+  vpc_id: vpc-xxx
+  target_type: instance
+
+listener:
+  protocol: UDP
+  port: 12345
+  default_action:
+    type: forward
+    target_group_arn: "{{output.target_group_arn}}"
+```
+
+## Classic Load Balancer (CLB - Legacy)
+
+### Basic CLB Setup
+
+```yaml
+load_balancer:
+  name: my-classic-lb
+  scheme: internet-facing
+
+  listeners:
+    - protocol: HTTP
+      load_balancer_port: 80
+      instance_protocol: HTTP
+      instance_port: 80
+
+  subnets:
+    - subnet-aaa
+    - subnet-bbb
+
+  security_groups:
+    - sg-web
+
+health_check:
+  target: HTTP:80/health
+  interval: 30
+  timeout: 5
+  unhealthy_threshold: 2
+  healthy_threshold: 10
+
+instances:
+  - i-aaa
+  - i-bbb
+```
+
+### CLB with SSL
+
+```yaml
+load_balancer:
+  name: my-secure-clb
+
+  listeners:
+    - protocol: HTTPS
+      load_balancer_port: 443
+      instance_protocol: HTTP
+      instance_port: 80
+      ssl_certificate_id: arn:aws:iam::123456789:server-certificate/my-cert
+
+instances:
+  - i-aaa
+  - i-bbb
+```
+
+## Load Balancer Attributes
+
+### ALB Attributes
+
+```yaml
+attributes:
+  - key: deletion_protection.enabled
+    value: true
+  - key: idle_timeout.timeout_seconds
+    value: 60
+  - key: routing.http2.enabled
+    value: true
+  - key: routing.http.drop_invalid_header_fields.enabled
+    value: true
+  - key: load_balancing.cross_zone.enabled
+    value: true
+  - key: access_logs.s3.enabled
+    value: true
+  - key: access_logs.s3.bucket
+    value: my-alb-logs
+  - key: access_logs.s3.prefix
+    value: alb-logs
+```
+
+### NLB Attributes
+
+```yaml
+attributes:
+  - key: deletion_protection.enabled
+    value: true
+  - key: load_balancing.cross_zone.enabled
+    value: true
+  - key: access_logs.s3.enabled
+    value: true
+  - key: access_logs.s3.bucket
+    value: my-nlb-logs
+```
+
+## Health Check Variations
+
+### HTTP Health Check
+
+```yaml
+health_check:
+  protocol: HTTP
+  port: 80
+  path: /health
+  interval_seconds: 30
+  timeout_seconds: 5
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+  matcher:
+    http_code: "200"
+```
+
+### HTTPS Health Check
+
+```yaml
+health_check:
+  protocol: HTTPS
+  port: 443
+  path: /health
+  interval_seconds: 30
+  timeout_seconds: 10
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+  matcher:
+    http_code: "200-299"
+```
+
+### TCP Health Check (NLB)
+
+```yaml
+health_check:
+  protocol: TCP
+  port: 8080
+  interval_seconds: 30
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+```
+
+### Custom Port Health Check
+
+```yaml
+health_check:
+  protocol: HTTP
+  port: traffic_port  # Use same port as traffic
+  path: /healthcheck
+  interval_seconds: 15
+  timeout_seconds: 3
+  healthy_threshold: 3
+  unhealthy_threshold: 3
+  matcher:
+    http_code: "200,202"
+```
+
+## Target Registration Examples
+
+### EC2 Instances
+
+```yaml
+targets:
+  - id: i-1234567890abcdef0
+    port: 80
+  - id: i-1234567890abcdef1
+    port: 80
+  - id: i-1234567890abcdef2
+    port: 8080  # Override port
+```
+
+### IP Addresses
+
+```yaml
+targets:
+  - id: 10.0.1.10
+    port: 8080
+  - id: 10.0.2.20
+    port: 8080
+  - id: 10.0.3.30
+    availability_zone: all  # Cross-zone target
+```
+
+### Lambda Function
+
+```yaml
+targets:
+  - id: arn:aws:lambda:us-east-1:123456789:function:my-function:1
+```

@@ -60,6 +60,66 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml # Trust/Permission Policy 示例
 
+├── aws-elb-ops/             # ELB 操作技能
+│   ├── SKILL.md             # 精简版 - ALB/NLB/CLB 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # ELB CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # ELB SDK 代码示例
+│   │   ├── core-concepts.md # 负载均衡器类型/组件
+│   │   └── troubleshooting.md # ELB 故障排查
+│   └── assets/
+│       └── example-config.yaml # Listener/Target Group 示例
+
+├── aws-eks-ops/             # EKS 操作技能
+│   ├── SKILL.md             # 精简版 - Cluster/NodeGroup/Fargate 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # EKS CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # EKS SDK 代码示例
+│   │   ├── core-concepts.md # Kubernetes 版本/组件
+│   │   └── troubleshooting.md # EKS 故障排查
+│   └── assets/
+│       └── example-config.yaml # NodeGroup/Fargate/Addon 示例
+│
+├── aws-lambda-ops/          # Lambda 操作技能
+│   ├── SKILL.md             # 精简版 - Function/Layer 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # Lambda CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # Lambda SDK 代码示例
+│   │   ├── core-concepts.md # Serverless 计算/运行时
+│   │   └── troubleshooting.md # Lambda 故障排查
+│   └── assets/
+│       └── example-config.yaml # Function/Layer/EventSource 示例
+│
+├── aws-vpc-ops/             # VPC 操作技能
+│   ├── SKILL.md             # 精简版 - VPC/Subnet/SecurityGroup 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # VPC CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # VPC SDK 代码示例
+│   │   ├── core-concepts.md # 网络架构/CIDR
+│   │   └── troubleshooting.md # VPC 故障排查
+│   └── assets/
+│       └── example-config.yaml # VPC/Subnet/SG 示例
+│
+├── aws-rds-ops/             # RDS 操作技能
+│   ├── SKILL.md             # 精简版 - DB Instance/Snapshot 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # RDS CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # RDS SDK 代码示例
+│   │   ├── core-concepts.md # 数据库引擎/高可用
+│   │   └── troubleshooting.md # RDS 故障排查
+│   └── assets/
+│       └── example-config.yaml # DB/Snapshot/ParamGroup 示例
+│
+├── aws-elasticache-ops/     # ElastiCache 操作技能
+│   ├── SKILL.md             # 精简版 - Redis/Memcached 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md # ElastiCache CLI 命令详解
+│   │   ├── boto3-sdk-usage.md # ElastiCache SDK 代码示例
+│   │   ├── core-concepts.md # Redis vs Memcached/节点类型
+│   │   └── troubleshooting.md # ElastiCache 故障排查
+│   └── assets/
+│       └── example-config.yaml # Redis/Memcached 配置示例
+│
 └── aws-[service]-ops/             # 后续服务技能...
 ```
 
@@ -140,10 +200,13 @@ aws sts get-caller-identity --output json
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 |
-| aws-rds-ops | RDS (数据库) | 📋 待创建 |
-| aws-vpc-ops | VPC (网络) | 📋 待创建 |
-| aws-lambda-ops | Lambda (函数计算) | 📋 待创建 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 |
+| aws-elb-ops | ELB (负载均衡) | ✅ 完成 |
+| aws-eks-ops | EKS (Kubernetes) | ✅ 完成 |
+| aws-lambda-ops | Lambda (函数计算) | ✅ 完成 |
+| aws-vpc-ops | VPC (网络) | ✅ 完成 |
+| aws-rds-ops | RDS (数据库) | ✅ 完成 |
+| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 |
 
 ## 参考
 
