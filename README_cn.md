@@ -120,6 +120,36 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml # Redis/Memcached 配置示例
 │
+├── aws-dynamodb-ops/              # DynamoDB 操作技能
+│   ├── SKILL.md                   # 精简版 - Table/Item/GSI 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # DynamoDB CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # DynamoDB SDK 代码示例
+│   │   ├── core-concepts.md       # NoSQL, 容量模式, 索引
+│   │   └── troubleshooting.md     # DynamoDB 故障排查
+│   └── assets/
+│       └── example-config.yaml    # Table/GSI/Item 配置示例
+│
+├── aws-cloudtrail-ops/            # CloudTrail 操作技能
+│   ├── SKILL.md                   # 精简版 - Trail/Event 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # CloudTrail CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # CloudTrail SDK 代码示例
+│   │   ├── core-concepts.md       # 审计日志, 事件类型
+│   │   └── troubleshooting.md     # CloudTrail 故障排查
+│   └── assets/
+│       └── example-config.yaml    # Trail/Event 配置示例
+│
+├── aws-kms-ops/                   # KMS 操作技能
+│   ├── SKILL.md                   # 精简版 - Key/Encryption 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # KMS CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # KMS SDK 代码示例
+│   │   ├── core-concepts.md       # 加密密钥, 密钥生命周期
+│   │   └── troubleshooting.md     # KMS 故障排查
+│   └── assets/
+│       └── example-config.yaml    # 密钥策略/配置示例
+│
 └── aws-[service]-ops/             # 后续服务技能...
 ```
 
@@ -207,6 +237,9 @@ aws sts get-caller-identity --output json
 | aws-vpc-ops | VPC (网络) | ✅ 完成 |
 | aws-rds-ops | RDS (数据库) | ✅ 完成 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 |
+| aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 |
+| aws-kms-ops | KMS (加密) | ✅ 完成 |
 
 ## 参考
 

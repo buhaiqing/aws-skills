@@ -1,0 +1,659 @@
+# KMS Example Configurations
+
+Configuration examples for AWS KMS operations.
+
+## Basic Key Creation
+
+### Symmetric Encryption Key
+```yaml
+key:
+  description: "Application data encryption key"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  origin: AWS_KMS
+  
+  # Key policy - allow root + specific role
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Application Role"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/ApplicationRole"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  # Auto-rotation enabled
+  rotation:
+    enabled: true
+  
+  # Alias for reference
+  alias: "alias/app-data-key"
+  
+  # Tags
+  tags:
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: myapp
+    - Key: Purpose
+      Value: data-encryption
+```
+
+### Asymmetric RSA Key for Encryption
+```yaml
+key:
+  description: "RSA key for asymmetric encryption"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: RSA_2048
+  origin: AWS_KMS
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Encryption Operations"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/EncryptionService"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  # No auto-rotation for asymmetric keys
+  rotation:
+    enabled: false
+  
+  alias: "alias/rsa-encryption-key"
+  
+  tags:
+    - Key: Type
+      Value: asymmetric
+    - Key: Algorithm
+      Value: RSA-2048
+```
+
+### ECC Key for Signing
+```yaml
+key:
+  description: "ECC key for digital signatures"
+  key_usage: SIGN_VERIFY
+  key_spec: ECC_NIST_P256
+  origin: AWS_KMS
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Signing"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/SigningService"
+        action:
+          - "kms:Sign"
+          - "kms:Verify"
+          - "kms:GetPublicKey"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  alias: "alias/signing-key"
+  
+  tags:
+    - Key: Type
+      Value: asymmetric
+    - Key: Algorithm
+      Value: ECC-NIST-P256
+    - Key: Purpose
+      Value: digital-signature
+```
+
+## Service Integration Keys
+
+### S3 SSE-KMS Key
+```yaml
+key:
+  description: "KMS key for S3 bucket encryption"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow S3 Service"
+        effect: Allow
+        principal:
+          Service: "s3.amazonaws.com"
+        action:
+          - "kms:GenerateDataKey*"
+          - "kms:Decrypt"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:CallerAccount": "{{user.AccountId}}"
+            "kms:ViaService": "s3.{{user.Region}}.amazonaws.com"
+      
+      - sid: "Allow S3 User Access"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/S3AccessRole"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/s3-encryption-key"
+  
+  tags:
+    - Key: Service
+      Value: S3
+    - Key: Encryption
+      Value: SSE-KMS
+```
+
+### RDS Encryption Key
+```yaml
+key:
+  description: "KMS key for RDS database encryption"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow RDS Service"
+        effect: Allow
+        principal:
+          Service: "rds.amazonaws.com"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:CallerAccount": "{{user.AccountId}}"
+      
+      - sid: "Allow RDS Admin"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/RDSAdmin"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+          - "kms:ReEncrypt*"
+          - "kms:CreateGrant"
+        resource: "*"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/rds-encryption-key"
+  
+  tags:
+    - Key: Service
+      Value: RDS
+    - Key: Encryption
+      Value: storage
+```
+
+### EBS Volume Encryption Key
+```yaml
+key:
+  description: "KMS key for EBS volume encryption"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow EC2 Service"
+        effect: Allow
+        principal:
+          AWS: "*"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:CreateGrant"
+          - "kms:DescribeKey"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:CallerAccount": "{{user.AccountId}}"
+            "kms:ViaService": "ec2.{{user.Region}}.amazonaws.com"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/ebs-encryption-key"
+  
+  tags:
+    - Key: Service
+      Value: EBS
+    - Key: Encryption
+      Value: volume
+```
+
+## Cross-Account Key
+
+### Multi-Account Access Key
+```yaml
+key:
+  description: "Key shared across AWS accounts"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Production Account"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.ProductionAccountId}}:root"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+          - "kms:CreateGrant"
+          - "kms:ListGrants"
+          - "kms:RevokeGrant"
+        resource: "*"
+      
+      - sid: "Allow Staging Account"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.StagingAccountId}}:root"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:EncryptionContext:environment": "staging"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/shared-encryption-key"
+  
+  tags:
+    - Key: Scope
+      Value: cross-account
+    - Key: Environment
+      Value: multi
+```
+
+## Key with Encryption Context Policy
+
+### Context-Aware Key Policy
+```yaml
+key:
+  description: "Key with encryption context access control"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Production Decrypt"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/ProductionService"
+        action:
+          - "kms:Decrypt"
+          - "kms:DescribeKey"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:EncryptionContext:environment": "production"
+      
+      - sid: "Allow Development Decrypt"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/DevService"
+        action:
+          - "kms:Decrypt"
+          - "kms:DescribeKey"
+        resource: "*"
+        condition:
+          StringEquals:
+            "kms:EncryptionContext:environment": "development"
+      
+      - sid: "Allow Admin All Environments"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/KMSAdmin"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/context-controlled-key"
+  
+  tags:
+    - Key: AccessControl
+      Value: encryption-context
+```
+
+## Grant Configuration
+
+### Service Grant
+```yaml
+grant:
+  key_id: "{{user.KeyId}}"
+  grantee_principal: "arn:aws:iam::{{user.AccountId}}:role/EC2-Role"
+  operations:
+    - Encrypt
+    - Decrypt
+    - GenerateDataKey
+    - DescribeKey
+  constraints:
+    encryption_context_subset:
+      service: "ec2"
+      environment: "production"
+  name: "ec2-grant"
+  
+  # Grant is independent of key policy
+  # Can be retired by grantee or revoked by key admin
+```
+
+### Temporary Access Grant
+```yaml
+grant:
+  key_id: "{{user.KeyId}}"
+  grantee_principal: "arn:aws:iam::{{user.OtherAccountId}}:role/ExternalService"
+  operations:
+    - Decrypt
+  constraints:
+    encryption_context_equals:
+      project: "temporary-project"
+      expires: "2024-12-31"
+  name: "temp-project-grant"
+  
+  # Document expiration
+  expiration_note: "Grant for temporary project, review on 2024-12-01"
+```
+
+## Key Import (External Key Material)
+
+### BYOK (Bring Your Own Key)
+```yaml
+key:
+  description: "Key with imported material"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  origin: EXTERNAL
+  
+  # Import parameters
+  import:
+    wrapping_algorithm: RSAES_OAEP_SHA_256
+    wrapping_key_spec: RSA_2048
+    
+    # Key material (must be 256-bit / 32 bytes)
+    # Wrapped with KMS public key
+    encrypted_key_material: "{{user.EncryptedKeyMaterial}}"
+    
+    # Optional expiration
+    expiration_model: KEY_MATERIAL_EXPIRES
+    valid_to: "2025-12-31T23:59:59Z"
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+  
+  # No auto-rotation for imported keys
+  rotation:
+    enabled: false
+  
+  alias: "alias/imported-key"
+  
+  tags:
+    - Key: Origin
+      Value: external
+    - Key: Compliance
+      Value: BYOK
+```
+
+## Multi-Region Key
+
+### Primary Key
+```yaml
+key:
+  description: "Multi-region key primary"
+  key_usage: ENCRYPT_DECRYPT
+  key_spec: SYMMETRIC_DEFAULT
+  multi_region: true
+  origin: AWS_KMS
+  
+  policy:
+    version: "2012-10-17"
+    statement:
+      - sid: "Enable IAM User Permissions"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:root"
+        action: "kms:*"
+        resource: "*"
+      
+      - sid: "Allow Application Access"
+        effect: Allow
+        principal:
+          AWS: "arn:aws:iam::{{user.AccountId}}:role/ApplicationRole"
+        action:
+          - "kms:Encrypt"
+          - "kms:Decrypt"
+          - "kms:GenerateDataKey*"
+          - "kms:DescribeKey"
+        resource: "*"
+  
+  rotation:
+    enabled: true
+  
+  alias: "alias/multi-region-key"
+  
+  tags:
+    - Key: Type
+      Value: multi-region
+    - Key: Primary
+      Value: "true"
+  
+  # Replicas in other regions
+  replicas:
+    - region: us-west-2
+      policy: "{{user.ReplicaPolicy}}"  # Can have different policy
+    - region: eu-west-1
+      policy: "{{user.ReplicaPolicy}}"
+```
+
+## Complete Workflow
+
+### Create Production Key
+```yaml
+workflow:
+  name: "create-production-key"
+  
+  steps:
+    # 1. Pre-flight
+    - step: "preflight"
+      actions:
+        - "Verify AWS credentials"
+        - "Check KMS quota"
+        - "Validate IAM roles exist"
+    
+    # 2. Create key
+    - step: "create_key"
+      config:
+        description: "{{user.Description}}"
+        key_usage: ENCRYPT_DECRYPT
+        key_spec: SYMMETRIC_DEFAULT
+        tags:
+          - Key: Environment
+            Value: production
+          - Key: ManagedBy
+            Value: terraform
+    
+    # 3. Create alias
+    - step: "create_alias"
+      alias: "alias/{{user.AliasName}}"
+      target_key_id: "{{output.KeyId}}"
+    
+    # 4. Update policy
+    - step: "put_key_policy"
+      policy:
+        version: "2012-10-17"
+        statement:
+          - sid: "Enable IAM User Permissions"
+            effect: Allow
+            principal:
+              AWS: "arn:aws:iam::{{user.AccountId}}:root"
+            action: "kms:*"
+            resource: "*"
+          - sid: "Allow Application Access"
+            effect: Allow
+            principal:
+              AWS: "arn:aws:iam::{{user.AccountId}}:role/{{user.ApplicationRole}}"
+            action:
+              - "kms:Encrypt"
+              - "kms:Decrypt"
+              - "kms:GenerateDataKey*"
+              - "kms:DescribeKey"
+            resource: "*"
+    
+    # 5. Enable rotation
+    - step: "enable_rotation"
+      key_id: "{{output.KeyId}}"
+    
+    # 6. Verify
+    - step: "verify"
+      actions:
+        - "Key is Enabled"
+        - "Alias is created"
+        - "Rotation is enabled"
+        - "Policy is correct"
+    
+    # 7. Output
+    - step: "output"
+      fields:
+        - "KeyId"
+        - "KeyArn"
+        - "Alias"
+        - "KeyState"
+```
+
+### Key Rotation Workflow
+```yaml
+workflow:
+  name: "manual-key-rotation"
+  
+  steps:
+    # 1. Create new key
+    - step: "create_key"
+      config:
+        description: "{{user.OldDescription}} - rotated {{date}}"
+        key_usage: ENCRYPT_DECRYPT
+        key_spec: SYMMETRIC_DEFAULT
+    
+    # 2. Update alias to new key
+    - step: "update_alias"
+      alias: "alias/{{user.AliasName}}"
+      target_key_id: "{{output.NewKeyId}}"
+    
+    # 3. Re-encrypt existing data (optional)
+    - step: "re_encrypt_data"
+      source_key: "{{user.OldKeyId}}"
+      target_key: "{{output.NewKeyId}}"
+      data_location: "{{user.DataLocation}}"
+    
+    # 4. Schedule old key deletion
+    - step: "schedule_deletion"
+      key_id: "{{user.OldKeyId}}"
+      pending_window: 30  # 30 days grace period
+    
+    # 5. Output
+    - step: "output"
+      fields:
+        - "NewKeyId"
+        - "OldKeyDeletionDate"
+```

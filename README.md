@@ -120,6 +120,36 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml # Redis/Memcached config examples
 │
+├── aws-dynamodb-ops/              # DynamoDB Operations Skill
+│   ├── SKILL.md                   # Concise - Table/Item/GSI operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # DynamoDB CLI commands
+│   │   ├── boto3-sdk-usage.md     # DynamoDB SDK code examples
+│   │   ├── core-concepts.md       # NoSQL, capacity modes, indexing
+│   │   └── troubleshooting.md     # DynamoDB troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Table/GSI/Item examples
+│
+├── aws-cloudtrail-ops/            # CloudTrail Operations Skill
+│   ├── SKILL.md                   # Concise - Trail/Event operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # CloudTrail CLI commands
+│   │   ├── boto3-sdk-usage.md     # CloudTrail SDK code examples
+│   │   ├── core-concepts.md       # Audit trails, event types
+│   │   └── troubleshooting.md     # CloudTrail troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Trail/Event configuration examples
+│
+├── aws-kms-ops/                   # KMS Operations Skill
+│   ├── SKILL.md                   # Concise - Key/Encryption operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # KMS CLI commands
+│   │   ├── boto3-sdk-usage.md     # KMS SDK code examples
+│   │   ├── core-concepts.md       # Encryption keys, key lifecycle
+│   │   └── troubleshooting.md     # KMS troubleshooting
+│   └── assets/
+│       └── example-config.yaml    # Key policy/configuration examples
+│
 └── aws-[service]-ops/             # More service skills...
 ```
 
@@ -207,6 +237,9 @@ aws sts get-caller-identity --output json
 | aws-vpc-ops | VPC (Network) | ✅ Complete |
 | aws-rds-ops | RDS (Database) | ✅ Complete |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete |
+| aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete |
+| aws-kms-ops | KMS (Encryption) | ✅ Complete |
 
 ## References
 
