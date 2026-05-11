@@ -1,4 +1,7 @@
 # CloudWatch Alarm Configuration Examples
+# Placeholders:
+#   {{env.*}} — sourced from .env file or shell environment (substituted by Agent before use)
+#   {{user.*}} — sourced from user input (collected by Agent before use)
 
 # High CPU Alarm (EC2)
 alarm_config:
@@ -7,7 +10,7 @@ alarm_config:
   Namespace: AWS/EC2
   Dimensions:
     - Name: InstanceId
-      Value: i-1234567890abcdef0
+      Value: "{{user.instance_id}}"
   Statistic: Average
   Period: 60
   Threshold: 80
@@ -15,7 +18,7 @@ alarm_config:
   EvaluationPeriods: 3
   DatapointsToAlarm: 2
   AlarmActions:
-    - arn:aws:sns:us-east-1:123456789012:my-topic
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
 
 # S3 Bucket Size Alarm
 alarm_config:
@@ -24,7 +27,7 @@ alarm_config:
   Namespace: AWS/S3
   Dimensions:
     - Name: BucketName
-      Value: my-bucket
+      Value: "{{user.bucket_name}}"
     - Name: StorageType
       Value: StandardStorage
   Statistic: Average
@@ -41,7 +44,7 @@ alarm_config:
   Namespace: AWS/RDS
   Dimensions:
     - Name: DBInstanceIdentifier
-      Value: my-db-instance
+      Value: "{{user.db_instance_id}}"
   Statistic: Average
   Period: 300
   Threshold: 100
@@ -55,7 +58,7 @@ alarm_config:
   Namespace: AWS/Lambda
   Dimensions:
     - Name: FunctionName
-      Value: my-function
+      Value: "{{user.function_name}}"
   Statistic: Sum
   Period: 60
   Threshold: 5
@@ -71,10 +74,11 @@ dashboard_widget:
   height: 6
   properties:
     metrics:
-      - ["AWS/EC2", "CPUUtilization", "InstanceId", "i-xxx"]
+      - ["AWS/EC2", "CPUUtilization", "InstanceId", "{{user.instance_id}}"]
     period: 300
     stat: Average
     title: EC2 CPU Utilization
+    region: "{{env.AWS_DEFAULT_REGION}}"
     yAxis:
       left:
         min: 0

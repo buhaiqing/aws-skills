@@ -48,9 +48,35 @@ AWS Step Functions operational skill for AI Agent automation.
 ## Execution Flow
 
 ### Pre-flight
+
+**Step 1: Check CLI**
+```bash
+aws --version
 ```
-1. Check AWS CLI: aws --version
-2. Validate credentials: aws sts get-caller-identity
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
+```
 3. Verify IAM role exists: aws iam get-role --role-name {{user.RoleName}}
 4. Check state machine definition syntax
 ```

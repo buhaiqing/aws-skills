@@ -62,11 +62,37 @@ Pre-flight → Execute → Validate → Recover
 
 ### Pre-flight
 
-1. **CLI available**: `aws lambda help` returns valid output
-2. **Credentials**: Verify `{{env.AWS_ACCESS_KEY_ID}}` and `{{env.AWS_SECRET_ACCESS_KEY}}` are set
-3. **Region**: Use `{{env.AWS_DEFAULT_REGION}}` or default `us-east-1`
-4. **Quota check**: Validate function count < account limit, code size < 75MB (zipped)
-5. **Dependencies**: For event source mapping, verify source resource exists
+**Step 1: Check CLI**
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
+3. **CLI available**: `aws lambda help` returns valid output
+4. **Region**: Use `{{env.AWS_DEFAULT_REGION}}` or default `us-east-1`
+5. **Quota check**: Validate function count < account limit, code size < 75MB (zipped)
+6. **Dependencies**: For event source mapping, verify source resource exists
 
 ### Execute
 

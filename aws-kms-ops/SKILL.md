@@ -69,9 +69,35 @@ AWS Key Management Service (KMS) operational skill for AI Agent automation.
 ## Execution Flow
 
 ### Pre-flight
+
+**Step 1: Check CLI**
+```bash
+aws --version
 ```
-1. Check AWS CLI availability: aws --version
-2. Validate credentials: aws sts get-caller-identity
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
+```
 3. Confirm region: aws kms list-keys --region {{env.AWS_DEFAULT_REGION}}
 4. Check service quotas: aws service-quotas get-service-quota --service-code kms --quota-code L-...
 5. Verify IAM permissions for KMS operations

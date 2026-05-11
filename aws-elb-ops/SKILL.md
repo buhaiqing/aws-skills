@@ -72,10 +72,38 @@ Every operation follows: **Pre-flight → Execute → Validate → Recover**
 ### Operation: Create Application Load Balancer
 
 #### Pre-flight
+
+**Step 1: Check CLI**
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
 | Check | Method | On Failure |
 |-------|--------|------------|
 | CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; configure env |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to integration.md |
 | VPC exists | `aws ec2 describe-vpcs --vpc-ids {{user.vpc_id}}` | HALT; verify VPC |
 | Subnets exist | `aws ec2 describe-subnets --subnet-ids {{user.subnet_ids}}` | HALT; verify subnets |
 

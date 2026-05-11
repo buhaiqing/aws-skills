@@ -305,6 +305,35 @@ export AWS_DEFAULT_REGION="us-east-1"
 aws sts get-caller-identity --output json
 ```
 
+### Option 3: AWS CLI Config Files
+
+Use AWS CLI's native configuration files. Suitable when you already use `aws configure`.
+
+**~/.aws/credentials**
+```ini
+[default]
+aws_access_key_id = your_access_key
+aws_secret_access_key = your_secret_key
+```
+
+**~/.aws/config**
+```ini
+[default]
+region = us-east-1
+output = json
+```
+
+```bash
+# Install uv and dependencies
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install awscli boto3
+
+# Verify (credentials loaded from ~/.aws/credentials)
+aws sts get-caller-identity --output json
+```
+
 **Note**: `.env` file is blocked by `.gitignore` — never commit real credentials.
 
 ## Existing Skills

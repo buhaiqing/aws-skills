@@ -17,7 +17,9 @@ metadata:
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
+    - AWS_PROFILE
 ---
 
 # AWS CloudWatch Operations Skill
@@ -42,12 +44,24 @@ Amazon CloudWatch provides monitoring for AWS resources and applications via met
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | Only required with explicit keys; skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | Only required with explicit keys; skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials; empty for long-term keys |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use `us-east-1` if unset |
+| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile (SSO / AssumeRole); overrides explicit keys |
+| `{{env.AWS_ACCOUNT_ID}}` | Runtime env | Use in ARNs; fail if unset when ARN needed |
 | `{{user.alarm_name}}` | User input | Ask once; reuse |
 | `{{user.namespace}}` | User input | Ask once; reuse |
 | `{{output.alarm_arn}}` | Last API response | Parse: `.AlarmArn` |
+
+## Config File Injection
+
+`assets/example-config.yaml` contains `{{env.*}}` and `{{user.*}}` placeholders. Before executing:
+
+1. Load `.env` from project root (if present)
+2. Substitute `{{env.VAR_NAME}}` with values from `.env` or shell environment
+3. Collect `{{user.*}}` values from user input
+4. Use the rendered configuration for CLI/SDK commands
 
 ## Execution Flow Pattern
 
@@ -56,10 +70,38 @@ Every operation: **Pre-flight → Execute → Validate → Recover**
 ### Operation: Create Alarm
 
 #### Pre-flight
+
+**Step 1: Check CLI**
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
 | Check | Method | On Failure |
 |-------|--------|------------|
 | CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; configure credentials |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to integration.md |
 | Metric exists | `aws cloudwatch list-metrics` | Suggest valid namespace/metric |
 | Threshold valid | Validate comparison operator | Suggest valid values |
 

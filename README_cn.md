@@ -305,6 +305,35 @@ export AWS_DEFAULT_REGION="us-east-1"
 aws sts get-caller-identity --output json
 ```
 
+### 方式三: AWS CLI 配置文件
+
+使用 AWS CLI 原生配置文件。适合已经习惯 `aws configure` 的用户。
+
+**~/.aws/credentials**
+```ini
+[default]
+aws_access_key_id = your_access_key
+aws_secret_access_key = your_secret_key
+```
+
+**~/.aws/config**
+```ini
+[default]
+region = us-east-1
+output = json
+```
+
+```bash
+# 安装 uv 和依赖
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install awscli boto3
+
+# 验证 (凭证从 ~/.aws/credentials 加载)
+aws sts get-caller-identity --output json
+```
+
 **注意**: `.env` 文件已被 `.gitignore` 阻止 — 永勿提交真实凭证。
 
 ## 已有技能

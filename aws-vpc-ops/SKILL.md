@@ -51,11 +51,38 @@ AWS VPC (Virtual Private Cloud) operational skill for AI Agent automation.
 ## Execution Flow
 
 ### Pre-flight Checklist
-1. AWS CLI installed and version >= 2.0
-2. Credentials present: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-3. Region specified: `AWS_DEFAULT_REGION` or `{{user.region}}`
-4. CIDR block validation: RFC 1918 private ranges preferred
-5. Quota check: VPCs per region (default 5), subnets per VPC (default 200)
+
+**Step 1: Check CLI**
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
+3. AWS CLI installed and version >= 2.0
+4. Region specified: `AWS_DEFAULT_REGION` or `{{user.region}}`
+5. CIDR block validation: RFC 1918 private ranges preferred
+6. Quota check: VPCs per region (default 5), subnets per VPC (default 200)
 
 ### Execute
 

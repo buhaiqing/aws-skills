@@ -19,11 +19,31 @@ boto3 is the official AWS SDK for Python. Use as **fallback** when AWS CLI fails
 import boto3
 import os
 
+# boto3 auto-discovers credentials from the standard AWS chain:
+#   1. Explicit env vars (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_SESSION_TOKEN)
+#   2. AWS_PROFILE env var → ~/.aws/config (supports SSO / AssumeRole)
+#   3. ~/.aws/credentials
+#   4. ~/.aws/config
+#   5. IAM Role (EC2/Lambda/ECS instance metadata)
+
 # Client initialization
 client = boto3.client(
     '[service]',
     region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 )
+
+# With explicit profile (for SSO / cross-account roles)
+# session = boto3.Session(profile_name=os.environ.get('AWS_PROFILE'))
+# client = session.client('[service]', region_name='us-east-1')
+
+# With explicit temporary credentials (for STS AssumeRole)
+# client = boto3.client(
+#     '[service]',
+#     aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+#     aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+#     aws_session_token=os.environ.get('AWS_SESSION_TOKEN'),  # Required for temporary creds
+#     region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+# )
 
 # Verify credentials
 identity = client.get_caller_identity() if hasattr(client, 'get_caller_identity') else None

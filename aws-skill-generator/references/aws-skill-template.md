@@ -16,7 +16,9 @@ metadata:
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
+    - AWS_PROFILE
 ---
 
 # AWS [Service Name] Operations Skill
@@ -41,12 +43,30 @@ AWS [Service Name] provides [brief description]. This skill is an **operational 
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile (SSO / AssumeRole); overrides explicit keys |
 | `{{user.region}}` | User input | Ask once; reuse |
 | `{{user.resource_name}}` | User input | Ask once; reuse |
 | `{{output.resource_id}}` | Last API response | Parse per AWS API docs |
+
+## Config File Placeholders
+
+`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
+
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
+| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
+| `{{user.resource_name}}` | User input | Ask once; substitute |
+
+Before using `example-config.yaml`:
+1. Load `.env` from project root (if present)
+2. Substitute `{{env.*}}` placeholders with loaded values
+3. Collect `{{user.*}}` values from user input
+4. Use rendered config for CLI/SDK commands
 
 ## Execution Flow Pattern
 
@@ -62,10 +82,38 @@ Every operation follows: **Pre-flight → Execute → Validate → Recover**
 ### Operation: Create [Resource]
 
 #### Pre-flight
+
+**Step 1: Check CLI**
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+
+**Step 2: Load & Verify Credentials**
+```bash
+aws sts get-caller-identity --output json
+```
+
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
+[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See references/integration.md → Error Messages for diagnosis.
+```
+
 | Check | Method | On Failure |
 |-------|--------|------------|
 | CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; configure env |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to integration.md |
 | Region valid | `aws [service] list-[resources] --region {{user.region}}` | Suggest valid region |
 | Quota | Check service quotas | HALT; request increase |
 
