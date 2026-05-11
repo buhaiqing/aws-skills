@@ -59,6 +59,19 @@ Pre-flight → Execute → Validate → Recover
 
 **Never commit real keys. Always use `{{env.*}}` placeholders.**
 
+### Environment Loading
+
+Credentials are loaded via `.env` file (see `.env.example` template):
+
+1. Copy `.env.example` → `.env` at project root
+2. Fill in real credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
+3. `.env` is blocked by `.gitignore` — never committed
+
+**Priority order**:
+1. Shell environment variables (highest)
+2. `.env` file values
+3. Default values (lowest)
+
 ## Safety Gates
 
 Destructive operations (delete, terminate) require explicit human confirmation before CLI/SDK execution.

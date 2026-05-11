@@ -264,6 +264,29 @@ aws ec2 stop-instances --instance-ids i-xxx --output json
 
 **前置要求**: Python >= 3.10
 
+### 方式一: .env 文件 (推荐)
+
+```bash
+# 复制模板并填写凭证
+cp .env.example .env
+
+# 编辑 .env 文件,填入 AWS 凭证
+# AWS_ACCESS_KEY_ID=your_key
+# AWS_SECRET_ACCESS_KEY=your_secret
+# AWS_DEFAULT_REGION=us-east-1
+
+# 安装 uv 和依赖
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install awscli boto3
+
+# 验证 (凭证从 .env 文件加载)
+aws sts get-caller-identity --output json
+```
+
+### 方式二: Shell 环境变量
+
 ```bash
 # 安装 uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -273,7 +296,7 @@ uv venv --python 3.10
 source .venv/bin/activate
 uv pip install awscli boto3
 
-# 配置凭证
+# 通过 shell 配置凭证
 export AWS_ACCESS_KEY_ID="your_key"
 export AWS_SECRET_ACCESS_KEY="your_secret"
 export AWS_DEFAULT_REGION="us-east-1"
@@ -281,6 +304,8 @@ export AWS_DEFAULT_REGION="us-east-1"
 # 验证
 aws sts get-caller-identity --output json
 ```
+
+**注意**: `.env` 文件已被 `.gitignore` 阻止 — 永勿提交真实凭证。
 
 ## 已有技能
 

@@ -264,6 +264,29 @@ aws ec2 stop-instances --instance-ids i-xxx --output json
 
 **Prerequisites**: Python >= 3.10
 
+### Option 1: .env File (Recommended)
+
+```bash
+# Copy template and fill in credentials
+cp .env.example .env
+
+# Edit .env with your AWS credentials
+# AWS_ACCESS_KEY_ID=your_key
+# AWS_SECRET_ACCESS_KEY=your_secret
+# AWS_DEFAULT_REGION=us-east-1
+
+# Install uv and dependencies
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install awscli boto3
+
+# Verify (credentials loaded from .env)
+aws sts get-caller-identity --output json
+```
+
+### Option 2: Shell Environment Variables
+
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -273,7 +296,7 @@ uv venv --python 3.10
 source .venv/bin/activate
 uv pip install awscli boto3
 
-# Configure credentials
+# Configure credentials via shell
 export AWS_ACCESS_KEY_ID="your_key"
 export AWS_SECRET_ACCESS_KEY="your_secret"
 export AWS_DEFAULT_REGION="us-east-1"
@@ -281,6 +304,8 @@ export AWS_DEFAULT_REGION="us-east-1"
 # Verify
 aws sts get-caller-identity --output json
 ```
+
+**Note**: `.env` file is blocked by `.gitignore` — never commit real credentials.
 
 ## Existing Skills
 
