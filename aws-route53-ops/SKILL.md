@@ -1,3 +1,20 @@
+---
+name: aws-route53-ops
+description: >-
+  Use when the user needs to create, manage, or delete DNS records and hosted
+  zones in AWS Route53; configure DNS routing policies including failover,
+  latency-based, geolocation, or weighted routing for Route53 hosted zones; set
+  up health checks for DNS failover; manage alias records pointing to AWS
+  resources like ELB, S3, or CloudFront; troubleshoot DNS resolution issues;
+  or delegate domain zones in Route53, even if they don't say "Route53" and
+  instead say "set up DNS records", "configure DNS failover", "manage hosted
+  zones", "set up health checks for my website", or "create alias records
+  for AWS resources".
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
+  to Route53 endpoints.
+---
 # AWS Route53 Ops Skill
 
 AWS Route53 DNS operational skill for AI Agent automation.

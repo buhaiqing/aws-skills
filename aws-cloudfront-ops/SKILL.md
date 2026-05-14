@@ -1,6 +1,10 @@
-# AWS CloudFront Ops Skill
+---
+name: aws-cloudfront-ops
+description: >-
+  Use when managing CloudFront distributions, CDN, cache invalidations, origins, or SSL/TLS certificates. Invoke when user mentions "CDN", "CloudFront", "distribution", or needs content delivery optimization.
+---
 
-AWS CloudFront operational skill for AI Agent automation.
+# AWS CloudFront Ops Skill
 
 ## Triggers
 

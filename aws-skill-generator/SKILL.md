@@ -1,10 +1,11 @@
 ---
 name: aws-skill-generator
 description: >-
-  Use when creating or scaffolding a new AWS cloud resource/service operational
-  skill (aws-[service]-ops) in this repository. Generates skill structure from
-  AWS official documentation, API/SDK references. Not for executing live AWS
-  operations.
+  Use when the user wants to create a new AWS cloud operational skill, scaffold
+  AWS service capabilities, or update an existing AWS skill after API changes
+  — even without explicitly using words like "skill," "scaffold," or "generator."
+  Generates complete skill structure from AWS documentation, CLI references,
+  and boto3 SDK. NOT for executing live AWS operations.
 license: MIT
 compatibility: >-
   Access to AWS official documentation, AWS CLI docs, boto3 SDK references,

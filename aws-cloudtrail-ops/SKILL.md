@@ -1,6 +1,10 @@
-# AWS CloudTrail Ops Skill
+---
+name: aws-cloudtrail-ops
+description: >-
+  Use when managing CloudTrail audit trails, querying AWS API events, or investigating "who did what when". Invoke when user mentions "CloudTrail", "audit trail", or needs event history and logging analysis.
+---
 
-AWS CloudTrail operational skill for AI Agent automation.
+# AWS CloudTrail Ops Skill
 
 ## Triggers
 

@@ -1,6 +1,10 @@
-# AWS DynamoDB Ops Skill
+---
+name: aws-dynamodb-ops
+description: >-
+  Use when managing DynamoDB tables, items, indexes, or capacity modes. Invoke when user mentions "DynamoDB", "NoSQL", or needs table/query operations, backups, or TTL configuration.
+---
 
-AWS DynamoDB NoSQL database operational skill for AI Agent automation.
+# AWS DynamoDB Ops Skill
 
 ## Triggers
 

@@ -1,3 +1,26 @@
+---
+name: aws-sns-ops
+description: >-
+  Use this skill when managing AWS SNS resources, creating/deleting topics,
+  managing subscriptions, publishing messages, configuring message filtering,
+  or integrating with Lambda/SQS; even if the user doesn't explicitly mention
+  "SNS" or "topic" but needs pub/sub notification functionality.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with SNS
+  permissions.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+---
+
 # AWS SNS Ops Skill
 
 AWS SNS (Simple Notification Service) operational skill for AI Agent automation.

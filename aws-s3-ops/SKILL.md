@@ -1,8 +1,16 @@
 ---
 name: aws-s3-ops
 description: >-
-  Use when operating AWS S3 buckets and objects via AWS CLI or boto3 SDK;
-  user mentions S3, Simple Storage Service, bucket, object, or file storage.
+  Use when the user needs to create, configure, or manage object storage buckets
+  in AWS S3; upload, download, copy, or delete objects; configure bucket
+  policies, access control lists (ACLs), or lifecycle policies; set up bucket
+  versioning or encryption; configure CORS policies for cross-origin requests;
+  configure static website hosting; manage multipart uploads for large files;
+  or optimize storage costs with intelligent tiering, even if they don't say
+  "S3" and instead say "store files in the cloud", "upload to object storage",
+  "configure bucket access", "set up static website hosting", "manage file
+  storage in AWS", or "configure cross-origin resource sharing for S3".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

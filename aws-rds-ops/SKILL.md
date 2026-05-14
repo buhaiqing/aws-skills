@@ -1,3 +1,20 @@
+---
+name: aws-rds-ops
+description: >-
+  Use when the user needs to create, manage, or delete managed relational
+  databases in AWS (RDS); configure MySQL, PostgreSQL, MariaDB, Oracle, or
+  Aurora clusters; set up Multi-AZ deployments for high availability; create
+  or restore database snapshots; manage read replicas; configure parameter
+  groups and option groups; set up automated backups; or perform database
+  recovery operations, even if they don't say "RDS" and instead say "set up
+  a managed database", "create a MySQL instance on AWS", "configure Aurora
+  cluster", "manage database snapshots", "set up read replicas for my database",
+  or "configure database failover".
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
+  to RDS endpoints.
+---
 # AWS RDS Ops Skill
 
 AWS Relational Database Service (RDS) operational skill for AI Agent automation.

@@ -1,3 +1,26 @@
+---
+name: aws-stepfunctions-ops
+description: >-
+  Use this skill when managing AWS Step Functions resources, creating/deleting
+  state machines, starting/stopping executions, describing execution history,
+  or configuring error handling; even if the user doesn't explicitly mention
+  "Step Functions" or "state machine" but needs workflow orchestration.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with Step
+  Functions permissions.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+---
+
 # AWS Step Functions Ops Skill
 
 AWS Step Functions operational skill for AI Agent automation.

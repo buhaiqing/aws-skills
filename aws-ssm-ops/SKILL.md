@@ -1,9 +1,10 @@
 ---
 name: aws-ssm-ops
 description: >-
-  Use when operating AWS Systems Manager (SSM) resources for remote command
-  execution, session management, and instance configuration; user mentions
-  SSM, Run Command, Session Manager, or remote execution on EC2.
+  Use this skill when managing AWS SSM resources, executing remote commands via
+  Run Command, starting interactive sessions via Session Manager, managing SSM
+  documents, or checking command execution status; even if the user doesn't
+  explicitly mention "SSM" but needs remote EC2 management without SSH access.
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, SSM Agent
@@ -11,7 +12,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-10"
+  last_updated: "2026-05-15"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:

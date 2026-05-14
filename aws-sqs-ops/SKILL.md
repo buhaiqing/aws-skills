@@ -1,3 +1,26 @@
+---
+name: aws-sqs-ops
+description: >-
+  Use this skill when managing AWS SQS resources, creating/deleting queues,
+  sending/receiving messages, configuring DLQs, setting queue attributes, or
+  integrating with Lambda triggers; even if the user doesn't explicitly mention
+  "SQS" or "queue" but needs message queuing functionality.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with SQS
+  permissions.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+---
+
 # AWS SQS Ops Skill
 
 AWS SQS (Simple Queue Service) operational skill for AI Agent automation.

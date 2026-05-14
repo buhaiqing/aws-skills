@@ -1,9 +1,13 @@
 ---
 name: aws-elasticache-ops
 description: >-
-  Use when operating AWS ElastiCache (Redis/Memcached) resources via AWS CLI
-  or boto3 SDK; user mentions ElastiCache, Redis, Memcached, cache cluster,
-  replication group, or cache node.
+  Use when the user needs to set up, configure, or manage in-memory caching
+  clusters using Redis or Memcached; create replication groups for high
+  availability; manage cache nodes, snapshots, or subnet groups; or optimize
+  application performance with caching, even if they don't say "ElastiCache"
+  and instead say "set up Redis", "configure a cache cluster", "improve
+  database performance with caching", or "manage session storage".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

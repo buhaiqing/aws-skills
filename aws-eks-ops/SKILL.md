@@ -1,8 +1,14 @@
 ---
 name: aws-eks-ops
 description: >-
-  Use when operating AWS EKS (Elastic Kubernetes Service) resources via AWS CLI
-  or boto3 SDK; user mentions EKS, Kubernetes, k8s, cluster, nodegroup, or fargate.
+  Use when the user needs to create, configure, or manage Kubernetes clusters
+  in AWS (EKS); scale node groups or Fargate profiles; update cluster versions;
+  or perform Kubernetes-specific operations with kubectl, deployments, services,
+  or Helm charts, even if they don't say "EKS" and instead say "set up a
+  Kubernetes cluster", "manage a k8s cluster", "configure container
+  orchestration on AWS", "deploy pods via kubectl", or "work with Helm charts
+  in AWS".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), kubectl, valid AWS credentials, network

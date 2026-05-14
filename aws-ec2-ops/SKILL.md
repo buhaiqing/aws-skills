@@ -1,8 +1,14 @@
 ---
 name: aws-ec2-ops
 description: >-
-  Use when operating AWS EC2 instances via AWS CLI or boto3 SDK; user mentions
-  EC2, Elastic Compute Cloud, instance, VM, or Amazon Machine Image (AMI).
+  Use when the user needs to launch, manage, stop, start, or terminate virtual
+  servers (instances) in AWS; create or manage Amazon Machine Images (AMIs);
+  work with Spot instances, Reserved instances, or On-Demand capacity; attach
+  volumes, security groups, or key pairs to instances; or monitor instance
+  state and health, even if they don't explicitly say "EC2" and instead say
+  "spin up a server", "create a VM", "launch an instance", "manage my cloud
+  compute resources", or "provision reserved capacity".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

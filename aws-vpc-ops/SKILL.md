@@ -1,10 +1,33 @@
+---
+name: aws-vpc-ops
+description: >-
+  Use this skill when managing AWS VPC resources, creating/deleting VPCs,
+  subnets, security groups, route tables, IGWs, NAT gateways, or peering
+  connections; even if the user doesn't explicitly mention "VPC" but needs
+  network infrastructure setup or troubleshooting.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with EC2/VPC
+  permissions.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+---
+
 # aws-vpc-ops
 
 AWS VPC (Virtual Private Cloud) operational skill for AI Agent automation.
 
 ## Triggers
 
-**SHOULD activate when**:
+**SHOULD activate when:**
 - User requests VPC creation, deletion, or modification
 - Subnet management operations (create, delete, describe)
 - Security Group rule changes
@@ -14,7 +37,7 @@ AWS VPC (Virtual Private Cloud) operational skill for AI Agent automation.
 - CIDR block allocation or conflicts
 - Network connectivity troubleshooting within VPC scope
 
-**SHOULD-NOT activate when**:
+**SHOULD-NOT activate when:**
 - EC2 instance operations only (delegate to `aws-ec2-ops`)
 - IAM policy changes (delegate to `aws-iam-ops`)
 - Direct Connect or VPN operations (delegate to `aws-network-ops`)
@@ -86,12 +109,12 @@ Action: See references/integration.md → Error Messages for diagnosis.
 
 ### Execute
 
-**Primary Path**: AWS CLI with `--output json`
+**Primary Path:** AWS CLI with `--output json`
 ```bash
 aws ec2 create-vpc --cidr-block {{user.vpc_cidr}} --output json
 ```
 
-**Fallback Path**: boto3 SDK (after 3 CLI failures)
+**Fallback Path:** boto3 SDK (after 3 CLI failures)
 ```python
 import boto3
 ec2 = boto3.client('ec2', region_name='{{env.AWS_DEFAULT_REGION}}')
@@ -138,7 +161,7 @@ Dependencies must be removed first:
 Confirm deletion? [YES/NO]
 ```
 
-**Required checks before VPC deletion**:
+**Required checks before VPC deletion:**
 1. List all subnets in VPC
 2. Check for EC2 instances via `describe-instances --filters Name=vpc-id`
 3. Verify Internet Gateway detachment

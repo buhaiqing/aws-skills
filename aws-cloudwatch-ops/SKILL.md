@@ -1,9 +1,7 @@
 ---
 name: aws-cloudwatch-ops
 description: >-
-  Use when operating AWS CloudWatch alarms, metrics, and dashboards via AWS CLI
-  or boto3 SDK; user mentions CloudWatch, CW, metrics, alarms, monitoring, or
-  dashboards.
+  Use when managing CloudWatch alarms, metrics, dashboards, or log groups. Invoke when user mentions "CloudWatch", "monitoring", "alarms", or needs AWS resource observability and alerting.
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

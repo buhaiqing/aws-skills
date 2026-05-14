@@ -1,8 +1,13 @@
 ---
 name: aws-elb-ops
 description: >-
-  Use when operating AWS Elastic Load Balancing (ELB) resources via AWS CLI or
-  boto3 SDK; user mentions ELB, ALB, NLB, CLB, Load Balancer, or Target Group.
+  Use when the user needs to set up, configure, or manage load balancers to
+  distribute traffic across multiple targets; create or modify target groups,
+  listeners, or health checks; configure ALB for HTTP/HTTPS web traffic, NLB
+  for high-performance TCP/UDP workloads, or CLB for legacy applications; even
+  if they don't say "ELB" and instead say "balance traffic", "set up a load
+  balancer", "configure health checks", or "route requests to my servers".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

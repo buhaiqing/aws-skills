@@ -1,9 +1,14 @@
 ---
 name: aws-iam-ops
 description: >-
-  Use when managing AWS IAM users, groups, roles, and policies via AWS CLI or
-  boto3 SDK; user mentions IAM, Identity and Access Management, user, group,
-  role, policy, or permissions.
+  Use when the user needs to create, manage, or delete AWS IAM identities
+  including users, groups, roles, and policies; configure access permissions
+  and trust relationships; generate or rotate access keys; set up federated
+  access or SSO; or attach/detach managed policies to AWS identities, even
+  if they don't say "IAM" and instead say "set up user access in AWS", "create
+  a service role for AWS", "configure AWS permissions", "grant cross-account
+  access", or "attach policies to an IAM role".
+---
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access

@@ -1,3 +1,20 @@
+---
+name: aws-lambda-ops
+description: >-
+  Use when the user needs to create, deploy, configure, or manage AWS Lambda
+  serverless functions; work with Lambda layers, versions, and aliases; set up
+  event source mappings with SQS, SNS, DynamoDB, or Kinesis; configure function
+  settings like memory, timeout, runtime, and environment variables; invoke
+  functions synchronously or asynchronously; configure provisioned concurrency
+  or dead-letter queues for error handling; or troubleshoot Lambda invocation
+  errors, even if they don't say "Lambda" and instead say "deploy a serverless
+  function", "set up an event-driven function", "configure a Lambda function",
+  "manage function layers", or "create an event source mapping for AWS".
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
+  to Lambda endpoints.
+---
 # aws-lambda-ops
 
 AWS Lambda serverless compute operations skill for AI Agent automation.

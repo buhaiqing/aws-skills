@@ -1,6 +1,20 @@
-# AWS KMS Ops Skill
-
-AWS Key Management Service (KMS) operational skill for AI Agent automation.
+---
+name: aws-kms-ops
+description: >-
+  Use when the user needs to create, manage, or rotate AWS KMS encryption keys;
+  encrypt and decrypt data using AWS-managed keys; configure key policies,
+  grants, or aliases; enable automatic key rotation; schedule or cancel key
+  deletion; implement envelope encryption with data keys; or integrate SSE-KMS
+  with other AWS services, even if they don't say "KMS" and instead say
+  "manage encryption keys in AWS", "encrypt my data with AWS keys", "set up
+  AWS key rotation", "configure SSE-KMS encryption", or "implement envelope
+  encryption with data keys in AWS".
+---
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
+  to KMS endpoints.
+---
 
 ## Triggers
 

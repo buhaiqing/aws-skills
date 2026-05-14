@@ -1,3 +1,19 @@
+---
+name: aws-secretsmanager-ops
+description: >-
+  Use when the user needs to create, manage, or rotate secrets in AWS Secrets
+  Manager (distinct from SSM Parameter Store); store and retrieve sensitive
+  information like database credentials, API keys, or OAuth tokens; configure
+  automatic secret rotation with Lambda functions; manage cross-account secret
+  access; or implement secure credential management for applications, even if they
+  don't say "Secrets Manager" and instead say "store my database password
+  securely", "manage API keys", "set up credential rotation", "configure secret
+  access across accounts", or "handle sensitive configuration in AWS".
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
+  to Secrets Manager endpoints.
+---
 # AWS Secrets Manager Ops Skill
 
 AWS Secrets Manager operational skill for AI Agent automation.
