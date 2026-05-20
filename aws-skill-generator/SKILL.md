@@ -60,18 +60,26 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 
 ## Directory Layout
 
-```
-aws-[service]-ops/
-├── SKILL.md              # What to do (triggers, scope, flows)
-├── references/
-│   ├── aws-cli-usage.md  # How to: CLI commands, JSON paths
-│   ├── boto3-sdk-usage.md # How to: SDK methods, examples
-│   ├── core-concepts.md  # Service architecture, limits
-│   ├── troubleshooting.md # Error codes, diagnostics
-│   └── integration.md    # Environment setup (uv, credentials)
-└── assets/
-    └── example-config.yaml
-```
+---
+
+## Post-Generation Self-Check (生成后自检 — 宪章执行)
+
+> **机制：生成完成后自动执行，不符合则循环修复直到通过。**
+> **参考：** `references/governance-review.md` §0 Charter
+
+### Charter Compliance Checklist (强制执行)
+
+| # | Check | Pass Criteria | Auto-Fix |
+|---|-------|--------------|----------|
+| C1 | Frontmatter | Starts with `---`, has `name`, `description`, `license`, `compatibility`, `metadata` | Add from aws-skill-template.md |
+| C2 | SHOULD/SHOULD NOT | Both trigger sections present | Add Trigger & Scope section |
+| C3 | Trigger & Scope | Complete with product keywords | Add from template |
+| C4 | Variable Convention | `{{env.AWS_*}}`, `{{user.*}}`, `{{output.*}}` | Add placeholder table |
+| C5 | Safety Gates | Destructive ops have confirmation | Add pre-flight safety gate |
+
+> **自解流程**：C1-C5 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
+
+---
 
 ## Key Principles
 
