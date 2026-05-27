@@ -1,5 +1,7 @@
 # boto3 SDK Usage — CloudWatch
 
+_Latest update: 2026-05-28_
+
 ## Client Initialization
 
 ```python
@@ -178,6 +180,138 @@ response = client.put_metric_data(
         }
     ]
 )
+```
+
+### Put Composite Alarm (FinOps: 合并告警)
+
+```python
+response = client.put_composite_alarm(
+    AlarmName='Production-Health-Composite',
+    AlarmRule='(ALARM("HighCPU") OR ALARM("HighMemory"))',
+    AlarmActions=['arn:aws:sns:us-east-1:123456789:ops-topic']
+)
+print(f"Composite alarm created")
+```
+
+### Create Anomaly Detection Alarm (AIOps: ML 动态阈值)
+
+```python
+response = client.put_metric_alarm(
+    AlarmName='HighCPU-Anomaly',
+    MetricName='CPUUtilization',
+    Namespace='AWS/EC2',
+    Statistic='Average',
+    Period=300,
+    ComparisonOperator='LessThanLowerOrGreaterThanUpperThreshold',
+    EvaluationPeriods=2,
+    ThresholdMetricId='ad',
+    Metrics=[
+        {
+            'Id': 'm1',
+            'MetricStat': {
+                'Metric': {'Namespace': 'AWS/EC2', 'MetricName': 'CPUUtilization'},
+                'Period': 300,
+                'Stat': 'Average'
+            }
+        },
+        {
+            'Id': 'ad',
+            'Expression': 'ANOMALY_DETECTION_BAND(m1, 2)'
+        }
+    ]
+)
+```
+
+### Get Metric Data with Metric Math (AIOps: Error Rate)
+
+```python
+response = client.get_metric_data(
+    MetricDataQueries=[
+        {
+            'Id': 'errors',
+            'MetricStat': {
+                'Metric': {'Namespace': 'AWS/Lambda', 'MetricName': 'Errors'},
+                'Stat': 'Sum',
+                'Period': 300
+            }
+        },
+        {
+            'Id': 'invocations',
+            'MetricStat': {
+                'Metric': {'Namespace': 'AWS/Lambda', 'MetricName': 'Invocations'},
+                'Stat': 'Sum',
+                'Period': 300
+            }
+        },
+        {
+            'Id': 'error_rate',
+            'Expression': '(errors/invocations)*100',
+            'Label': 'Error Rate %'
+        }
+    ]
+)
+for result in response['MetricDataResults']:
+    print(f"{result['Id']}: {result['Values']}")
+```
+
+### Forecast Metrics (AIOps+FinOps)
+
+```python
+from datetime import datetime, timedelta
+
+response = client.get_metric_data(
+    MetricDataQueries=[
+        {
+            'Id': 'm1',
+            'MetricStat': {
+                'Metric': {'Namespace': 'AWS/EC2', 'MetricName': 'CPUUtilization'},
+                'Stat': 'Average',
+                'Period': 3600
+            }
+        },
+        {
+            'Id': 'fc',
+            'Expression': 'FORECAST(m1, "linear", 168)',
+            'Label': '7-Day Forecast'
+        }
+    ],
+    StartTime=datetime.utcnow() - timedelta(days=14),
+    EndTime=datetime.utcnow()
+)
+```
+
+## Logs Insights (AIOps)
+
+### Start Log Query
+```python
+import boto3, time
+from datetime import datetime, timedelta
+
+logs = boto3.client('logs', region_name='us-east-1')
+
+start_response = logs.start_query(
+    logGroupNames=['/aws/lambda/my-function'],
+    startTime=int((datetime.utcnow() - timedelta(hours=1)).timestamp()),
+    endTime=int(datetime.utcnow().timestamp()),
+    queryString='fields @timestamp, @message | filter @message like /ERROR/ | stats count() by bin(5m)'
+)
+
+query_id = start_response['queryId']
+
+# Poll for results (max 300 retries = 5 min timeout to prevent infinite loop)
+max_polls = 300
+for i in range(max_polls):
+    result = logs.get_query_results(queryId=query_id)
+    if result['status'] in ('Complete', 'Failed', 'Cancelled'):
+        break
+    time.sleep(1)
+else:
+    print("Timed out waiting for query results")
+    result = {'status': 'Timeout'}
+
+if result['status'] == 'Complete':
+    for row in result['results']:
+        print({field['field']: field['value'] for field in row})
 ```
 
 ### Put Dashboard

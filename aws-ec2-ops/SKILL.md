@@ -15,8 +15,8 @@ compatibility: >-
   to EC2 endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-05-28"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -53,7 +53,24 @@ Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. Thi
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default `us-east-1` if unset |
 | `{{user.region}}` | User input | Ask once; reuse |
 | `{{user.instance_name}}` | User input | Ask once; reuse |
-| `{{output.instance_id}}` | Last API response | Parse: `.Instances[0].InstanceId` |
+| `{{user.ami_id}}` | User input | Ask once; reuse |
+| `{{user.instance_type}}` | User input | Ask once; reuse |
+| `{{user.key_name}}` | User input | Ask once; reuse |
+| `{{user.sg_id}}` | User input | Ask once; reuse |
+| `{{user.instance_id}}` | User input / output | Resolve by name/tag, then reuse |
+| `{{user.volume_id}}` | User input / output | Resolve by instance or list, then reuse |
+| `{{user.volume_size}}` | User input | Default `10` GB |
+| `{{user.volume_type}}` | User input | Default `gp3` |
+| `{{user.snapshot_id}}` | User input / output | Resolve or create, then reuse |
+| `{{user.image_id}}` | User input / output | Describe AMI, then reuse |
+| `{{user.image_name}}` | User input | AMI name; ask once |
+| `{{user.device}}` | User input | Default `/dev/sdf` |
+| `{{user.new_instance_type}}` | User input | Target type for modify |
+| `{{output.instance_id}}` | API response | Parse: `.Instances[0].InstanceId` after Run |
+| `{{output.volume_id}}` | API response | Parse: `.Volumes[0].VolumeId` after Create |
+| `{{output.snapshot_id}}` | API response | Parse: `.Snapshots[0].SnapshotId` after Create |
+| `{{output.image_id}}` | API response | Parse: `.ImageId` after CreateImage |
+| `{{output.key_material}}` | API response | Parse: `.KeyMaterial` (private key, save once) |
 
 ## Execution Flow Pattern
 
@@ -104,15 +121,17 @@ Action: See references/integration.md → Error Messages for diagnosis.
 
 #### Execute — CLI (Primary)
 ```bash
-aws ec2 run-instances \
+INSTANCE_ID=$(aws ec2 run-instances \
   --image-id "{{user.ami_id}}" \
   --instance-type "{{user.instance_type}}" \
   --key-name "{{user.key_name}}" \
   --security-group-ids "{{user.sg_id}}" \
   --region "{{user.region}}" \
   --tag-specifications "[{\"ResourceType\":\"instance\",\"Tags\":[{\"Key\":\"Name\",\"Value\":\"{{user.instance_name}}\"}]}]" \
-  --output json
+  --output json | jq -r '.Instances[0].InstanceId')
 ```
+Log: `[OK] Instance launched: $INSTANCE_ID`
+Set `{{output.instance_id}}` = `$INSTANCE_ID`
 
 #### Execute — boto3 (Fallback)
 ```python
@@ -153,8 +172,8 @@ done
 ### Operation: Stop Instance
 
 #### Pre-flight (Safety Gate)
-- Verify instance exists and is `running` state
-- **MUST** confirm: "Stop instance {{user.instance_id}}?"
+- Describe instance to verify it exists and is `running` state
+- **MUST** obtain confirmation: "Stop instance {{user.instance_id}}? This will shut down the instance. Confirm with exact instance ID."
 
 #### Execute — CLI
 ```bash
@@ -162,9 +181,26 @@ aws ec2 stop-instances --instance-ids "{{user.instance_id}}" --region "{{user.re
 ```
 
 #### Validate
-Poll until `stopped` state (max 120s).
+Poll until `stopped` state (max 120s, interval 5s):
+```bash
+for i in $(seq 1 24); do
+  STATUS=$(aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq -r '.Reservations[0].Instances[0].State.Name')
+  [ "$STATUS" = "stopped" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.stop_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Stopping: {response['StoppingInstances'][0]['InstanceId']}")
+```
 
 ### Operation: Start Instance
+
+#### Pre-flight
+- Describe instance to verify it exists and is `stopped` state
+- If already `running`: inform user that instance is already running; no action needed
 
 #### Execute — CLI
 ```bash
@@ -172,13 +208,27 @@ aws ec2 start-instances --instance-ids "{{user.instance_id}}" --region "{{user.r
 ```
 
 #### Validate
-Poll until `running` state (max 120s).
+Poll until `running` state (max 120s, interval 5s):
+```bash
+for i in $(seq 1 24); do
+  STATUS=$(aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq -r '.Reservations[0].Instances[0].State.Name')
+  [ "$STATUS" = "running" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.start_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Starting: {response['StartingInstances'][0]['InstanceId']}")
+```
 
 ### Operation: Terminate Instance (Destructive)
 
 #### Safety Gate (Mandatory)
-**MUST** obtain explicit confirmation:
-> "Terminate {{user.instance_id}}? This action is IRREVERSIBLE. Confirm with exact instance ID."
+- Describe instance to verify it exists
+- **MUST** obtain explicit confirmation:
+> "Terminate {{user.instance_id}}? This action is IRREVERSIBLE — all associated data will be lost. Confirm with exact instance ID."
 
 #### Execute — CLI
 ```bash
@@ -186,7 +236,20 @@ aws ec2 terminate-instances --instance-ids "{{user.instance_id}}" --region "{{us
 ```
 
 #### Validate
-Poll until `terminated` state (max 60s).
+Poll until `terminated` state (max 60s, interval 5s):
+```bash
+for i in $(seq 1 12); do
+  STATUS=$(aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq -r '.Reservations[0].Instances[0].State.Name')
+  [ "$STATUS" = "terminated" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.terminate_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Terminating: {response['TerminatingInstances'][0]['InstanceId']}")
+```
 
 ### Operation: Describe Instance
 
@@ -204,6 +267,341 @@ aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{use
 | Private IP | `.Reservations[0].Instances[0].PrivateIpAddress` | Internal IP |
 | Public IP | `.Reservations[0].Instances[0].PublicIpAddress` | External IP (if assigned) |
 | Launch Time | `.Reservations[0].Instances[0].LaunchTime` | ISO 8601 |
+| VPC ID | `.Reservations[0].Instances[0].VpcId` | Network |
+| Subnet ID | `.Reservations[0].Instances[0].SubnetId` | Network |
+
+### Operation: Describe Instances (List/Filter)
+
+#### Execute — CLI
+
+List all instances:
+```bash
+aws ec2 describe-instances --region "{{user.region}}" --output json
+```
+
+Filter by state (e.g., running):
+```bash
+aws ec2 describe-instances --region "{{user.region}}" --filters Name=instance-state-name,Values=running --output json
+```
+
+Filter by tag:
+```bash
+aws ec2 describe-instances --region "{{user.region}}" --filters Name=tag:Name,Values="{{user.instance_name}}" --output json
+```
+
+#### Present to User
+Summarize each instance: ID, state, type, tags.
+```bash
+aws ec2 describe-instances --region "{{user.region}}" --output json | jq -r '.Reservations[].Instances[] | [.InstanceId, .State.Name, .InstanceType, (.Tags // [] | from_entries.Name // "-")] | @tsv'
+```
+
+#### Execute — boto3 (Fallback)
+```python
+paginator = client.get_paginator('describe_instances')
+filters = [{'Name': 'tag:Name', 'Values': ['{{user.instance_name}}']}]  # optional
+for page in paginator.paginate(Filters=filters):
+    for r in page['Reservations']:
+        for i in r['Instances']:
+            print(f"{i['InstanceId']}: {i['State']['Name']} ({i['InstanceType']})")
+```
+
+### Operation: Create KeyPair
+
+#### Pre-flight
+- Check if key name already exists:
+  ```bash
+  aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}"
+  ```
+  If no error → name exists, suggest a different name.
+
+#### Execute — CLI
+```bash
+RESULT=$(aws ec2 create-key-pair --key-name "{{user.key_name}}" --key-type ed25519 --region "{{user.region}}" --output json)
+PRIVATE_KEY=$(echo "$RESULT" | jq -r '.KeyMaterial')
+```
+**CRITICAL**: Save private key immediately — AWS will NOT return it again.
+```
+[IMPORTANT] Private key saved to {{user.key_name}}.pem. Set permissions: chmod 400 {{user.key_name}}.pem
+```
+Set `{{output.key_material}}` = `$PRIVATE_KEY`
+
+#### Validate
+```bash
+aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.create_key_pair(KeyName='{{user.key_name}}', KeyType='ed25519')
+print(f"KeyPair: {response['KeyName']}")
+print(f"Private key:\n{response['KeyMaterial']}")
+```
+
+### Operation: Delete KeyPair
+
+#### Safety Gate (Destructive)
+- **MUST** confirm: "Delete key pair {{user.key_name}}? Instances using this key will lose SSH access for new connections."
+- Verify keypair exists first
+
+#### Execute — CLI
+```bash
+aws ec2 delete-key-pair --key-name "{{user.key_name}}" --region "{{user.region}}"
+```
+
+#### Execute — boto3 (Fallback)
+```python
+client.delete_key_pair(KeyName='{{user.key_name}}')
+```
+
+### Operation: Create Volume (EBS)
+
+#### Pre-flight
+- Verify availability zone: `{{user.region}}`a (or user-specified AZ)
+
+#### Execute — CLI
+```bash
+VOLUME_ID=$(aws ec2 create-volume \
+  --availability-zone "{{user.region}}a" \
+  --size "{{user.volume_size:10}}" \
+  --volume-type "{{user.volume_type:gp3}}" \
+  --region "{{user.region}}" \
+  --output json | jq -r '.VolumeId')
+```
+Log: `[OK] Volume created: $VOLUME_ID`
+Set `{{output.volume_id}}` = `$VOLUME_ID`
+
+#### Validate
+Wait until `available` state (max 30s, interval 5s):
+```bash
+for i in $(seq 1 6); do
+  STATUS=$(aws ec2 describe-volumes --volume-ids "{{output.volume_id}}" --region "{{user.region}}" --output json | jq -r '.Volumes[0].State')
+  [ "$STATUS" = "available" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.create_volume(
+    AvailabilityZone='{{user.region}}a',
+    Size={{user.volume_size:10}},
+    VolumeType='{{user.volume_type:gp3}}'
+)
+volume_id = response['VolumeId']
+```
+
+### Operation: Attach Volume
+
+#### Pre-flight
+- Verify volume exists and state is `available`
+- Verify instance exists and state is `running`
+
+#### Execute — CLI
+```bash
+aws ec2 attach-volume \
+  --volume-id "{{user.volume_id|output.volume_id}}" \
+  --instance-id "{{user.instance_id}}" \
+  --device "{{user.device:/dev/sdf}}" \
+  --region "{{user.region}}" \
+  --output json
+```
+
+#### Validate
+Wait until volume state is `in-use` (max 30s, interval 5s):
+```bash
+for i in $(seq 1 6); do
+  STATUS=$(aws ec2 describe-volumes --volume-ids "{{user.volume_id|output.volume_id}}" --region "{{user.region}}" --output json | jq -r '.Volumes[0].State')
+  [ "$STATUS" = "in-use" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.attach_volume(
+    VolumeId='{{user.volume_id|output.volume_id}}',
+    InstanceId='{{user.instance_id}}',
+    Device='{{user.device:/dev/sdf}}'
+)
+```
+
+### Operation: Detach Volume
+
+#### Safety Gate
+- Verify volume is attached to instance
+- **MUST** confirm: "Detach volume {{user.volume_id}} from instance {{user.instance_id}}?"
+
+#### Execute — CLI
+```bash
+aws ec2 detach-volume --volume-id "{{user.volume_id}}" --region "{{user.region}}" --output json
+```
+
+#### Validate
+Wait until volume state is `available` (max 60s, interval 5s):
+```bash
+for i in $(seq 1 12); do
+  STATUS=$(aws ec2 describe-volumes --volume-ids "{{user.volume_id}}" --region "{{user.region}}" --output json | jq -r '.Volumes[0].State')
+  [ "$STATUS" = "available" ] && break
+  sleep 5
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.detach_volume(VolumeId='{{user.volume_id}}')
+```
+
+### Operation: Describe Volumes
+
+#### Execute — CLI
+```bash
+# All volumes
+aws ec2 describe-volumes --region "{{user.region}}" --output json
+
+# Filter by instance attachment
+aws ec2 describe-volumes --region "{{user.region}}" --filters Name=attachment.instance-id,Values="{{user.instance_id}}" --output json
+
+# Single volume
+aws ec2 describe-volumes --volume-ids "{{user.volume_id}}" --region "{{user.region}}" --output json
+```
+
+#### Present to User
+| Field | JSON Path | Notes |
+|-------|-----------|-------|
+| Volume ID | `.Volumes[0].VolumeId` | Primary identifier |
+| Size (GB) | `.Volumes[0].Size` | Storage capacity |
+| Type | `.Volumes[0].VolumeType` | gp3/io1/standard |
+| State | `.Volumes[0].State` | available/in-use |
+| Attached to | `.Volumes[0].Attachments[0].InstanceId` | If in-use |
+| Device | `.Volumes[0].Attachments[0].Device` | e.g., /dev/sdf |
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.describe_volumes(
+    Filters=[{'Name': 'attachment.instance-id', 'Values': ['{{user.instance_id}}']}]
+)
+for v in response['Volumes']:
+    print(f"{v['VolumeId']}: {v['Size']}GB {v['VolumeType']} ({v['State']})")
+```
+
+### Operation: Create Snapshot
+
+#### Pre-flight
+- Verify volume exists (describe volume)
+
+#### Execute — CLI
+```bash
+SNAPSHOT_ID=$(aws ec2 create-snapshot \
+  --volume-id "{{user.volume_id}}" \
+  --description "{{user.snapshot_description:Snapshot of {{user.volume_id}}}}" \
+  --region "{{user.region}}" \
+  --output json | jq -r '.SnapshotId')
+```
+Set `{{output.snapshot_id}}` = `$SNAPSHOT_ID`
+
+#### Validate
+Poll until `completed` state (max 300s, interval 10s):
+```bash
+for i in $(seq 1 30); do
+  STATUS=$(aws ec2 describe-snapshots --snapshot-ids "{{output.snapshot_id}}" --region "{{user.region}}" --output json | jq -r '.Snapshots[0].State')
+  [ "$STATUS" = "completed" ] && break
+  sleep 10
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.create_snapshot(
+    VolumeId='{{user.volume_id}}',
+    Description='{{user.snapshot_description:Snapshot of volume}}'
+)
+snapshot_id = response['SnapshotId']
+```
+
+### Operation: Create Image (AMI)
+
+#### Pre-flight
+- Verify instance exists
+- **Recommend** stopping instance first for data consistency:
+  "Stop instance {{user.instance_id}} first? (Recommended for consistent AMI)"
+
+#### Execute — CLI
+```bash
+IMAGE_ID=$(aws ec2 create-image \
+  --instance-id "{{user.instance_id}}" \
+  --name "{{user.image_name}}" \
+  --description "{{user.image_description:AMI of {{user.instance_id}}}}" \
+  --region "{{user.region}}" \
+  --output json | jq -r '.ImageId')
+```
+Set `{{output.image_id}}` = `$IMAGE_ID`
+
+#### Validate
+Poll until `available` state (max 600s, interval 30s):
+```bash
+for i in $(seq 1 20); do
+  STATUS=$(aws ec2 describe-images --image-ids "{{output.image_id}}" --region "{{user.region}}" --output json | jq -r '.Images[0].State')
+  [ "$STATUS" = "available" ] && break
+  sleep 30
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.create_image(
+    InstanceId='{{user.instance_id}}',
+    Name='{{user.image_name}}',
+    Description='{{user.image_description:AMI}}',
+    NoReboot=False
+)
+image_id = response['ImageId']
+```
+
+### Operation: Deregister Image (AMI)
+
+#### Safety Gate (Destructive)
+- **MUST** confirm: "Deregister AMI {{user.image_id}}? This removes the AMI. Existing instances continue running, but new instances cannot be launched from this AMI."
+
+#### Execute — CLI
+```bash
+aws ec2 deregister-image --image-id "{{user.image_id}}" --region "{{user.region}}"
+```
+
+### Operation: Modify Instance Attribute
+
+#### Pre-flight
+- For instance type change: instance **must** be `stopped`
+- Verify the target attribute is valid
+
+#### Execute — CLI: Change Instance Type
+```bash
+aws ec2 modify-instance-attribute \
+  --instance-id "{{user.instance_id}}" \
+  --instance-type "{\"Value\":\"{{user.new_instance_type}}\"}" \
+  --region "{{user.region}}"
+```
+
+#### Execute — CLI: Change Security Groups
+```bash
+aws ec2 modify-instance-attribute \
+  --instance-id "{{user.instance_id}}" \
+  --groups "{{user.new_sg_id}}" \
+  --region "{{user.region}}"
+```
+
+#### Validate
+Describe and verify the attribute changed:
+```bash
+aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq '.Reservations[0].Instances[0].InstanceType'
+```
+
+#### Execute — boto3 (Fallback)
+```python
+client.modify_instance_attribute(
+    InstanceId='{{user.instance_id}}',
+    InstanceType={'Value': '{{user.new_instance_type}}'}
+)
+```
 
 ## Reference Files
 
@@ -212,3 +610,4 @@ aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{use
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+- [Example Configuration](assets/example-config.yaml)

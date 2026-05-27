@@ -1,0 +1,130 @@
+# EC2 Instance Configuration Examples
+# =====================================
+# Template: Replace {{user.*}} placeholders with actual values at runtime.
+# Use these examples as references when launching or configuring EC2 resources.
+
+# --- Instance Launch Configuration ---
+# Basic t3.micro with Amazon Linux 2
+instance_config:
+  ImageId: "{{user.ami_id}}"
+  InstanceType: "{{user.instance_type:t3.micro}}"
+  KeyName: "{{user.key_name}}"
+  SecurityGroupIds:
+    - "{{user.sg_id}}"
+  SubnetId: "subnet-xxxxxxxx"  # from aws-vpc-ops
+  TagSpecifications:
+    - ResourceType: instance
+      Tags:
+        - Key: "Name"
+          Value: "{{user.instance_name}}"
+        - Key: "Environment"
+          Value: "dev"
+        - Key: "ManagedBy"
+          Value: "AI-Agent"
+  BlockDeviceMappings:
+    - DeviceName: "/dev/xvda"
+      Ebs:
+        VolumeSize: 20
+        VolumeType: "gp3"
+        DeleteOnTermination: true
+  MetadataOptions:
+    HttpTokens: "required"       # IMDSv2 only
+    HttpPutResponseHopLimit: 1
+
+# --- User Data Script (Bootstrapping) ---
+# Base64-encoded or passed as file
+user_data: |
+  #!/bin/bash
+  yum update -y
+  yum install -y httpd
+  systemctl enable httpd
+  systemctl start httpd
+  echo "<h1>Hello from {{user.instance_name}}</h1>" > /var/www/html/index.html
+
+# --- EBS Volume Configuration ---
+volume_config:
+  VolumeType: "gp3"
+  Size: 50
+  Iops: 3000           # gp3 baseline
+  Throughput: 125      # MB/s, gp3 baseline
+  AvailabilityZone: "{{user.region}}a"
+  Encrypted: true
+  Tags:
+    - Key: "Name"
+      Value: "data-volume-{{user.instance_name}}"
+
+# --- Security Group Rules (EC2 Create) ---
+security_group_rules:
+  Inbound:
+    - IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: "0.0.0.0/0"
+      Description: "SSH access"
+    - IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: "0.0.0.0/0"
+      Description: "HTTP access"
+    - IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: "0.0.0.0/0"
+      Description: "HTTPS access"
+  Outbound:
+    - IpProtocol: "-1"
+      CidrIp: "0.0.0.0/0"
+      Description: "All outbound traffic"
+
+# --- KeyPair Type (for create-key-pair) ---
+keypair_config:
+  KeyName: "{{user.key_name}}"
+  KeyType: "ed25519"     # ed25519 or rsa
+  KeyFormat: "pem"       # pem or ppk (Windows)
+
+# --- Reserved Instance Specification ---
+reserved_instance_offer:
+  InstanceType: "t3.micro"
+  InstanceCount: 1
+  ProductDescription: "Linux/UNIX"
+  OfferingClass: "standard"
+  OfferingType: "All Upfront"
+  DurationSeconds: 31536000  # 1 year
+
+# --- Spot Instance Request ---
+spot_request:
+  InstanceCount: 1
+  Type: "one-time"
+  InstanceInterruptionBehavior: "terminate"
+  SpotPrice: "0.05"       # max bid price (USD/hour)
+  LaunchSpecification:
+    ImageId: "{{user.ami_id}}"
+    InstanceType: "t3.micro"
+    KeyName: "{{user.key_name}}"
+    SecurityGroupIds:
+      - "{{user.sg_id}}"
+
+# --- Snapshot Configuration ---
+snapshot_config:
+  VolumeId: "{{user.volume_id}}"
+  Description: "Backup of {{user.volume_id}} - {{env.AWS_DEFAULT_REGION}}"
+  TagSpecifications:
+    - ResourceType: snapshot
+      Tags:
+        - Key: "Backup"
+          Value: "daily"
+        - Key: "CreatedBy"
+          Value: "AI-Agent"
+
+# --- Auto Recovery Alarm (CloudWatch) ---
+recovery_alarm:
+  AlarmName: "EC2-Recovery-{{user.instance_name}}"
+  Namespace: "AWS/EC2"
+  MetricName: "StatusCheckFailed_System"
+  Statistic: "Minimum"
+  Period: 60
+  EvaluationPeriods: 2
+  Threshold: 1.0
+  ComparisonOperator: "GreaterThanOrEqualToThreshold"
+  AlarmActions:
+    - "arn:aws:automate:{{env.AWS_DEFAULT_REGION}}:ec2:recover"

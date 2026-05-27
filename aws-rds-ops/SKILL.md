@@ -29,193 +29,123 @@ AWS Relational Database Service (RDS) operational skill for AI Agent automation.
 - User asks about Aurora cluster operations
 - User mentions "RDS", "managed database", "MySQL/PostgreSQL on AWS", "Aurora"
 - User needs database backup or recovery operations
+- (AIOps) User reports slow database, connection issues, storage warning, backup compliance
+- (AIOps) User asks for cost optimization or capacity forecast
 
 **SHOULD-NOT activate when:**
-- DynamoDB operations (use `aws-dynamodb-ops`)
-- ElastiCache operations (use `aws-elasticache-ops`)
-- Redshift operations (use `aws-redshift-ops`)
-- EC2 self-managed database setup
-- DocumentDB operations
-- Neptune graph database operations
+- DynamoDB → `aws-dynamodb-ops` / ElastiCache → `aws-elasticache-ops` / Redshift → `aws-redshift-ops`
+- EC2 self-managed DB / DocumentDB / Neptune
 
 **Delegation:**
-- Security groups → `aws-ec2-ops` (security group creation)
-- IAM roles → `aws-iam-ops` (role creation for RDS)
-- KMS keys → `aws-kms-ops` (encryption key setup)
-- CloudWatch alarms → `aws-cloudwatch-ops` (monitoring setup)
-- S3 backup integration → `aws-s3-ops` (S3 import/export)
+- Security groups → `aws-ec2-ops` | IAM roles → `aws-iam-ops` | KMS keys → `aws-kms-ops`
+- CloudWatch alarms → `aws-cloudwatch-ops` | S3 backup → `aws-s3-ops`
 
 ## Scope
 
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create DB Instance | Yes | None |
-| Modify DB Instance | Yes | Parameter validation |
-| Delete DB Instance | Yes | **Human confirmation + final snapshot** |
-| Create Snapshot | Yes | None |
-| Restore from Snapshot | Yes | None |
-| Delete Snapshot | Yes | Human confirmation |
-| Create Read Replica | Yes | None |
-| Promote Read Replica | Yes | None |
-| Create Parameter Group | Yes | None |
-| Modify Parameter Group | Yes | Static param restart required |
-| Delete Parameter Group | Yes | Human confirmation |
-| Create Aurora Cluster | Yes | None |
-| Add Aurora Instance | Yes | None |
-| Delete Aurora Cluster | Yes | **Human confirmation + final snapshot** |
+| Operation | Safety Gate |
+|-----------|-------------|
+| Create/Modify DB Instance | Parameter validation |
+| Delete DB Instance | **Human confirm + final snapshot** |
+| Create/Restore/Delete Snapshot | Delete: human confirm |
+| Create/Promote Read Replica | None |
+| Create/Modify/Delete Parameter Group | Delete: human confirm |
+| Create/Delete Aurora Cluster | Delete: human confirm + snapshot |
+| **Auto Heal Storage** (FreeStorage <10%) | AUTO_HEAL — automatic |
+| **Diagnose Slow Query** | AI_ASSIST — recommend index/params |
+| **Capacity Forecast** | AI_ASSIST — recommend scale |
+| **Backup Compliance Scan** | MANUAL — report findings |
 
 ## Variable Convention
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.DBInstanceIdentifier}}` | User input | my-db-prod |
-| `{{user.DBEngine}}` | User input | mysql, postgres, aurora |
-| `{{user.MasterUsername}}` | User input | admin |
-| `{{user.MasterUserPassword}}` | User input | (secure prompt) |
-| `{{user.DBInstanceClass}}` | User input | db.t3.micro |
+| `{{env.*}}` | Environment | `AWS_ACCESS_KEY_ID`, `AWS_DEFAULT_REGION` |
+| `{{user.*}}` | User input | `DBInstanceIdentifier`, `DBEngine`, `MasterUsername` |
 
 **Never commit real credentials. Always use `{{env.*}}` or `{{user.*}}` placeholders.**
 
 ## Execution Flow
 
 ### Pre-flight
-
-**Step 1: Check CLI**
 ```bash
-aws --version
+aws --version && aws sts get-caller-identity --output json
 ```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
-
-**Step 2: Load & Verify Credentials**
+Log: `[OK] Region={{env.AWS_DEFAULT_REGION}} Credential verified. Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx`
+On failure: `[FAIL] AWS credential verification failed. Action: Check .env`
 ```bash
-aws sts get-caller-identity --output json
+# Verify region, engine, quota
+aws rds describe-db-engine-versions --region {{env.AWS_DEFAULT_REGION}} --engine {{user.DBEngine}}
 ```
-
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
-
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Confirm region: aws rds describe-db-engine-versions --region {{env.AWS_DEFAULT_REGION}}
-4. Check quotas: aws service-quotas get-service-quota --service-code rds --quota-code L-...
-5. Validate engine version: aws rds describe-db-engine-versions --engine {{user.DBEngine}}
-```
+Log: `[OK] Engine {{user.DBEngine}} available in {{env.AWS_DEFAULT_REGION}}`
 
 ### Execute (Primary: CLI)
-```
-aws rds create-db-instance \
-  --db-instance-identifier {{user.DBInstanceIdentifier}} \
-  --db-instance-class {{user.DBInstanceClass}} \
-  --engine {{user.DBEngine}} \
-  --engine-version {{user.EngineVersion}} \
-  --master-username {{user.MasterUsername}} \
-  --master-user-password {{user.MasterUserPassword}} \
-  --allocated-storage {{user.AllocatedStorage}} \
-  --storage-type {{user.StorageType}} \
-  --vpc-security-group-ids {{user.SecurityGroupIds}} \
-  --output json
-```
+See [references/aws-cli-usage.md](references/aws-cli-usage.md) for full command reference.
 
 ### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK:
-```python
-import boto3
-rds = boto3.client('rds', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = rds.create_db_instance(
-    DBInstanceIdentifier='{{user.DBInstanceIdentifier}}',
-    DBInstanceClass='{{user.DBInstanceClass}}',
-    Engine='{{user.DBEngine}}',
-    # ... parameters
-)
-```
+After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
 ### Validate
 ```
-1. Poll status: aws rds describe-db-instances --db-instance-identifier {{user.DBInstanceIdentifier}}
-2. Wait for terminal state: available (create), deleted (delete)
-3. Max wait: 30 minutes for create, 15 minutes for delete
-4. Validate endpoint reachable (optional): Connection test via psql/mysql client
+1. Poll: aws rds describe-db-instances --db-instance-identifier {{user.DBInstanceIdentifier}}
+2. Wait for terminal state (available/deleted) — max 30min create, 15min delete
+3. Optional: test endpoint via nc/psql/mysql
 ```
 
 ### Recover
 | Error Type | Action |
-|------------|---------|
-| DBInstanceAlreadyExists | HALT - provide existing instance info |
-| InvalidDBInstanceState | HALT - wait or fix state conflict |
-| InsufficientStorageCapacity | HALT - suggest smaller storage or different region |
-| StorageTypeNotSupported | Retry with gp2/gp3 |
-| QuotaExceeded | HALT - request quota increase |
-| Throttling (429) | Exponential backoff; max 3 retries |
-| 5xx Internal | Retry 3x; then HALT |
+|------------|--------|
+| AlreadyExists / InvalidState / QuotaExceeded | HALT |
+| StorageTypeNotSupported | Retry gp2/gp3 |
+| Throttling (429) | Exponential backoff, max 3 retries |
+| 5xx Internal | Retry 3x; HALT |
 
 ## Safety Gates
 
-### Database Deletion (Critical)
+### Database Deletion
 ```
 BEFORE delete-db-instance:
 1. Display: "Deleting {{user.DBInstanceIdentifier}} will permanently remove all data"
-2. Ask: "Create final snapshot? (recommended)" → collect snapshot name if yes
+2. Ask: "Create final snapshot? (recommended)"
 3. Ask: "Type 'DELETE {{user.DBInstanceIdentifier}}' to confirm"
-4. Human must type exact confirmation string
-5. Proceed only after confirmation matches
 ```
-
-### Snapshot Deletion
+### Snapshot / Parameter Group Deletion
 ```
-BEFORE delete-db-snapshot:
-1. Display: "Snapshot {{user.SnapshotIdentifier}} will be permanently deleted"
-2. Ask: "Type 'DELETE SNAPSHOT {{user.SnapshotIdentifier}}' to confirm"
-3. Proceed only after confirmation matches
-```
-
-### Parameter Group Deletion
-```
-BEFORE delete-db-parameter-group:
-1. Check: No DB instances using this parameter group
-2. Ask: "Type 'DELETE PG {{user.ParameterGroupName}}' to confirm"
-3. Proceed only after confirmation matches
+BEFORE delete-db-snapshot / delete-db-parameter-group:
+1. Confirm with user: "Type 'DELETE (SNAPSHOT|PG) {{name}}' to confirm"
+2. PG precondition: No DB instances using this group
 ```
 
 ## Output Convention
-
-Always use `--output json` for agent parsing.
-
-Key JSON paths:
-- `.DBInstances[0].DBInstanceStatus` - instance state
-- `.DBInstances[0].Endpoint.Address` - connection endpoint
-- `.DBInstances[0].Endpoint.Port` - connection port
-- `.DBInstances[0].DBInstanceArn` - resource ARN
-- `.DBSnapshot.DBSnapshotIdentifier` - snapshot ID
-- `.DBSnapshot.Status` - snapshot status
+All commands use `--output json`. Key JSON paths:
+- `.DBInstances[0].{DBInstanceStatus,Endpoint.Address,Endpoint.Port,DBInstanceArn}`
+- `.DBSnapshot.{DBSnapshotIdentifier,Status}`
+- `.DBClusters[0].{Status,Endpoint,ReaderEndpoint}`
 
 ## Related Skills
+- `aws-ec2-ops` — Security groups | `aws-iam-ops` — IAM roles | `aws-kms-ops` — Encryption
+- `aws-cloudwatch-ops` — Performance Insights, alarms | `aws-s3-ops` — Import/export
+- `aws-secrets-manager-ops` — Credential management
 
-- `aws-ec2-ops` - Security groups, VPC setup
-- `aws-iam-ops` - IAM roles for enhanced monitoring, S3 integration
-- `aws-kms-ops` - Encryption key management
-- `aws-cloudwatch-ops` - Performance Insights, alarms
-- `aws-s3-ops` - Database import/export from S3
-- `aws-secrets-manager-ops` - Credential management
+## Cross-Skill Orchestration
+| Scenario | Chain |
+|----------|-------|
+| RDS Performance RCA | rds → cloudwatch → ec2 (查指标 → 查底层 → 查安全组) |
+| RDS Cost Optimization | rds → cloudwatch (查闲置 → 建议降配/预留) |
+| RDS Security Audit | rds → kms → iam → secretsmanager (加密 → 权限 → 凭据) |
+| Layered Inspection | cloudwatch → elb/vpc → ec2/rds → eks — see [layered-inspection](references/layered-inspection-template.md) |
+
+## AIOps Scenarios
+See [references/prompt-examples.md](references/prompt-examples.md) for 10 concrete scenarios:
+- Slow query RCA / Storage AUTO_HEAL / Connection surge diagnosis
+- Backup compliance scan / Idle instance cleanup (FinOps)
+- Cross-region DR / Parameter tuning / Aurora failover
+- Cross-skill RCA / Capacity forecast
 
 ## Reference Files
-
-- `references/aws-cli-usage.md` - CLI command reference
-- `references/boto3-sdk-usage.md` - Python SDK patterns
-- `references/core-concepts.md` - RDS architecture, engines, quotas
-- `references/troubleshooting.md` - Error codes, recovery procedures
-- `assets/example-config.yaml` - Configuration examples
+- [Prompt Examples](references/prompt-examples.md) — 10 AIOps user prompts
+- [Layered Inspection Template](references/layered-inspection-template.md) — Health check + RCA
+- `references/aws-cli-usage.md` — CLI command reference
+- `references/boto3-sdk-usage.md` — Python SDK patterns
+- `references/core-concepts.md` — RDS architecture, concepts
+- `references/troubleshooting.md` — Error codes, recovery procedures
+- `assets/example-config.yaml` — Configuration examples

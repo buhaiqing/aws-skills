@@ -2,9 +2,19 @@
 # Placeholders:
 #   {{env.*}} — sourced from .env file or shell environment (substituted by Agent before use)
 #   {{user.*}} — sourced from user input (collected by Agent before use)
+#
+# ===== FinOps Cost Tips =====
+# - Alarm:  $0.10/alarm/month (free: 10) → 优先用 Composite Alarm 合并条件减少数量
+# - Dashboard: $3.00/dashboard/month (free: 3 free) → 用 widget 聚合避免创建多个 dashboard
+# - Custom Metric: $0.30/metric/month (free: 10) → 优先复用 AWS 内置指标
+# - Log Ingestion: $0.50/GB, Log Storage: $0.03/GB/month → 务必设置保留期
+# ===== AIOps Tips =====
+# - Anomaly Detection: 对于有周期性模式的指标（如请求量），优先用 ML 动态阈值代替静态阈值
+# - Metric Math: 用 FORECAST() 预测未来趋势做容量规划，用 error_rate = errors/invocations 监控错误率
+# - Logs Insights: 用 SQL 风格查询直接分析日志，避免创建过多 Custom Metric
 
 # High CPU Alarm (EC2)
-alarm_config:
+high_cpu_alarm:
   AlarmName: HighCPU-Instance
   MetricName: CPUUtilization
   Namespace: AWS/EC2
@@ -20,8 +30,7 @@ alarm_config:
   AlarmActions:
     - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
 
-# S3 Bucket Size Alarm
-alarm_config:
+s3_bucket_alarm:
   AlarmName: BucketSizeWarning
   MetricName: BucketSizeBytes
   Namespace: AWS/S3
@@ -37,8 +46,7 @@ alarm_config:
   EvaluationPeriods: 1
   TreatMissingData: notBreaching
 
-# RDS Connection Count Alarm
-alarm_config:
+rds_connections_alarm:
   AlarmName: RDS-HighConnections
   MetricName: DatabaseConnections
   Namespace: AWS/RDS
@@ -51,8 +59,7 @@ alarm_config:
   ComparisonOperator: GreaterThanThreshold
   EvaluationPeriods: 2
 
-# Lambda Error Rate Alarm
-alarm_config:
+lambda_error_alarm:
   AlarmName: Lambda-HighErrorRate
   MetricName: Errors
   Namespace: AWS/Lambda
@@ -83,3 +90,53 @@ dashboard_widget:
       left:
         min: 0
         max: 100
+
+# ===== FinOps: Composite Alarm 示例（合并告警省钱）=====
+composite_alarm:
+  AlarmName: "{{user.env}}-Composite-Health"
+  AlarmRule: '(ALARM("{{user.env}}-HighCPU") OR ALARM("{{user.env}}-HighMemory"))'
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+  # FinOps: 2 个 alarm × $0.10 = $0.20/月 → 1 个 composite alarm = $0.10/月
+  # AIOps: 组合逻辑避免分散告警风暴
+
+# ===== AIOps: Anomaly Detection 告警示例（ML 动态阈值）=====
+anomaly_alarm:
+  AlarmName: "{{user.env}}-RequestCount-Anomaly"
+  MetricName: RequestCount
+  Namespace: MyApplication
+  Dimensions:
+    - Name: Service
+      Value: "{{user.service_name}}"
+  Statistic: Average
+  Period: 300
+  ComparisonOperator: LessThanLowerOrGreaterThanUpperThreshold
+  EvaluationPeriods: 2
+  TreatMissingData: notBreaching
+  # ANOMALY_DETECTION_BAND(m1, 2) — 偏差因子 2=适中
+  # 要求: ≥ 2 周历史数据用于 ML 模型训练
+
+# ===== AIOps+FinOps: Metric Math 错误率告警 =====
+metric_math_alarm:
+  AlarmName: "{{user.env}}-Lambda-ErrorRate"
+  Metrics:
+    - Id: errors
+      MetricStat:
+        Metric:
+          Namespace: AWS/Lambda
+          MetricName: Errors
+        Period: 300
+        Stat: Sum
+    - Id: invocations
+      MetricStat:
+        Metric:
+          Namespace: AWS/Lambda
+          MetricName: Invocations
+        Period: 300
+        Stat: Sum
+    - Id: error_rate
+      Expression: (errors/invocations)*100
+      Label: Error Rate %
+  Threshold: 5
+  ComparisonOperator: GreaterThanThreshold
+  EvaluationPeriods: 2
