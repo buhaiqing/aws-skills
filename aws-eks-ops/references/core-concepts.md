@@ -56,17 +56,17 @@
 
 ## Kubernetes Versions
 
-| Version | Status | Release |
-|---------|--------|---------|
-| 1.31 | Latest | 2024 |
-| 1.30 | Stable | 2024 |
-| 1.29 | Stable | 2024 |
-| 1.28 | Standard | 2024 |
-| 1.27 | Extended Support | 2023 |
-| 1.26 | Extended Support | 2023 |
-| 1.25 | Extended Support | 2023 |
+| Version | Status | Release | EOL |
+|---------|--------|---------|-----|
+| 1.32 | Latest | 2025 Q1 | 2026 Q4 |
+| 1.31 | Stable | 2024 Q3 | 2026 Q2 |
+| 1.30 | Stable | 2024 Q2 | 2026 Q1 |
+| 1.29 | Standard | 2024 Q1 | 2025 Q4 |
+| 1.28 | Extended Support | 2023 Q3 | 2025 Q2 |
+| 1.27 | Extended Support | 2023 Q2 | 2025 Q1 |
+| 1.26 | Deprecated | 2023 Q1 | 2024 Q4 |
 
-**Note**: EKS provides extended support for older versions at additional cost.
+**Note**: EKS provides extended support for older versions at additional cost ($0.60/hour).
 
 ## Cluster Endpoints
 
@@ -266,3 +266,224 @@
 | KMS | Secrets encryption |
 | Fargate | Serverless pods |
 | Auto Scaling | Node scaling |
+
+## Advanced Concepts
+
+### Cluster Autoscaler
+
+**Purpose**: Automatically adjusts the number of nodes in a node group based on pod resource requests.
+
+**How It Works**:
+```
+Pod Pending → Scheduler cannot find node → CA detects → Scale up node group → Pod scheduled
+Node idle → CA detects → Scale down node group → Node terminated
+```
+
+**Key Configuration**:
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| scale-down-delay-after-add | Wait time after scale-up before scale-down | 10m |
+| scale-down-unneeded-time | How long node must be unneeded | 10m |
+| scale-down-utilization-threshold | CPU/memory threshold for scale-down | 0.5 |
+| max-graceful-termination-sec | Max wait time for pod termination | 600 |
+
+**Deployment**: Install via Helm or kubectl. Requires IAM permissions (AutoScalingFullAccess).
+
+### Pod Disruption Budgets (PDB)
+
+**Purpose**: Ensure minimum number of pods available during voluntary disruptions (node maintenance, updates).
+
+**Types**:
+| Type | Description | Example |
+|------|-------------|---------|
+| minAvailable | Minimum pods that must be available | `minAvailable: 2` |
+| minAvailable % | Minimum percentage of pods | `minAvailable: 50%` |
+
+**Use Case**: Protect critical applications from downtime during node maintenance.
+
+### Resource Quotas
+
+**Purpose**: Limit aggregate resource consumption per namespace.
+
+**Example**:
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-resources
+  namespace: dev
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    persistentvolumeclaims: 4
+```
+
+**Benefits**:
+- Prevent namespace resource exhaustion
+- Fair resource allocation
+- Cost control
+
+### Limit Ranges
+
+**Purpose**: Set default and limit constraints for pod resources per namespace.
+
+**Example**:
+```yaml
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: resource-limits
+  namespace: dev
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:
+      cpu: 250m
+      memory: 256Mi
+    max:
+      cpu: "2"
+      memory: 2Gi
+```
+
+### Network Policies
+
+**Purpose**: Control network traffic between pods at the IP address level.
+
+**Default Policy**: Kubernetes allows all traffic. Network policies restrict it.
+
+**Key Concepts**:
+| Concept | Description |
+|---------|-------------|
+| Ingress | Incoming traffic to pod |
+| Egress | Outgoing traffic from pod |
+| Namespace isolation | Control traffic between namespaces |
+| Label-based rules | Match pods using labels |
+
+**Requirement**: Network plugin with support (Calico, Cilium, Weave Net).
+
+### Pod Security Standards (PSS)
+
+**Purpose**: Enforce security standards at the pod level (replaces deprecated Pod Security Policies).
+
+**Levels**:
+| Level | Description | Use Case |
+|-------|-------------|----------|
+| privileged | Unrestricted, allows everything | Not recommended |
+| baseline | Minimal security restrictions | Standard workloads |
+| restricted | Strict security controls | High-security applications |
+
+**Features**:
+- Prevent privileged containers
+- Block host path mounts
+- Restrict capabilities
+- Enforce non-root users
+
+### EKS Access Entries
+
+**Purpose**: Native IAM-based access control for EKS clusters (replaces aws-auth ConfigMap).
+
+**Benefits**:
+- No ConfigMap management
+- Native AWS integration
+- Better security
+- Supports IAM users, roles, and groups
+
+**Components**:
+| Component | Description |
+|-----------|-------------|
+| Access Entry | Mapping of IAM principal to cluster |
+| Access Policy | Kubernetes RBAC permissions |
+| Access Scope | Cluster-wide or namespace-specific |
+
+**Predefined Policies**:
+- `AmazonEKSClusterAdminPolicy` - Full cluster access
+- `AmazonEKSEditPolicy` - Edit permissions
+- `AmazonEKSViewPolicy` - Read-only access
+
+### Horizontal Pod Autoscaler (HPA)
+
+**Purpose**: Automatically scale the number of pods based on CPU/memory or custom metrics.
+
+**How It Works**:
+```
+High CPU Usage → HPA detects → Increase replicas → Load distributed → CPU decreases
+Low CPU Usage → HPA detects → Decrease replicas → Cost savings
+```
+
+**Example**:
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+```
+
+### Vertical Pod Autoscaler (VPA)
+
+**Purpose**: Automatically adjust pod CPU and memory resource requests.
+
+**Benefits**:
+- Right-size resources
+- Reduce costs
+- Improve performance
+
+**Modes**:
+| Mode | Description |
+|------|-------------|
+| Off | VPA does nothing |
+| Initial | Sets resource requests on pod creation only |
+| Auto | Updates resource requests during pod lifecycle |
+| Recreate | Recreates pods when resource requests change |
+
+## Resource Management Best Practices
+
+### Cluster Autoscaler + HPA + VPA
+
+```
+User Load → HPA scales pods → More pods → Cluster Autoscaler scales nodes
+VPA adjusts pod resources → Better resource utilization
+```
+
+**Configuration Tips**:
+1. Set appropriate HPA metrics (CPU, memory, custom)
+2. Configure Cluster Autoscaler with priority expander
+3. Use VPA in "Auto" mode for stateless apps
+4. Combine with PDB to protect critical services
+
+### Cost Optimization
+
+| Strategy | Description | Savings |
+|----------|-------------|---------|
+| Spot instances | Use Spot for interruptible workloads | Up to 90% |
+| Right-sizing | Use VPA to optimize resources | 20-30% |
+| Cluster autoscaler | Scale down idle nodes | 30-50% |
+| Multiple instance types | Use cost-effective types | 10-20% |
+
+### Resource Limits
+
+| Resource | Default Limit | Recommended |
+|----------|--------------|-------------|
+| Pods per node | 110 | 50-70 |
+| Nodes per cluster | 100 | 50-100 |
+| Services per cluster | 5000 | 1000-2000 |
+| Namespaces per cluster | 1000 | 50-100 |

@@ -86,7 +86,7 @@ Every operation follows: **Pre-flight → Execute → Validate → Recover**
 ```bash
 aws --version
 ```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install AWS CLI v2: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html`
 
 **Step 2: Load & Verify Credentials**
 ```bash
@@ -106,13 +106,13 @@ On failure:
 ```
 [FAIL] AWS credential verification failed.
 AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
+Action: See references/troubleshooting.md → Diagnostic Order for diagnosis.
 ```
 
 | Check | Method | On Failure |
 |-------|--------|------------|
 | CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to integration.md |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to troubleshooting.md |
 | VPC exists | `aws ec2 describe-vpcs --vpc-ids {{user.vpc_id}}` | HALT; verify VPC |
 | Subnets exist | `aws ec2 describe-subnets` | HALT; verify subnets |
 | IAM role exists | `aws iam get-role --role-name {{user.iam_role}}` | HALT; create role first |
@@ -170,6 +170,7 @@ aws eks create-nodegroup \
   --subnets "{{user.subnet_ids}}" \
   --scaling-config minSize={{user.min_size}},maxSize={{user.max_size}},desiredSize={{user.desired_size}} \
   --instance-types "{{user.instance_types}}" \
+  --ami-type AL2_x86_64 \
   --output json
 ```
 
@@ -226,9 +227,10 @@ Poll until nodegroup deleted (max wait: 15 min).
 
 **Pre-delete Sequence**:
 1. Delete all Fargate profiles
-2. Delete all node groups
-3. Wait for all deletions complete
-4. Delete cluster
+2. Delete all addons
+3. Delete all node groups
+4. Wait for all deletions complete
+5. Delete cluster
 
 #### Execute — CLI (Primary)
 ```bash
@@ -271,13 +273,36 @@ aws eks update-kubeconfig --name "{{user.cluster_name}}" --region "{{user.region
 | 1.31 | Latest | New features |
 | 1.30 | Stable | Recommended |
 | 1.29 | Stable | Supported |
-| 1.28 | Stable | Supported |
-| 1.27 | Standard | Extended support available |
+| 1.28 | Standard | Supported |
+| 1.27 | Extended Support | Extended support available |
+| 1.26 | Extended Support | Extended support available |
+| 1.25 | Extended Support | Extended support available |
+
+**Note**: EKS provides extended support for older versions at additional cost.
 
 ## Reference Files
 
+### Quick Start
+- [Quick Start Guide](references/quick-start.md) - Get started in 10 minutes
+
+### Core Documentation
 - [AWS CLI Usage](references/aws-cli-usage.md)
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-- [Example Configurations](assets/example-config.yaml)
+- [Core Concepts](references/core-concepts.md) - Updated with new features
+- [Troubleshooting](references/troubleshooting.md) - Enhanced with new feature issues
+
+### Advanced Features
+- [EKS 2024 Features](references/eks-2024-features.md) - Access Entries, Pod Identity, Bottlerocket
+- [Cluster Autoscaler](references/cluster-autoscaler.md) - Auto-scaling configuration
+- [Monitoring & Logging](references/monitoring-logging.md) - CloudWatch, Prometheus, X-Ray
+- [Security Best Practices](references/security-best-practices.md) - Access control, encryption, networking
+
+### Optimization & Best Practices
+- [Cost Optimization](references/cost-optimization.md) - Spot instances, Graviton, right-sizing
+- [Multi-Region HA](references/multi-region-ha.md) - Disaster recovery, failover strategies
+- [Performance Optimization](references/performance-optimization.md) - Node, network, storage, application optimization
+- [Backup & Recovery](references/backup-recovery.md) - Data backup, disaster recovery
+- [FAQ](references/faq.md) - Common questions and answers
+
+### Assets
+- [Example Configurations](assets/example-config.yaml) - Updated with 2024 features and optimizations

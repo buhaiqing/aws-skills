@@ -323,13 +323,13 @@ kubectl get nodes
 aws eks list-fargate-profiles --cluster-name my-cluster --output json
 aws eks delete-fargate-profile --cluster-name my-cluster --fargate-profile-name profile1 --output json
 
-# 2. Delete all nodegroups
-aws eks list-nodegroups --cluster-name my-cluster --output json
-aws eks delete-nodegroup --cluster-name my-cluster --nodegroup-name ng1 --output json
-
-# 3. Delete all addons
+# 2. Delete all addons (before nodegroups to avoid dependency issues)
 aws eks list-addons --cluster-name my-cluster --output json
 aws eks delete-addon --cluster-name my-cluster --addon-name vpc-cni --output json
+
+# 3. Delete all nodegroups
+aws eks list-nodegroups --cluster-name my-cluster --output json
+aws eks delete-nodegroup --cluster-name my-cluster --nodegroup-name ng1 --output json
 
 # 4. Wait for all deletions (poll until complete)
 

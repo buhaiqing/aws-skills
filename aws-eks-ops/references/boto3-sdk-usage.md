@@ -359,7 +359,7 @@ print(f"Status: {response['fargateProfile']['status']}")
 ### Create Addon
 
 ```python
-response = client.create-addon(
+response = client.create_addon(
     clusterName='my-cluster',
     addonName='vpc-cni',
     addonVersion='v1.12.0-eksbuild.1',
@@ -400,7 +400,7 @@ print(f"Status: {addon['status']}")
 ### Update Addon
 
 ```python
-response = client.update-addon(
+response = client.update_addon(
     clusterName='my-cluster',
     addonName='vpc-cni',
     addonVersion='v1.13.0-eksbuild.1',
@@ -421,44 +421,90 @@ response = client.delete_addon(
 
 ```python
 # Safety Gate: Confirm with user before deletion
+import time
 
 def delete_eks_cluster(client, cluster_name):
     """Complete EKS cluster deletion with cleanup."""
     
-    # 1. Delete all Fargate profiles
-    profiles = client.list_fargate_profiles(clusterName=cluster_name)
-    for profile_name in profiles['fargateProfileNames']:
-        print(f"Deleting Fargate profile: {profile_name}")
-        client.delete_fargate_profile(
-            clusterName=cluster_name,
-            fargateProfileName=profile_name
+    try:
+        # 1. Delete all Fargate profiles
+        profiles = client.list_fargate_profiles(clusterName=cluster_name)
+        for profile_name in profiles['fargateProfileNames']:
+            print(f"Deleting Fargate profile: {profile_name}")
+            try:
+                client.delete_fargate_profile(
+                    clusterName=cluster_name,
+                    fargateProfileName=profile_name
+                )
+                # Wait for profile deletion
+                waiter = client.get_waiter('fargate_profile_deleted')
+                waiter.wait(
+                    clusterName=cluster_name,
+                    fargateProfileName=profile_name,
+                    WaiterConfig={'Delay': 10, 'MaxAttempts': 30}
+                )
+                print(f"Fargate profile {profile_name} deleted")
+            except Exception as e:
+                print(f"Warning: Failed to delete Fargate profile {profile_name}: {e}")
+        
+        # 2. Delete all addons (before nodegroups to avoid dependency issues)
+        addons = client.list_addons(clusterName=cluster_name)
+        for addon_name in addons['addons']:
+            print(f"Deleting addon: {addon_name}")
+            try:
+                client.delete_addon(
+                    clusterName=cluster_name,
+                    addonName=addon_name
+                )
+                # Wait for addon deletion (polling)
+                for _ in range(30):
+                    try:
+                        client.describe_addon(clusterName=cluster_name, addonName=addon_name)
+                        time.sleep(10)
+                    except client.exceptions.ResourceNotFoundException:
+                        print(f"Addon {addon_name} deleted")
+                        break
+                else:
+                    print(f"Warning: Addon {addon_name} deletion timeout")
+            except Exception as e:
+                print(f"Warning: Failed to delete addon {addon_name}: {e}")
+        
+        # 3. Delete all node groups
+        nodegroups = client.list_nodegroups(clusterName=cluster_name)
+        for ng_name in nodegroups['nodegroups']:
+            print(f"Deleting node group: {ng_name}")
+            try:
+                client.delete_nodegroup(
+                    clusterName=cluster_name,
+                    nodegroupName=ng_name
+                )
+                # Wait for nodegroup deletion
+                waiter = client.get_waiter('nodegroup_deleted')
+                waiter.wait(
+                    clusterName=cluster_name,
+                    nodegroupName=ng_name,
+                    WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
+                )
+                print(f"Node group {ng_name} deleted")
+            except Exception as e:
+                print(f"Warning: Failed to delete node group {ng_name}: {e}")
+        
+        # 4. Delete cluster
+        print(f"Deleting cluster: {cluster_name}")
+        response = client.delete_cluster(name=cluster_name)
+        
+        # 5. Wait for cluster deletion
+        waiter = client.get_waiter('cluster_deleted')
+        waiter.wait(
+            name=cluster_name,
+            WaiterConfig={'Delay': 30, 'MaxAttempts': 40}
         )
-    
-    # 2. Delete all node groups
-    nodegroups = client.list_nodegroups(clusterName=cluster_name)
-    for ng_name in nodegroups['nodegroups']:
-        print(f"Deleting node group: {ng_name}")
-        client.delete_nodegroup(
-            clusterName=cluster_name,
-            nodegroupName=ng_name
-        )
-    
-    # 3. Delete all addons
-    addons = client.list_addons(clusterName=cluster_name)
-    for addon_name in addons['addons']:
-        print(f"Deleting addon: {addon_name}")
-        client.delete_addon(
-            clusterName=cluster_name,
-            addonName=addon_name
-        )
-    
-    # 4. Wait for all deletions (poll)
-    # ... wait logic ...
-    
-    # 5. Delete cluster
-    print(f"Deleting cluster: {cluster_name}")
-    response = client.delete_cluster(name=cluster_name)
-    return response
+        print(f"Cluster {cluster_name} deleted successfully")
+        return response
+        
+    except Exception as e:
+        print(f"Error during cluster deletion: {e}")
+        raise
 ```
 
 ### Describe Update
