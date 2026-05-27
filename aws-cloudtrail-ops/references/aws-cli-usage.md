@@ -1,390 +1,125 @@
 # AWS CLI Usage - CloudTrail
 
-AWS CLI commands for CloudTrail operations. All commands use `--output json`.
+AWS CLI commands for CloudTrail operations. All commands use `--region {{r.region}} --output json`.
+
+## Common JSON Paths (Centralized)
+
+```
+# Create Trail:      .Trail.{TrailARN,Name,S3BucketName}
+# Describe Trails:   .trailList[].{Name,TrailARN,S3BucketName,IsMultiRegionTrail,HomeRegion}
+# Get Trail Status:  .{IsLogging,LatestDeliveryTime,LatestDeliveryError}
+# Lookup Events:     .Events[].{EventId,EventTime,EventSource,EventName,Username,SourceIPAddress}
+# Get Event Sel:     .EventSelectors[].{ReadWriteType,IncludeManagementEvents}
+# Put Event Sel:     .EventSelectors[]
+# Get Insight Sel:   .InsightSelectors[].InsightType
+# Start/Stop:        Empty (success)
+```
 
 ## Trail Operations
 
 ### Create Trail
 ```bash
 aws cloudtrail create-trail \
-  --name {{user.TrailName}} \
-  --s3-bucket-name {{user.S3BucketName}} \
-  --s3-key-prefix {{user.S3KeyPrefix}} \
-  --is-multi-region-trail \
-  --enable-log-file-validation \
-  --kms-key-id {{user.KmsKeyId}} \
-  --is-organization-trail \
-  --tags-list Key=Environment,Value=production Key=Team,Value=platform \
-  --output json
+  --name {{user.TrailName}} --s3-bucket-name {{user.S3BucketName}} \
+  --is-multi-region-trail --enable-log-file-validation \
+  --kms-key-id {{user.KmsKeyId}} --is-organization-trail \
+  --tags-list Key=Environment,Value=production
 ```
-
-**JSON paths:**
-- `.Trail.Name` → trail name
-- `.Trail.S3BucketName` → S3 bucket
-- `.Trail.S3KeyPrefix` → prefix
-- `.Trail.TrailARN` → ARN
-- `.Trail.IsMultiRegionTrail` → boolean
-- `.Trail.LogFileValidationEnabled` → boolean
-- `.Trail.KmsKeyId` → KMS key
 
 ### Describe Trails
 ```bash
-# Single trail
-aws cloudtrail describe-trails \
-  --trail-name-list {{user.TrailName}} \
-  --output json
-
-# All trails
-aws cloudtrail describe-trails --output json
+aws cloudtrail describe-trails --trail-name-list {{user.TrailName}}
+aws cloudtrail describe-trails    # All trails
 ```
-
-**JSON paths:**
-- `.trailList[].Name` → trail name
-- `.trailList[].S3BucketName` → S3 bucket
-- `.trailList[].S3KeyPrefix` → prefix
-- `.trailList[].TrailARN` → ARN
-- `.trailList[].HomeRegion` → home region
-- `.trailList[].IsMultiRegionTrail` → boolean
-- `.trailList[].IsOrganizationTrail` → boolean
-- `.trailList[].LogFileValidationEnabled` → boolean
-- `.trailList[].KmsKeyId` → encryption key
 
 ### Get Trail Status
 ```bash
-aws cloudtrail get-trail-status \
-  --name {{user.TrailName}} \
-  --output json
+aws cloudtrail get-trail-status --name {{user.TrailName}}
 ```
-
-**JSON paths:**
-- `.IsLogging` → boolean, if trail is actively logging
-- `.LatestDeliveryTime` → last successful delivery
-- `.LatestDeliveryError` → error message if failed
-- `.LatestNotificationTime` → SNS notification time
-- `.LatestNotificationError` → SNS error message
-- `.StartLoggingTime` → when logging started
-- `.StopLoggingTime` → when logging stopped
 
 ### Update Trail
 ```bash
-aws cloudtrail update-trail \
-  --name {{user.TrailName}} \
-  --s3-bucket-name {{user.NewS3BucketName}} \
-  --s3-key-prefix {{user.NewS3KeyPrefix}} \
-  --kms-key-id {{user.NewKmsKeyId}} \
-  --output json
+aws cloudtrail update-trail --name {{user.TrailName}} \
+  --s3-bucket-name {{user.NewS3BucketName}} --kms-key-id {{user.NewKmsKeyId}}
 ```
 
-### Delete Trail
+### Delete / Start / Stop Logging
 ```bash
-aws cloudtrail delete-trail \
-  --name {{user.TrailName}} \
-  --output json
-```
-
-**Safety Gate:** Human confirmation required before deletion.
-
-### Start Logging
-```bash
-aws cloudtrail start-logging \
-  --name {{user.TrailName}} \
-  --output json
-```
-
-### Stop Logging
-```bash
-aws cloudtrail stop-logging \
-  --name {{user.TrailName}} \
-  --output json
+aws cloudtrail delete-trail --name {{user.TrailName}}
+aws cloudtrail start-logging --name {{user.TrailName}}
+aws cloudtrail stop-logging --name {{user.TrailName}}
 ```
 
 ## Event Operations
 
 ### Lookup Events
 ```bash
-# Basic lookup - last 7 days
-aws cloudtrail lookup-events \
-  --output json
+# Basic — last 90 days
+aws cloudtrail lookup-events
 
-# Lookup by time range
-aws cloudtrail lookup-events \
-  --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-15T23:59:59Z" \
-  --output json
+# By time range
+aws cloudtrail lookup-events --start-time "2024-01-01T00:00:00Z" --end-time "2024-01-15T23:59:59Z"
 
-# Lookup by username
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=Username,AttributeValue={{user.UserName}} \
-  --output json
-
-# Lookup by event name
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=CreateTrail \
-  --output json
-
-# Lookup by event source
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventSource,AttributeValue=ec2.amazonaws.com \
-  --output json
-
-# Lookup by resource type and name
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=ResourceType,AttributeValue=AWS::S3::Bucket \
-  --output json
+# By user/event/resource
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=Username,AttributeValue={{user.UserName}}
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=CreateTrail
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventSource,AttributeValue=ec2.amazonaws.com
 
 # Pagination
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=PutObject \
-  --max-results 50 \
-  --next-token {{user.NextToken}} \
-  --output json
+aws cloudtrail lookup-events --max-results 50 --next-token {{user.NextToken}}
 ```
-
-**JSON paths:**
-- `.Events[].EventId` → unique event ID
-- `.Events[].EventTime` → ISO 8601 timestamp
-- `.Events[].EventSource` → service (e.g., ec2.amazonaws.com)
-- `.Events[].EventName` → API action (e.g., RunInstances)
-- `.Events[].EventType` → AwsApiCall, AwsServiceEvent, etc.
-- `.Events[].Username` → IAM user/role name
-- `.Events[].UserAgent` → user agent string
-- `.Events[].SourceIPAddress` → source IP
-- `.Events[].RequestParameters` → request details
-- `.Events[].ResponseElements` → response details
-- `.Events[].CloudTrailEvent` → full JSON event
-- `.NextToken` → for pagination
 
 ### Common Lookup Attributes
-
 | AttributeKey | Description | Example |
-|--------------|-------------|---------|
+|-------------|-------------|---------|
 | EventId | Specific event ID | 12345678-... |
-| EventName | API action name | CreateTrail |
-| EventSource | Service name | ec2.amazonaws.com |
+| EventName | API action | CreateTrail |
+| EventSource | Service | ec2.amazonaws.com |
 | Username | IAM user/role | admin |
 | ResourceType | Resource type | AWS::EC2::Instance |
-| ResourceName | Resource name | i-1234567890abcdef0 |
+| ResourceName | Resource name | i-1234567890 |
 
-## Event Selector Operations
+## Event Selectors
 
-### Get Event Selectors
+### Get / Put Event Selectors
 ```bash
-aws cloudtrail get-event-selectors \
-  --trail-name {{user.TrailName}} \
-  --output json
-```
+aws cloudtrail get-event-selectors --trail-name {{user.TrailName}}
 
-**JSON paths:**
-- `.EventSelectors[].ReadWriteType` → All, ReadOnly, WriteOnly
-- `.EventSelectors[].IncludeManagementEvents` → boolean
-- `.EventSelectors[].DataResources[].Type` → resource type
-- `.EventSelectors[].DataResources[].Values[]` → resource ARNs
-
-### Put Event Selectors
-```bash
-# Basic - management events only
-aws cloudtrail put-event-selectors \
-  --trail-name {{user.TrailName}} \
-  --event-selectors '{
-    "ReadWriteType": "All",
-    "IncludeManagementEvents": true
-  }' \
-  --output json
+# Management events only
+aws cloudtrail put-event-selectors --trail-name {{user.TrailName}} \
+  --event-selectors '{"ReadWriteType":"All","IncludeManagementEvents":true}'
 
 # With S3 data events
-aws cloudtrail put-event-selectors \
-  --trail-name {{user.TrailName}} \
-  --event-selectors '[{
-    "ReadWriteType": "All",
-    "IncludeManagementEvents": true,
-    "DataResources": [{
-      "Type": "AWS::S3::Object",
-      "Values": ["arn:aws:s3:::{{user.BucketName}}/*"]
-    }]
-  }]' \
-  --output json
-
-# With Lambda data events
-aws cloudtrail put-event-selectors \
-  --trail-name {{user.TrailName}} \
-  --event-selectors '[{
-    "ReadWriteType": "All",
-    "IncludeManagementEvents": true,
-    "DataResources": [{
-      "Type": "AWS::Lambda::Function",
-      "Values": ["arn:aws:lambda:us-east-1:{{user.AccountId}}:function:{{user.FunctionName}}"]
-    }]
-  }]' \
-  --output json
-
-# Multiple data resources
-aws cloudtrail put-event-selectors \
-  --trail-name {{user.TrailName}} \
-  --event-selectors '[{
-    "ReadWriteType": "All",
-    "IncludeManagementEvents": true,
-    "DataResources": [
-      {"Type": "AWS::S3::Object", "Values": ["arn:aws:s3:::bucket1/*", "arn:aws:s3:::bucket2/*"]},
-      {"Type": "AWS::Lambda::Function", "Values": ["arn:aws:lambda:*:*:function:*"]}
-    ]
-  }]' \
-  --output json
+aws cloudtrail put-event-selectors --trail-name {{user.TrailName}} \
+  --event-selectors '[{"ReadWriteType":"All","IncludeManagementEvents":true,"DataResources":[{"Type":"AWS::S3::Object","Values":["arn:aws:s3:::{{user.BucketName}}/*"]}]}]'
 ```
-
-## CloudWatch Logs Integration
-
-### Create CloudWatch Log Group
-```bash
-aws logs create-log-group --log-group-name {{user.LogGroupName}}
-```
-
-### Update Trail with CloudWatch Logs
-```bash
-aws cloudtrail update-trail \
-  --name {{user.TrailName}} \
-  --cloud-watch-logs-log-group-arn {{user.LogGroupArn}} \
-  --cloud-watch-logs-role-arn {{user.CloudWatchRoleArn}} \
-  --output json
-```
-
-## S3 Bucket Policy for CloudTrail
-
-```bash
-aws s3api put-bucket-policy \
-  --bucket {{user.S3BucketName}} \
-  --policy '{
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Sid": "AWSCloudTrailAclCheck",
-        "Effect": "Allow",
-        "Principal": {
-          "Service": "cloudtrail.amazonaws.com"
-        },
-        "Action": "s3:GetBucketAcl",
-        "Resource": "arn:aws:s3:::{{user.S3BucketName}}"
-      },
-      {
-        "Sid": "AWSCloudTrailWrite",
-        "Effect": "Allow",
-        "Principal": {
-          "Service": "cloudtrail.amazonaws.com"
-        },
-        "Action": "s3:PutObject",
-        "Resource": "arn:aws:s3:::{{user.S3BucketName}}/{{user.S3KeyPrefix}}/AWSLogs/{{user.AccountId}}/*",
-        "Condition": {
-          "StringEquals": {
-            "s3:x-amz-acl": "bucket-owner-full-control"
-          }
-        }
-      }
-    ]
-  }'
-```
-
-## Organization Trail
-
-### Create Organization Trail
-```bash
-aws cloudtrail create-trail \
-  --name {{user.TrailName}} \
-  --s3-bucket-name {{user.S3BucketName}} \
-  --is-organization-trail \
-  --output json
-```
-
-**Requirements:**
-- Must be created from organization management account
-- S3 bucket must allow access from all member accounts
-- Organization ID must be allowed in bucket policy
 
 ## Insights Configuration
 
-### Get Insights Selectors
 ```bash
-aws cloudtrail get-insight-selectors \
-  --trail-name {{user.TrailName}} \
-  --output json
+aws cloudtrail get-insight-selectors --trail-name {{user.TrailName}}
+aws cloudtrail put-insight-selectors --trail-name {{user.TrailName}} \
+  --insight-selectors '[{"InsightType":"ApiCallRateInsight"},{"InsightType":"ApiErrorRateInsight"}]'
 ```
 
-### Put Insights Selectors
+## S3 Bucket Policy for CloudTrail
 ```bash
-aws cloudtrail put-insight-selectors \
-  --trail-name {{user.TrailName}} \
-  --insight-selectors '[{
-    "InsightType": "ApiCallRateInsight"
-  }, {
-    "InsightType": "ApiErrorRateInsight"
-  }]' \
-  --output json
-```
-
-## Common Options
-
-```bash
---name {{user.TrailName}}                    # Trail name
---s3-bucket-name {{user.S3BucketName}}         # S3 bucket
---s3-key-prefix {{user.S3KeyPrefix}}           # Prefix for logs
---is-multi-region-trail                        # Enable multi-region
---is-organization-trail                        # Enable for organization
---enable-log-file-validation                   # Enable log integrity
---kms-key-id {{user.KmsKeyId}}                 # KMS encryption
---cloud-watch-logs-log-group-arn {{user.LogGroupArn}}  # CloudWatch Logs
---cloud-watch-logs-role-arn {{user.RoleArn}}   # CloudWatch Logs role
---tags-list Key=Name,Value=production          # Tags
---include-global-service-events                # Include global services
---event-selectors                              # Data event selectors
-```
-
-## Querying CloudTrail Logs in S3
-
-### List Log Files
-```bash
-aws s3 ls s3://{{user.S3BucketName}}/{{user.S3KeyPrefix}}/AWSLogs/{{user.AccountId}}/CloudTrail/{{user.Region}}/2024/01/01/ \
-  --recursive
-```
-
-### Download and Analyze
-```bash
-# Download specific log file
-aws s3 cp s3://{{user.S3BucketName}}/{{user.S3KeyPrefix}}/AWSLogs/{{user.AccountId}}/CloudTrail/{{user.Region}}/2024/01/01/logfile.json.gz .
-
-# Extract and query
-gunzip logfile.json.gz
-jq '.Records[] | select(.eventName=="CreateTrail")' logfile.json
+aws s3api put-bucket-policy --bucket {{user.S3BucketName}} --policy '{
+  "Version":"2012-10-17","Statement":[
+    {"Sid":"AWSCloudTrailAclCheck","Effect":"Allow","Principal":{"Service":"cloudtrail.amazonaws.com"},"Action":"s3:GetBucketAcl","Resource":"arn:aws:s3:::{{user.S3BucketName}}"},
+    {"Sid":"AWSCloudTrailWrite","Effect":"Allow","Principal":{"Service":"cloudtrail.amazonaws.com"},"Action":"s3:PutObject","Resource":"arn:aws:s3:::{{user.S3BucketName}}/{{user.S3KeyPrefix}}/AWSLogs/{{user.AccountId}}/*","Condition":{"StringEquals":{"s3:x-amz-acl":"bucket-owner-full-control"}}}
+  ]}'
 ```
 
 ## Common Event Queries
 
-### Recent Console Login
 ```bash
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=ConsoleLogin \
-  --max-results 10 \
-  --output json
-```
+# Recent console logins
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=ConsoleLogin --max-results 10
 
-### Failed API Calls
-```bash
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue={{user.EventName}} \
-  --output json | \
-  jq '.Events[] | select(.ErrorCode != null)'
-```
+# Failed API calls
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue={{user.EventName}} | jq '.Events[] | select(.ErrorCode != null)'
 
-### Events by Specific User
-```bash
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=Username,AttributeValue={{user.UserName}} \
-  --start-time "2024-01-01T00:00:00Z" \
-  --end-time "2024-01-31T23:59:59Z" \
-  --output json
-```
-
-### S3 PutObject Events
-```bash
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=PutObject \
-  --max-results 100 \
-  --output json
+# Events by specific user
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=Username,AttributeValue={{user.UserName}} --start-time "2024-01-01T00:00:00Z" --end-time "2024-01-31T23:59:59Z"
 ```

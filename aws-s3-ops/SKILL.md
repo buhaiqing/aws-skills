@@ -29,6 +29,16 @@ metadata:
 
 # AWS S3 Operations Skill
 
+## Common JSON Paths (Centralized)
+
+```
+# Create:     .Location  (bucket ARN)
+# List:       .Buckets[].{Name,CreationDate}
+# Head:       Empty (204 — check via HTTP status)
+# Put/Get:    .ETag
+# List Objs:  .Contents[].{Key,Size,LastModified}
+```
+
 ## Overview
 
 Amazon S3 (Simple Storage Service) provides object storage with scalability, availability, and security. This skill is an **operational runbook** with explicit scope, credential rules, pre-flight checks, dual-path execution (AWS CLI + boto3 SDK), validation, and recovery.

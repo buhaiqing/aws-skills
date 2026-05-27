@@ -14,165 +14,124 @@ license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to Route53 endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+    - AWS_SESSION_TOKEN
 ---
 # AWS Route53 Ops Skill
 
 AWS Route53 DNS operational skill for AI Agent automation.
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create Zone:     .HostedZone.Id  (strip "/hostedzone/" prefix)
+#                  .DelegationSet.NameServers[]
+# List Zones:      .HostedZones[].{Id,Name,ResourceRecordSetCount}
+# Change Record:   .ChangeInfo.{Id,Status}
+# List Records:    .ResourceRecordSets[].{Name,Type,TTL,ResourceRecords}
+# Create HC:       .HealthCheck.Id
+# Test DNS:        .TestResult
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests DNS record creation, modification, or deletion
 - User needs to configure health checks
 - User asks about Route53 failover routing
 - User mentions "Route53", "DNS", "hosted zone", "record set"
 - User needs to troubleshoot DNS resolution issues
-- User asks about latency-based routing or geolocation routing
+- User asks about latency-based or geolocation routing
 - User needs to configure alias records for AWS resources
 
-**SHOULD-NOT activate when:**
+### SHOULD NOT Use When
 - Domain registration only (use AWS Console)
-- Certificate validation (use `aws-acm-ops`)
-- Load balancer configuration (use `aws-elb-ops`)
+- Certificate validation → delegate to: `aws-acm-ops`
+- Load balancer configuration → delegate to: `aws-elb-ops`
 
-**Delegation:**
-- ELB health checks → `aws-elb-ops` (target group health)
+### Delegation
 - CloudWatch alarms → `aws-cloudwatch-ops` (health check monitoring)
 - S3 static hosting → `aws-s3-ops` (website endpoints)
 
-## Scope
+## Scope & Quick Reference
 
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Hosted Zone | Yes | None |
-| Delete Hosted Zone | Yes | **Human confirmation** |
-| Create Record Set | Yes | None |
-| Update Record Set | Yes | None |
-| Delete Record Set | Yes | **Human confirmation** |
-| Create Health Check | Yes | None |
-| Update Health Check | Yes | None |
-| Delete Health Check | Yes | None |
-| Test DNS Answer | Yes | None |
+| Operation | CLI | Safety Gate |
+|-----------|-----|-------------|
+| Create Hosted Zone | `aws route53 create-hosted-zone --name {{u.name}}` | None |
+| Delete Hosted Zone | `aws route53 delete-hosted-zone --id {{u.id}}` | **Human confirmation** |
+| Create/Update Record | `aws route53 change-resource-record-sets --hosted-zone-id {{u.id}} --change-batch file://batch.json` | None |
+| Delete Record Set | Same as above with Action=DELETE | **Human confirmation** |
+| Create Health Check | `aws route53 create-health-check --caller-reference {{u.ref}} --health-check-config file://hc.json` | None |
+| Update/Delete HC | `aws route53 update-health-check / delete-health-check` | None |
+| Test DNS Answer | `aws route53 test-dns-answer --hosted-zone-id {{u.id}} --record-name {{u.name}} --record-type {{u.type}}` | None |
 
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.ZoneId}}` | User input | Z1234567890ABC |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | STS temporary credentials |
+| `{{user.ZoneId}}` | User input | Ask once; reuse |
 | `{{user.ZoneName}}` | User input | example.com |
 | `{{user.RecordName}}` | User input | www.example.com |
 | `{{user.RecordType}}` | User input | A, AAAA, CNAME, MX, TXT |
-| `{{user.HealthCheckId}}` | User input | 12345678-abcd-1234-abcd-123456789012 |
+| `{{user.RecordValue}}` | User input | IP or target DNS name |
+| `{{user.HealthCheckId}}` | User input | UUID format |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify hosted zone exists via `get-hosted-zone`. Check quotas via `service-quotas`.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws route53 [command] --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Query DNS via `dig` or `test-dns-answer`. Max wait 60s for propagation. Use `get-change --id {{o.ChangeId}}` to poll PENDING→INSYNC.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Confirm hosted zone exists: aws route53 get-hosted-zone --id {{user.ZoneId}}
-4. Check service quotas: aws service-quotas get-service-quota --service-code route53 --quota-code L-...
-```
-
-### Execute (Primary: CLI)
-```
-aws route53 change-resource-record-sets \
-  --hosted-zone-id {{user.ZoneId}} \
-  --change-batch file://change-batch.json \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK:
-```python
-import boto3
-route53 = boto3.client('route53', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = route53.change_resource_record_sets(
-    HostedZoneId='{{user.ZoneId}}',
-    ChangeBatch={'Changes': [...]}
-)
-```
-
-### Validate
-```
-1. Query DNS: dig {{user.RecordName}} +short
-2. Check record set: aws route53 list-resource-record-sets --hosted-zone-id {{user.ZoneId}}
-3. Max wait: 60 seconds (DNS propagation)
-```
-
-### Recover
-| Error Type | Action |
-|------------|---------|
-| NoSuchHostedZone | HALT - zone does not exist |
-| InvalidChangeBatch | FIX - check record set syntax |
-| PriorRequestNotComplete | RETRY - wait for previous change |
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| NoSuchHostedZone | HALT — zone does not exist |
+| InvalidChangeBatch | FIX — check record set syntax |
+| PriorRequestNotComplete | RETRY — wait for previous change |
 | Throttling (429) | Exponential backoff; max 3 retries |
 
 ## Safety Gates
 
 ### Record Set Deletion
 ```
-BEFORE delete-resource-record-sets:
-1. Display: "Deleting record set {{user.RecordName}} will stop DNS resolution"
-2. Ask: "Type 'DELETE {{user.RecordName}}' to confirm"
-3. Proceed only after confirmation matches
+⚠️ Deleting record {{user.RecordName}} will stop DNS resolution.
+Confirm: Type DELETE {{user.RecordName}} to proceed.
 ```
 
-## Output Convention
-
-Always use `--output json` for agent parsing.
-
-Key JSON paths:
-- `.ChangeInfo.Id` - change request ID
-- `.ChangeInfo.Status` - PENDING, INSYNC
-- `.HostedZone.Id` - hosted zone ID
-- `.HostedZone.Name` - zone name
-- `.ResourceRecordSets[].Name` - record name
-- `.ResourceRecordSets[].Type` - record type
-- `.ResourceRecordSets[].TTL` - time to live
-- `.HealthCheck.Id` - health check ID
-- `.HealthCheck.HealthCheckConfig.*` - health check config
+### Hosted Zone Deletion
+```
+⚠️ Zone must be empty (no record sets) before deletion.
+Confirm: Type DELETE {{user.ZoneName}} to proceed.
+```
 
 ## Related Skills
 
-- `aws-elb-ops` - Health check target groups
-- `aws-cloudwatch-ops` - Health check monitoring
-- `aws-s3-ops` - Static website endpoints
-- `aws-cloudfront-ops` - CloudFront alias records
+- `aws-elb-ops` — Health check target groups
+- `aws-cloudwatch-ops` — Health check monitoring
+- `aws-s3-ops` — Static website endpoints
+- `aws-cloudfront-ops` — CloudFront alias records
 
 ## Reference Files
 
-- `references/aws-cli-usage.md` - CLI command reference
-- `references/boto3-sdk-usage.md` - Python SDK patterns
-- `references/core-concepts.md` - DNS architecture, routing policies
-- `references/troubleshooting.md` - Error codes, recovery procedures
-- `assets/example-config.yaml` - Configuration examples
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

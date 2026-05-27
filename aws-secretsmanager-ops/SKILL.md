@@ -13,14 +13,34 @@ license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to Secrets Manager endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
 ---
 # AWS Secrets Manager Ops Skill
 
-AWS Secrets Manager operational skill for AI Agent automation.
+## Common JSON Paths (Centralized)
 
-## Triggers
+```
+# Create Secret:     .{ARN,Name,VersionId}
+# Get Secret Value:  .{ARN,Name,SecretString,SecretBinary,VersionId}
+# Put Secret Value:  .{ARN,Name,VersionId}
+# Delete Secret:     .{ARN,Name,DeletionDate}
+# Restore Secret:    .{ARN,Name}
+# Rotate Secret:     .{ARN,Name,VersionId}
+# Replicate Secret:  .{ARN,Name,ReplicationStatus}
+```
 
-**SHOULD activate when:**
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests secret creation, rotation, or deletion
 - User needs to retrieve secret values
 - User asks about Secrets Manager
@@ -28,129 +48,65 @@ AWS Secrets Manager operational skill for AI Agent automation.
 - User mentions "secret", "credential", "password", "API key"
 - User needs cross-account secret access
 
-**SHOULD-NOT activate when:**
-- Parameter Store operations (use `aws-ssm-ops`)
-- KMS key operations (use `aws-kms-ops`)
+### SHOULD NOT Use When
+- Parameter Store operations → delegate to: `aws-ssm-ops`
+- KMS key operations → delegate to: `aws-kms-ops`
 
-**Delegation:**
+### Delegation
 - KMS → `aws-kms-ops` (encryption key)
 - Lambda → `aws-lambda-ops` (rotation function)
 - IAM → `aws-iam-ops` (access policies)
 
-## Scope
-
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Secret | Yes | None |
-| Get Secret Value | Yes | None |
-| Update Secret | Yes | None |
-| Delete Secret | Yes | **Human confirmation** |
-| Restore Secret | Yes | None |
-| Rotate Secret | Yes | None |
-| Cancel Rotation | Yes | None |
-| Replicate Secret | Yes | None |
-| Tag Secret | Yes | None |
-
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.SecretId}}` | User input | my-secret-id or ARN |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{user.SecretId}}` | User input | Secret name or ARN |
 | `{{user.SecretName}}` | User input | prod/db/password |
 | `{{user.SecretString}}` | User input | Secret value (plain text) |
-| `{{user.SecretBinary}}` | User input | Binary secret (base64) |
 | `{{user.KmsKeyId}}` | User input | alias/aws/secretsmanager |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Check KMS key exists if custom key specified.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws secretsmanager [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `get-secret-value` to confirm create/update. For delete, verify DeletionDate is set.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Check KMS key exists: aws kms describe-key --key-id {{user.KmsKeyId}}
-4. Verify IAM permissions for secretsmanager:GetSecretValue
-```
-
-### Execute (Primary: CLI)
-```
-aws secretsmanager create-secret \
-  --name {{user.SecretName}} \
-  --description "{{user.Description}}" \
-  --secret-string '{{user.SecretString}}' \
-  --kms-key-id {{user.KmsKeyId}} \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-```python
-import boto3
-sm = boto3.client('secretsmanager', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = sm.create_secret(
-    Name='{{user.SecretName}}',
-    SecretString='{{user.SecretString}}'
-)
-```
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| ResourceNotFoundException (404) | HALT — verify secret name/ARN |
+| InvalidRequestException | HALT — operation not allowed in current state |
+| EncryptionFailure | FIX — check KMS key permissions |
+| Throttling (429) | Backoff, retry 3x |
+| InternalServiceError (5xx) | Retry 3x; HALT |
 
 ## Safety Gates
 
 ### Secret Deletion
 ```
-BEFORE delete-secret:
-1. Display: "Deleting {{user.SecretName}} will remove all versions"
-2. Ask: "Type 'DELETE {{user.SecretName}}' to confirm"
-3. Require exact confirmation
+⚠️ Deleting {{user.SecretName}} will remove all versions. Default recovery window: 30 days.
+Use --force-delete-without-recovery for immediate deletion (no recovery).
+Confirm: Type DELETE {{user.SecretName}} to proceed.
 ```
-
-## Output Convention
-
-Key JSON paths:
-- `.ARN` - secret ARN
-- `.Name` - secret name
-- `.VersionId` - current version
-- `.SecretString` - secret value (plain text)
-- `.SecretBinary` - secret value (base64)
-- `.CreatedDate` - creation timestamp
-- `.DeletedDate` - deletion timestamp (if pending)
 
 ## Related Skills
 
-- `aws-kms-ops` - Encryption key management
-- `aws-lambda-ops` - Rotation function
-- `aws-iam-ops` - Access policies
+- `aws-kms-ops` — Encryption key management
+- `aws-lambda-ops` — Rotation function
+- `aws-iam-ops` — Access policies
 
 ## Reference Files
 
-- `references/aws-cli-usage.md`
-- `references/boto3-sdk-usage.md`
-- `references/core-concepts.md`
-- `references/troubleshooting.md`
-- `assets/example-config.yaml`
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

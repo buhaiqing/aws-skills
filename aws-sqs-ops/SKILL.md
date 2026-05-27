@@ -25,9 +25,22 @@ metadata:
 
 AWS SQS (Simple Queue Service) operational skill for AI Agent automation.
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create Queue:       .QueueUrl
+# List Queues:        .QueueUrls[]
+# Get Queue URL:      .QueueUrl
+# Send Message:       .MessageId
+# Receive Messages:   .Messages[].{MessageId,ReceiptHandle,Body}
+# Delete Message:     Empty (success)
+# Get Attributes:     .Attributes
+# Purge Queue:        Empty (success)
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests queue creation or deletion
 - User needs to send/receive messages
 - User asks about Dead Letter Queues (DLQ)
@@ -35,131 +48,64 @@ AWS SQS (Simple Queue Service) operational skill for AI Agent automation.
 - User needs to configure queue attributes
 - User asks about Lambda triggers for SQS
 
-**SHOULD-NOT activate when:**
-- SNS topics (use `aws-sns-ops`)
-- EventBridge (use `aws-eventbridge-ops`)
-- Kinesis (use `aws-kinesis-ops`)
+### SHOULD NOT Use When
+- SNS topics → delegate to: `aws-sns-ops`
+- EventBridge → delegate to: `aws-eventbridge-ops`
+- Kinesis → delegate to: `aws-kinesis-ops`
 
-**Delegation:**
+### Delegation
 - Lambda → `aws-lambda-ops` (SQS trigger)
 - KMS → `aws-kms-ops` (queue encryption)
 - CloudWatch → `aws-cloudwatch-ops` (metrics)
 
-## Scope
-
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Queue | Yes | None |
-| Delete Queue | Yes | **Human confirmation** |
-| Send Message | Yes | None |
-| Receive Message | Yes | None |
-| Delete Message | Yes | None |
-| Purge Queue | Yes | **Human confirmation** |
-| Set Queue Attributes | Yes | None |
-| Configure DLQ | Yes | None |
-
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.QueueName}}` | User input | my-queue |
-| `{{user.QueueUrl}}` | User input | https://sqs... |
-| `{{user.MessageBody}}` | User input | Message content |
-| `{{user.ReceiptHandle}}` | User input | Message receipt handle |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{user.QueueName}}` | User input | Ask once; reuse |
+| `{{user.QueueUrl}}` | User input | Ask once; reuse |
+| `{{user.MessageBody}}` | User input | Ask once; reuse |
+| `{{user.ReceiptHandle}}` | User input | Ask once; reuse |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify queue exists via `get-queue-url`.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws sqs [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `get-queue-attributes` to confirm create/update. Poll max 60s for delete/purge.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Verify queue exists: aws sqs get-queue-url --queue-name {{user.QueueName}}
-4. Check permissions
-```
-
-### Execute (Primary: CLI)
-```
-aws sqs send-message \
-  --queue-url {{user.QueueUrl}} \
-  --message-body "{{user.MessageBody}}" \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-```python
-import boto3
-sqs = boto3.client('sqs', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = sqs.send_message(
-    QueueUrl='{{user.QueueUrl}}',
-    MessageBody='{{user.MessageBody}}'
-)
-```
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| InvalidParameterValue (400) | Fix params; retry once |
+| ResourceNotFound (404) | Verify queue name/URL |
+| Throttling (429) | Backoff, retry 3x |
+| InternalError (5xx) | Retry 3x; HALT |
 
 ## Safety Gates
 
 ### Queue Deletion
 ```
-BEFORE delete-queue:
-1. Display: "Deleting {{user.QueueName}} will remove all messages"
-2. Ask: "Type 'DELETE {{user.QueueName}}' to confirm"
+⚠️ Queue deletion is irreversible. All messages in {{user.QueueName}} will be lost.
+Confirm: Type DELETE {{user.QueueName}} to proceed.
 ```
 
 ### Queue Purge
 ```
-BEFORE purge-queue:
-1. Display: "Purging {{user.QueueName}} will delete all messages (no recovery)"
-2. Ask: "Type 'PURGE {{user.QueueName}}' to confirm"
+⚠️ Purging {{user.QueueName}} will delete all messages immediately. No recovery possible.
+Confirm: Type PURGE {{user.QueueName}} to proceed.
 ```
-
-## Output Convention
-
-Key JSON paths:
-- `.QueueUrl` - queue URL
-- `.QueueArn` - queue ARN
-- `.MessageId` - sent message ID
-- `.ReceiptHandle` - message receipt handle
-- `.Messages[].Body` - message body
-- `.Messages[].ReceiptHandle` - receipt handle for deletion
-
-## Related Skills
-
-- `aws-lambda-ops` - SQS trigger
-- `aws-kms-ops` - Queue encryption
-- `aws-cloudwatch-ops` - Monitoring
 
 ## Reference Files
 
-- `references/aws-cli-usage.md`
-- `references/boto3-sdk-usage.md`
-- `references/core-concepts.md`
-- `references/troubleshooting.md`
-- `assets/example-config.yaml`
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

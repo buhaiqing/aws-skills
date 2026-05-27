@@ -201,17 +201,14 @@ aws elbv2 describe-rules \
 
 ## CloudWatch Metrics for Troubleshooting
 
-| Metric | LB Type | Purpose |
-|--------|---------|---------|
-| TargetResponseTime | ALB | Backend latency |
-| RequestCount | ALB | Traffic volume |
-| HTTPCode_Target_2XX/4XX/5XX | ALB | Backend response codes |
-| HTTPCode_ELB_4XX/5XX | ALB | ELB errors (502, 503, 504) |
-| ActiveConnectionCount | NLB | Connection count |
-| NewConnectionCount | NLB | Connection rate |
-| ProcessedBytes | NLB | Throughput |
-| HealthyHostCount | ALB/NLB | Healthy target count |
-| UnHealthyHostCount | ALB/NLB | Unhealthy target count |
+| Metric | Description |
+|--------|-------------|
+| TargetResponseTime (ALB) | Backend latency |
+| HTTPCode_Target_4XX/5XX (ALB) | Backend response codes |
+| HTTPCode_ELB_5XX (ALB) | ELB errors (502, 503, 504) |
+| ActiveConnectionCount (NLB) | Connection count |
+| HealthyHostCount (ALB/NLB) | Healthy target count |
+| UnHealthyHostCount (ALB/NLB) | Unhealthy target count |
 
 ## Diagnostic Commands
 

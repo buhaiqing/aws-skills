@@ -2,13 +2,36 @@
 name: aws-cloudfront-ops
 description: >-
   Use when managing CloudFront distributions, CDN, cache invalidations, origins, or SSL/TLS certificates. Invoke when user mentions "CDN", "CloudFront", "distribution", or needs content delivery optimization.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access to CloudFront endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
 ---
-
 # AWS CloudFront Ops Skill
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create Dist:       .Distribution.{Id,DomainName,Status}
+# Get Dist:          .Distribution.{Id,DomainName,Status}
+# List Dists:        .DistributionList.Items[].{Id,DomainName,Status}
+# Create Inval:      .Invalidation.{Id,Status}
+# Get Inval:         .Invalidation.Status
+# Create OAI:        .CloudFrontOriginAccessIdentity.{Id,S3CanonicalUserId}
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests distribution creation or deletion
 - User needs to manage cache behaviors
 - User asks about CloudFront
@@ -17,123 +40,70 @@ description: >-
 - User asks about SSL/TLS certificates for CloudFront
 - User needs to configure custom domains
 
-**SHOULD-NOT activate when:**
-- S3 bucket operations only (use `aws-s3-ops`)
-- ELB operations (use `aws-elb-ops`)
-- Route53 operations (use `aws-route53-ops`)
+### SHOULD NOT Use When
+- S3 bucket operations only → delegate to: `aws-s3-ops`
+- ELB operations → delegate to: `aws-elb-ops`
+- Route53 operations → delegate to: `aws-route53-ops`
 
-**Delegation:**
+### Delegation
 - S3 → `aws-s3-ops` (origin bucket)
 - Route53 → `aws-route53-ops` (DNS/alias records)
 - ACM → `aws-acm-ops` (SSL/TLS certificates)
 - Lambda → `aws-lambda-ops` (Lambda@Edge)
 
-## Scope
-
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Distribution | Yes | None |
-| Update Distribution | Yes | None |
-| Disable Distribution | Yes | None |
-| Delete Distribution | Yes | **Human confirmation** |
-| Create CloudFront Origin Access Identity | Yes | None |
-| Create Cache Invalidation | Yes | None |
-| Get Distribution Status | Yes | None |
-
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.DistributionId}}` | User input | E1234567890ABC |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | CloudFront uses us-east-1 |
+| `{{user.DistributionId}}` | User input | Ask once; reuse |
 | `{{user.Domain}}` | User input | example.com |
 | `{{user.OriginDomain}}` | User input | mybucket.s3.amazonaws.com |
-| `{{user.AcmCertArn}}` | User input | arn:aws:acm:us-east-1:... |
+| `{{user.AcmCertArn}}` | User input | ACM cert ARN (us-east-1) |
+| `{{user.ETag}}` | Last API response | Required for updates (from get-distribution-config) |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify origin exists (S3/ELB). Check SSL cert in us-east-1.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws cloudfront [command] --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `get-distribution --id {{u.id}}` to poll. Status: `InProgress` → `Deployed`. Max wait 15 min for create, 5 min for invalidation.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Verify origin exists (S3/ELB/custom origin)
-4. Check SSL certificate in us-east-1
-```
-
-### Execute (Primary: CLI)
-```
-aws cloudfront create-distribution \
-  --distribution-config file://distribution-config.json \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-```python
-import boto3
-cf = boto3.client('cloudfront')
-response = cf.create_distribution(
-    DistributionConfig={...}
-)
-```
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| InvalidArgument (400) | Fix distribution config; retry once |
+| DistributionAlreadyExists | HALT — choose different name |
+| PreconditionFailed | HALT — ETag mismatch; re-fetch with `get-distribution-config` |
+| TooManyDistributions | HALT — account limit reached |
+| Throttling (429) | Backoff, retry 3x |
+| InternalError (5xx) | Retry 3x; HALT |
 
 ## Safety Gates
 
 ### Distribution Deletion
 ```
-BEFORE delete-distribution:
-1. Disable distribution first
-2. Wait for disabled state
-3. Ask: "Type 'DELETE {{user.DistributionId}}' to confirm"
+⚠️ Distribution must be DISABLED before deletion.
+1. `update-distribution` with Enabled=false
+2. Wait for Deployed status
+3. Confirm: Type DELETE {{user.DistributionId}} to proceed.
 ```
-
-## Output Convention
-
-Key JSON paths:
-- `.Distribution.Id` - distribution ID
-- `.Distribution.DomainName` - CloudFront domain
-- `.Distribution.Status` - Deployed/InProgress
-- `.DistributionConfig.Enabled` - true/false
-- `.DistributionConfig.DefaultCacheBehavior` - cache config
-- `.Invalidation.Id` - invalidation ID
 
 ## Related Skills
 
-- `aws-s3-ops` - S3 origin bucket
-- `aws-route53-ops` - DNS alias
-- `aws-acm-ops` - SSL/TLS certificates
+- `aws-s3-ops` — S3 origin bucket
+- `aws-route53-ops` — DNS alias
+- `aws-acm-ops` — SSL/TLS certificates
 
 ## Reference Files
 
-- `references/aws-cli-usage.md`
-- `references/boto3-sdk-usage.md`
-- `references/core-concepts.md`
-- `references/troubleshooting.md`
-- `assets/example-config.yaml`
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

@@ -23,19 +23,21 @@ metadata:
 
 AWS VPC operational skill for AI Agent automation.
 
-## Triggers
+## Trigger & Scope
 
-**SHOULD activate when:**
-- VPC / subnet / security group / route table creation, deletion, modification
-- Internet Gateway or NAT Gateway setup
-- VPC Peering connection requests
-- CIDR block allocation or conflicts
+### SHOULD Use When
+- User mentions "VPC", "subnet", "security group", "route table", "NAT Gateway", "Internet Gateway"
+- Task involves creating, deleting, or modifying VPC networking resources
+- User requests VPC Peering connection setup
+- Keywords: vpc, subnet, cidr, security-group, route, gateway, peering
 - Network connectivity troubleshooting within VPC scope
 
-**SHOULD-NOT when:**
-- EC2 instance ops → `aws-ec2-ops` | IAM → `aws-iam-ops`
-- Load Balancer → `aws-elb-ops` | Route53 → `aws-route53-ops`
-- Direct Connect/VPN → `aws-network-ops`
+### SHOULD NOT Use When
+- EC2 instance ops → delegate to: `aws-ec2-ops`
+- IAM → delegate to: `aws-iam-ops`
+- Load Balancer → delegate to: `aws-elb-ops`
+- Route53 DNS → delegate to: `aws-route53-ops`
+- Direct Connect/VPN → delegate to: `aws-network-ops`
 
 ## Scope & Quick Reference
 
@@ -51,12 +53,18 @@ AWS VPC operational skill for AI Agent automation.
 
 ## Variable Convention
 
-| Placeholder | Source | Example |
-|-------------|--------|---------|
-| `{{env.*}}` | Environment | `AWS_ACCESS_KEY_ID`, `AWS_DEFAULT_REGION` |
-| `{{user.*}}` | User input | `vpc_cidr`, `vpc_name`, `subnet_cidr` |
-
-**Never commit real credentials. Always use `{{env.*}}` placeholders.**
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
+| `{{user.vpc_cidr}}` | User input | Ask once; reuse |
+| `{{user.vpc_name}}` | User input | Ask once; reuse |
+| `{{user.subnet_cidr}}` | User input | Ask once; reuse |
+| `{{output.vpc_id}}` | Last API response | Parse: `.Vpc.VpcId` |
+| `{{output.subnet_id}}` | Last API response | Parse: `.Subnet.SubnetId` |
+| `{{output.sg_id}}` | Last API response | Parse: `.GroupId` |
 
 ## Execution Flow
 

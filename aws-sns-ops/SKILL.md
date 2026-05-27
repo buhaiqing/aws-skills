@@ -25,9 +25,19 @@ metadata:
 
 AWS SNS (Simple Notification Service) operational skill for AI Agent automation.
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create Topic:   .TopicArn
+# Get Attributes: .Attributes
+# Publish:        .MessageId
+# Subscribe:      .SubscriptionArn
+# List Subs:      .Subscriptions[].{SubscriptionArn,Protocol,Endpoint}
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests topic creation or deletion
 - User needs to manage subscriptions
 - User asks about SNS notifications
@@ -35,125 +45,84 @@ AWS SNS (Simple Notification Service) operational skill for AI Agent automation.
 - User needs to configure message filtering
 - User asks about Lambda/SQS integration
 
-**SHOULD-NOT activate when:**
-- SQS operations (use `aws-sqs-ops`)
-- EventBridge (use `aws-eventbridge-ops`)
-- Direct messaging (use application-level messaging)
+### SHOULD NOT Use When
+- SQS operations → delegate to: `aws-sqs-ops`
+- EventBridge → delegate to: `aws-eventbridge-ops`
+- Direct messaging → delegate to: application-level messaging
 
-**Delegation:**
+### Delegation
 - Lambda → `aws-lambda-ops` (SNS trigger)
 - SQS → `aws-sqs-ops` (SQS subscription)
 - KMS → `aws-kms-ops` (topic encryption)
 
-## Scope
+## Scope & Quick Reference
 
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Topic | Yes | None |
-| Delete Topic | Yes | **Human confirmation** |
-| List Topics | Yes | None |
-| Publish Message | Yes | None |
-| Subscribe | Yes | None |
-| Unsubscribe | Yes | None |
-| Set Filter Policy | Yes | None |
-| Confirm Subscription | Yes | None |
+| Operation | CLI | Safety Gate |
+|-----------|-----|-------------|
+| Create Topic | `aws sns create-topic --name {{u.name}}` | None |
+| Delete Topic | `aws sns delete-topic --topic-arn {{u.arn}}` | **Human confirmation** |
+| List Topics | `aws sns list-topics` | None |
+| Publish Message | `aws sns publish --topic-arn {{u.arn}} --message "{{u.msg}}"` | None |
+| Subscribe | `aws sns subscribe --topic-arn {{u.arn}} --protocol {{u.proto}} --notification-endpoint {{u.endpoint}}` | None |
+| Unsubscribe | `aws sns unsubscribe --subscription-arn {{u.sub_arn}}` | None |
+| Set Filter Policy | `aws sns set-subscription-attributes --subscription-arn {{u.sub_arn}} --attribute-name FilterPolicy --attribute-value '{{u.policy}}'` | None |
+| Confirm Subscription | `aws sns confirm-subscription --topic-arn {{u.arn}} --token {{u.token}}` | None |
 
-## Variable Convention
+## Placeholder Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.TopicName}}` | User input | my-topic |
-| `{{user.TopicArn}}` | User input | arn:aws:sns:... |
-| `{{user.Protocol}}` | User input | email, sqs, lambda, http |
-| `{{user.Endpoint}}` | User input | email@example.com |
-| `{{user.SubscriptionArn}}` | User input | arn:aws:sns:... |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{r.region}}` | User input or `{{env.AWS_DEFAULT_REGION}}` | Default `us-east-1` |
+| `{{u.name}}` | User input | Ask once; reuse |
+| `{{u.arn}}` | User input | Ask once; reuse |
+| `{{u.proto}}` | User input | email, sqs, lambda, http, sms |
+| `{{u.endpoint}}` | User input | email / Lambda ARN / SQS ARN |
+| `{{u.sub_arn}}` | User input | Subscription ARN |
+| `{{u.msg}}` | User input | Message body |
+| `{{u.subject}}` | User input | Optional email subject |
+| `{{u.token}}` | User input | Confirmation token |
+| `{{o.*}}` | Last API response | Parse from JSON output |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify topic exists via `get-topic-attributes`.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws sns [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `get-topic-attributes` or `list-subscriptions-by-topic` to confirm.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Verify topic exists: aws sns get-topic-attributes --topic-arn {{user.TopicArn}}
-4. Check permissions
-```
-
-### Execute (Primary: CLI)
-```
-aws sns publish \
-  --topic-arn {{user.TopicArn}} \
-  --message "{{user.Message}}" \
-  --subject "{{user.Subject}}" \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-```python
-import boto3
-sns = boto3.client('sns', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = sns.publish(
-    TopicArn='{{user.TopicArn}}',
-    Message='{{user.Message}}'
-)
-```
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| InvalidParameter (400) | Fix args; retry once |
+| NotFound (404) | Verify topic/subscription exists |
+| EndpointDisabled | Check endpoint validity; update or remove subscription |
+| Throttling (429) | Backoff, retry 3x |
+| InternalFailure (5xx) | Retry 3x; HALT |
 
 ## Safety Gates
 
 ### Topic Deletion
 ```
-BEFORE delete-topic:
-1. Display: "Deleting {{user.TopicName}} will remove all subscriptions"
-2. Ask: "Type 'DELETE {{user.TopicName}}' to confirm"
+⚠️ Deleting {{u.name}} will remove all subscriptions. IRREVERSIBLE.
+Type DELETE {{u.arn}} to confirm.
 ```
-
-## Output Convention
-
-Key JSON paths:
-- `.TopicArn` - topic ARN
-- `.SubscriptionArn` - subscription ARN
-- `.MessageId` - published message ID
-- `.Endpoint` - subscriber endpoint
-- `.Protocol` - subscription protocol
 
 ## Related Skills
 
-- `aws-lambda-ops` - Lambda subscription
-- `aws-sqs-ops` - SQS subscription
-- `aws-kms-ops` - Topic encryption
+- `aws-lambda-ops` — Lambda subscription
+- `aws-sqs-ops` — SQS subscription
+- `aws-kms-ops` — Topic encryption
 
 ## Reference Files
 
-- `references/aws-cli-usage.md`
-- `references/boto3-sdk-usage.md`
-- `references/core-concepts.md`
-- `references/troubleshooting.md`
-- `assets/example-config.yaml`
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

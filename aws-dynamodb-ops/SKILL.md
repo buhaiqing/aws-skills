@@ -2,13 +2,39 @@
 name: aws-dynamodb-ops
 description: >-
   Use when managing DynamoDB tables, items, indexes, or capacity modes. Invoke when user mentions "DynamoDB", "NoSQL", or needs table/query operations, backups, or TTL configuration.
+license: MIT
+compatibility: >-
+  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access to DynamoDB endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
 ---
-
 # AWS DynamoDB Ops Skill
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create Table:      .TableDescription.{TableName,TableStatus,TableArn}
+# Describe Table:    .Table.{TableStatus,KeySchema,ItemCount,TableSizeBytes,BillingModeSummary}
+# List Tables:       .TableNames[]
+# Update Table:      .TableDescription.TableStatus
+# Get Item:          .Item
+# Put Item:          Empty (success, or .Attributes if ReturnValues)
+# Query/Scan:        .{Items[],Count,ScannedCount,LastEvaluatedKey}
+# Create Backup:     .BackupDetails.{BackupStatus,BackupArn}
+# Create GSI:        .TableDescription.GlobalSecondaryIndexes
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests DynamoDB table creation, modification, or deletion
 - User asks about DynamoDB items, queries, or scans
 - User needs to configure Global Secondary Index (GSI) or Local Secondary Index (LSI)
@@ -16,133 +42,48 @@ description: >-
 - User needs backup/restore or point-in-time recovery operations
 - User asks about provisioned capacity (RCU/WCU) or on-demand mode
 
-**SHOULD-NOT activate when:**
-- RDS relational database operations (use `aws-rds-ops`)
-- ElastiCache Redis/Memcached operations (use `aws-elasticache-ops`)
-- DocumentDB operations
-- MongoDB operations (use Amazon DocumentDB skill)
-- Neptune graph database operations
+### SHOULD NOT Use When
+- RDS relational database operations → delegate to: `aws-rds-ops`
+- ElastiCache Redis/Memcached operations → delegate to: `aws-elasticache-ops`
+- DocumentDB / Neptune operations
 
-**Delegation:**
-- Lambda triggers → `aws-lambda-ops` (Lambda-DynamoDB integration)
+### Delegation
+- Lambda triggers → `aws-lambda-ops` (DynamoDB Streams integration)
 - CloudWatch alarms → `aws-cloudwatch-ops` (monitoring setup)
 - IAM roles → `aws-iam-ops` (role creation for DynamoDB access)
 - KMS keys → `aws-kms-ops` (encryption key setup)
 - S3 export/import → `aws-s3-ops` (data export to S3)
 
-## Scope
-
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Table | Yes | None |
-| Describe Table | Yes | None |
-| List Tables | Yes | None |
-| Update Table | Yes | Capacity/index changes |
-| Delete Table | Yes | **Human confirmation** |
-| Put Item | Yes | None |
-| Get Item | Yes | None |
-| Update Item | Yes | Conditional writes |
-| Delete Item | Yes | Human confirmation (optional) |
-| Query | Yes | None |
-| Scan | Yes | Pagination required |
-| Create GSI | Yes | None |
-| Delete GSI | Yes | Human confirmation |
-| Create Backup | Yes | None |
-| Restore Backup | Yes | None |
-| Enable TTL | Yes | None |
-| Enable Streams | Yes | None |
-
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.TableName}}` | User input | my-table-prod |
-| `{{user.PrimaryKey}}` | User input | partition-key |
-| `{{user.SortKey}}` | User input | sort-key (optional) |
-| `{{user.RCU}}` | User input | 5 (Read Capacity Units) |
-| `{{user.WCU}}` | User input | 5 (Write Capacity Units) |
-
-**Never commit real credentials. Always use `{{env.*}}` or `{{user.*}}` placeholders.**
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{user.TableName}}` | User input | Ask once; reuse |
+| `{{user.PrimaryKey}}` | User input | Partition key name |
+| `{{user.SortKey}}` | User input | Sort key name (optional) |
+| `{{user.RCU}}` | User input | Read Capacity Units |
+| `{{user.WCU}}` | User input | Write Capacity Units |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify table name uniqueness, check quotas.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws dynamodb [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Poll `describe-table` until TableStatus=ACTIVE (create, max 10 min) or DELETING (delete, max 5 min). Use `wait table-exists` / `wait table-not-exists`.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Confirm region: aws dynamodb list-tables --region {{env.AWS_DEFAULT_REGION}}
-4. Check quotas: aws service-quotas get-service-quota --service-code dynamodb --quota-code L-...
-5. Validate table name uniqueness: aws dynamodb describe-table --table-name {{user.TableName}}
-```
-
-### Execute (Primary: CLI)
-```
-aws dynamodb create-table \
-  --table-name {{user.TableName}} \
-  --attribute-definitions AttributeName={{user.PrimaryKey}},AttributeType=S \
-  --key-schema AttributeName={{user.PrimaryKey}},KeyType=HASH \
-  --provisioned-throughput ReadCapacityUnits={{user.RCU}},WriteCapacityUnits={{user.WCU}} \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK:
-```python
-import boto3
-dynamodb = boto3.client('dynamodb', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = dynamodb.create_table(
-    TableName='{{user.TableName}}',
-    AttributeDefinitions=[{'AttributeName': '{{user.PrimaryKey}}', 'AttributeType': 'S'}],
-    KeySchema=[{'AttributeName': '{{user.PrimaryKey}}', 'KeyType': 'HASH'}],
-    ProvisionedThroughput={'ReadCapacityUnits': {{user.RCU}}, 'WriteCapacityUnits': {{user.WCU}}
-)
-```
-
-### Validate
-```
-1. Poll status: aws dynamodb describe-table --table-name {{user.TableName}}
-2. Wait for terminal state: ACTIVE (create), DELETING (delete)
-3. Max wait: 10 minutes for create, 5 minutes for delete
-4. Validate key schema and indexes
-```
-
-### Recover
-| Error Type | Action |
-|------------|---------|
-| TableAlreadyExists | HALT - provide existing table info |
-| LimitExceededException | HALT - wait or reduce capacity |
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| TableAlreadyExists | HALT — provide existing table info |
+| LimitExceededException | HALT — wait or reduce capacity |
 | ProvisionedThroughputExceededException | Backoff, retry with exponential backoff |
-| ResourceNotFoundException | HALT - table does not exist |
-| ConditionalCheckFailedException | HALT - item condition failed |
+| ResourceNotFoundException | HALT — table does not exist |
 | ValidationException | Fix args; retry once |
 | Throttling (429) | Exponential backoff; max 3 retries |
 | 5xx Internal | Retry 3x; then HALT |
@@ -151,49 +92,29 @@ response = dynamodb.create_table(
 
 ### Table Deletion (Critical)
 ```
-BEFORE delete-table:
-1. Display: "Deleting {{user.TableName}} will permanently remove all data and indexes"
-2. Ask: "Confirm dependencies - no Lambda triggers, no Streams consumers?"
-3. Ask: "Type 'DELETE {{user.TableName}}' to confirm"
-4. Human must type exact confirmation string
-5. Proceed only after confirmation matches
+⚠️ Deleting {{user.TableName}} will permanently remove all data and indexes.
+Confirm no Lambda triggers, no Streams consumers.
+Confirm: Type DELETE {{user.TableName}} to proceed.
 ```
 
 ### GSI Deletion
 ```
-BEFORE delete-gsi:
-1. Display: "GSI {{user.IndexName}} will be permanently deleted"
-2. Ask: "Type 'DELETE GSI {{user.IndexName}}' to confirm"
-3. Proceed only after confirmation matches
+⚠️ GSI {{user.IndexName}} will be permanently deleted.
+Confirm: Type DELETE GSI {{user.IndexName}} to proceed.
 ```
-
-## Output Convention
-
-Always use `--output json` for agent parsing.
-
-Key JSON paths:
-- `.Table.TableStatus` - table state (ACTIVE, CREATING, DELETING)
-- `.Table.TableName` - table name
-- `.Table.KeySchema` - primary key structure
-- `.Table.GlobalSecondaryIndexes` - GSI list
-- `.Table.ProvisionedThroughput.ReadCapacityUnits` - RCU
-- `.Table.ProvisionedThroughput.WriteCapacityUnits` - WCU
-- `.Table.ItemCount` - approximate item count
-- `.Item` - item attributes
 
 ## Related Skills
 
-- `aws-lambda-ops` - Lambda triggers for DynamoDB Streams
-- `aws-eks-ops` - Kubernetes applications using DynamoDB
-- `aws-cloudwatch-ops` - DynamoDB metrics and alarms
-- `aws-iam-ops` - IAM roles for DynamoDB access
-- `aws-kms-ops` - Encryption key management
-- `aws-s3-ops` - Export/import DynamoDB data
+- `aws-lambda-ops` — Lambda triggers for DynamoDB Streams
+- `aws-cloudwatch-ops` — DynamoDB metrics and alarms
+- `aws-iam-ops` — IAM roles for DynamoDB access
+- `aws-kms-ops` — Encryption key management
+- `aws-s3-ops` — Export/import DynamoDB data
 
 ## Reference Files
 
-- `references/aws-cli-usage.md` - CLI command reference
-- `references/boto3-sdk-usage.md` - Python SDK patterns
-- `references/core-concepts.md` - DynamoDB architecture, capacity modes
-- `references/troubleshooting.md` - Error codes, recovery procedures
-- `assets/example-config.yaml` - Configuration examples
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

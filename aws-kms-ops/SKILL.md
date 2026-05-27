@@ -9,16 +9,44 @@ description: >-
   "manage encryption keys in AWS", "encrypt my data with AWS keys", "set up
   AWS key rotation", "configure SSE-KMS encryption", or "implement envelope
   encryption with data keys in AWS".
----
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to KMS endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-15"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
+    - AWS_SESSION_TOKEN
 ---
+# AWS KMS Ops Skill
 
-## Triggers
+Operational runbook for AWS KMS — key lifecycle, encryption, grants, policies, and rotation.
 
-**SHOULD activate when:**
+## Common JSON Paths (Centralized)
+
+```
+# Create Key:      .KeyMetadata.{KeyId,KeyArn,KeyState}
+# Describe Key:    .KeyMetadata.{KeyState,Enabled,KeyUsage,KeySpec,Description,CreationDate}
+# List Keys:       .Keys[].{KeyId,KeyArn}
+# Enable/Disable:  Empty (success)
+# Schedule Delete: .{KeyId,DeletionDate}
+# Encrypt:         .{CiphertextBlob,KeyId}
+# Decrypt:         .{Plaintext,KeyId}
+# Gen DataKey:     .{CiphertextBlob,Plaintext,KeyId}
+# Create Alias:    Empty (success)
+# Create Grant:    .{GrantToken,GrantId}
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests KMS key creation, rotation, or deletion
 - User needs to enable/disable keys
 - User asks about encryption key management
@@ -28,140 +56,55 @@ compatibility: >-
 - User needs to encrypt/decrypt data or generate data keys
 - User mentions "SSE-KMS", "envelope encryption", "key hierarchy"
 
-**SHOULD-NOT activate when:**
-- S3 bucket encryption only (use `aws-s3-ops`)
-- RDS encryption only (use `aws-rds-ops`)
-- EBS volume encryption only (use `aws-ec2-ops`)
-- Secrets Manager operations (use `aws-secrets-manager-ops`)
+### SHOULD NOT Use When
+- S3 bucket encryption → `aws-s3-ops`
+- RDS encryption → `aws-rds-ops`
+- EBS volume encryption → `aws-ec2-ops`
+- Secrets Manager operations → `aws-secrets-manager-ops`
 
-**Delegation:**
+### Delegation
 - IAM policy editing → `aws-iam-ops` (IAM policies for key access)
-- S3 bucket operations → `aws-s3-ops` (bucket encryption config)
-- RDS operations → `aws-rds-ops` (database encryption)
-- CloudTrail operations → `aws-cloudtrail-ops` (trail encryption)
+- S3 bucket ops → `aws-s3-ops` (bucket encryption config)
+- RDS ops → `aws-rds-ops` (database encryption)
+- CloudTrail ops → `aws-cloudtrail-ops` (trail encryption)
 
-## Scope
+## Placeholder Convention
 
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create Key | Yes | None |
-| Describe Key | Yes | None |
-| List Keys | Yes | None |
-| Update Key Description | Yes | None |
-| Enable Key | Yes | None |
-| Disable Key | Yes | **Warning - affects dependent services** |
-| Schedule Key Deletion | Yes | **CRITICAL - data loss risk** |
-| Cancel Key Deletion | Yes | None |
-| Enable Auto-Rotation | Yes | None |
-| Create Alias | Yes | None |
-| Delete Alias | Yes | None |
-| Put Key Policy | Yes | None |
-| Get Key Policy | Yes | None |
-| Create Grant | Yes | None |
-| Revoke Grant | Yes | None |
-| Encrypt | Yes | None |
-| Decrypt | Yes | None |
-| Generate Data Key | Yes | None |
-| Generate Random | Yes | None |
-
-## Variable Convention
-
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.KeyId}}` | User input | alias/my-key or key-id |
-| `{{user.AliasName}}` | User input | alias/production-key |
-| `{{user.KeyDescription}}` | User input | Key for production data |
-| `{{user.Plaintext}}` | User input | Data to encrypt (max 4KB) |
-| `{{user.Ciphertext}}` | User input | Data to decrypt |
-| `{{user.GranteePrincipal}}` | User input | IAM role/user ARN |
-
-**Never commit real credentials. Always use `{{env.*}}` or `{{user.*}}` placeholders.**
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default; allow override |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | STS temp creds only |
+| `{{env.AWS_PROFILE}}` | Runtime env | Overrides explicit keys |
+| `{{r.region}}` | User input or env | Default `us-east-1` |
+| `{{u.key_id}}` | User input | Key ID, ARN, or `alias/` prefix |
+| `{{u.alias}}` | User input | Without `alias/` prefix |
+| `{{u.desc}}` | User input | Description for key |
+| `{{u.plaintext}}` | User input | Max 4KB for encrypt |
+| `{{u.ciphertext}}` | User input | Base64 encoded ciphertext |
+| `{{u.grantee}}` | User input | IAM role/user ARN |
+| `{{o.*}}` | Last API response | Parse from JSON output |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify region via `list-keys`, check quotas.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws kms [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `describe-key` to confirm state changes (Enabled/Disabled/PendingDeletion). Key operations are synchronous.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Confirm region: aws kms list-keys --region {{env.AWS_DEFAULT_REGION}}
-4. Check service quotas: aws service-quotas get-service-quota --service-code kms --quota-code L-...
-5. Verify IAM permissions for KMS operations
-```
-
-### Execute (Primary: CLI)
-```
-aws kms create-key \
-  --description "{{user.KeyDescription}}" \
-  --key-usage ENCRYPT_DECRYPT \
-  --key-spec SYMMETRIC_DEFAULT \
-  --origin AWS_KMS \
-  --policy '{{user.KeyPolicy}}' \
-  --tags TagKey=Environment,TagValue=production \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK:
-```python
-import boto3
-kms = boto3.client('kms', region_name='{{env.AWS_DEFAULT_REGION}}')
-response = kms.create_key(
-    Description='{{user.KeyDescription}}',
-    KeyUsage='ENCRYPT_DECRYPT',
-    KeySpec='SYMMETRIC_DEFAULT',
-    Policy='{{user.KeyPolicy}}'
-)
-```
-
-### Validate
-```
-1. Poll status: aws kms describe-key --key-id {{user.KeyId}}
-2. Wait for KeyState: Enabled
-3. Max wait: Immediate (synchronous)
-4. Verify key is usable
-```
-
-### Recover
-| Error Type | Action |
-|------------|---------|
-| AlreadyExistsException | HALT - key alias already exists |
-| NotFoundException | HALT - key does not exist |
-| DisabledException | FIX - enable key first |
-| InvalidKeyState | HALT - key in invalid state (PendingDeletion, PendingImport) |
-| DependencyTimeoutException | RETRY - temporary service issue, max 3 retries |
-| InvalidKeyUsageException | FIX - key not valid for requested operation |
-| InvalidGrantIdException | HALT - grant does not exist |
-| KMSInvalidStateException | FIX - fix key state before operation |
-| LimitExceededException | HALT - quota exceeded, request increase |
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| AlreadyExistsException | HALT — key alias already exists |
+| NotFoundException | HALT — key does not exist |
+| DisabledException | FIX — enable key first |
+| InvalidKeyState | HALT — key in invalid state |
+| DependencyTimeoutException | RETRY max 3x |
+| LimitExceededException | HALT — quota exceeded |
 | Throttling (429) | Exponential backoff; max 3 retries |
 | 5xx Internal | Retry 3x; then HALT |
 
@@ -169,54 +112,25 @@ response = kms.create_key(
 
 ### Key Deletion (CRITICAL)
 ```
-BEFORE schedule-key-deletion:
-1. Display: "Deleting key {{user.KeyId}} will PERMANENTLY destroy key material"
-2. WARN: "All data encrypted with this key will be UNRECOVERABLE"
-3. REQUIRE: List of dependent services (S3, RDS, EBS, etc.)
-4. REQUIRE: Confirmation that backups exist with different keys
-5. Ask: "Type 'PERMANENTLY DELETE {{user.KeyId}}' to confirm"
-6. Use minimum 7-day pending window (default: 30 days)
-7. Proceed only after confirmation matches
+⚠️ Deleting key {{u.key_id}} will PERMANENTLY destroy key material.
+All data encrypted with this key will be UNRECOVERABLE.
+Before proceeding:
+1. List dependent services (S3, RDS, EBS, etc.)
+2. Confirm backups exist with different keys
+3. Use minimum 7-day pending window (default: 30 days)
+Confirm: Type PERMANENTLY DELETE {{u.key_id}} to proceed.
 ```
 
 ### Key Disabling
 ```
-BEFORE disable-key:
-1. WARN: "Disabling key will break encryption/decryption for dependent services"
-2. REQUIRE: List affected services
-3. Ask: "Continue? (yes/no)"
-4. Proceed only after explicit "yes"
+⚠️ Disabling key will break encryption/decryption for dependent services.
+List affected services first. Continue? (yes/no)
 ```
 
 ### Key Rotation
 ```
-BEFORE enable-key-rotation:
-1. INFO: "Rotation generates new key material, old material preserved"
-2. INFO: "Existing encrypted data remains usable"
-3. Proceed without additional confirmation
+ℹ️ Rotation generates new key material. Old material preserved. Existing data remains usable.
 ```
-
-## Output Convention
-
-Always use `--output json` for agent parsing.
-
-Key JSON paths:
-- `.KeyMetadata.KeyId` - unique key ID
-- `.KeyMetadata.KeyArn` - full ARN
-- `.KeyMetadata.KeyState` - Enabled, Disabled, PendingDeletion, etc.
-- `.KeyMetadata.KeyUsage` - ENCRYPT_DECRYPT, SIGN_VERIFY, etc.
-- `.KeyMetadata.KeySpec` - SYMMETRIC_DEFAULT, RSA_2048, etc.
-- `.KeyMetadata.CreationDate` - timestamp
-- `.KeyMetadata.DeletionDate` - scheduled deletion time
-- `.KeyMetadata.Enabled` - boolean
-- `.KeyMetadata.Description` - key description
-- `.KeyMetadata.Origin` - AWS_KMS, EXTERNAL, AWS_CLOUDHSM
-- `.KeyMetadata.KeyManager` - CUSTOMER or AWS
-- `.CiphertextBlob` - encrypted data (base64)
-- `.Plaintext` - decrypted data (base64)
-- `.Aliases[].AliasName` - alias name
-- `.Grants[].GrantId` - grant ID
-- `.GrantTokens[]` - grant tokens for cross-account access
 
 ## Related Skills
 
@@ -225,13 +139,13 @@ Key JSON paths:
 - `aws-rds-ops` - RDS storage encryption
 - `aws-ec2-ops` - EBS volume encryption
 - `aws-cloudtrail-ops` - Trail encryption
-- `aws-lambda-ops` - Lambda environment variable encryption
+- `aws-lambda-ops` - Lambda env var encryption
 - `aws-secrets-manager-ops` - Secrets encryption
 
 ## Reference Files
 
-- `references/aws-cli-usage.md` - CLI command reference
-- `references/boto3-sdk-usage.md` - Python SDK patterns
-- `references/core-concepts.md` - KMS architecture, key types
-- `references/troubleshooting.md` - Error codes, recovery procedures
-- `assets/example-config.yaml` - Key configuration
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

@@ -25,9 +25,21 @@ metadata:
 
 AWS Step Functions operational skill for AI Agent automation.
 
-## Triggers
+## Common JSON Paths (Centralized)
 
-**SHOULD activate when:**
+```
+# Create SM:       .stateMachineArn
+# Describe SM:     .{stateMachineArn,name,status,definition}
+# List SMs:        .stateMachines[].{stateMachineArn,name,creationDate}
+# Start Exec:      .executionArn
+# Describe Exec:   .{executionArn,status,output,startDate}
+# Stop Exec:       Empty (success)
+# Get History:     .events[].{id,type,timestamp}
+```
+
+## Trigger & Scope
+
+### SHOULD Use When
 - User requests state machine creation or deletion
 - User needs to start/stop executions
 - User asks about Step Functions
@@ -35,114 +47,59 @@ AWS Step Functions operational skill for AI Agent automation.
 - User needs to describe execution history
 - User asks about error handling or retries
 
-**SHOULD-NOT activate when:**
-- Lambda operations only (use `aws-lambda-ops`)
-- EventBridge rules (use `aws-eventbridge-ops`)
-- Simple queue operations (use `aws-sqs-ops`)
+### SHOULD NOT Use When
+- Lambda operations only → delegate to: `aws-lambda-ops`
+- EventBridge rules → delegate to: `aws-eventbridge-ops`
+- Simple queue operations → delegate to: `aws-sqs-ops`
 
-**Delegation:**
+### Delegation
 - Lambda → `aws-lambda-ops` (Lambda functions)
 - IAM → `aws-iam-ops` (Execution role)
 - CloudWatch → `aws-cloudwatch-ops` (Metrics)
 
-## Scope
-
-| Operation | Supported | Safety Gate |
-|-----------|-----------|-------------|
-| Create State Machine | Yes | None |
-| Delete State Machine | Yes | **Human confirmation** |
-| Update State Machine | Yes | None |
-| Start Execution | Yes | None |
-| Stop Execution | Yes | None |
-| Describe Execution | Yes | None |
-| List Executions | Yes | None |
-
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Environment | Never ask user |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Environment | Never ask user |
-| `{{env.AWS_DEFAULT_REGION}}` | Environment | us-east-1 |
-| `{{user.StateMachineArn}}` | User input | arn:aws:states:... |
-| `{{user.ExecutionArn}}` | User input | arn:aws:states:... |
-| `{{user.RoleArn}}` | User input | arn:aws:iam::...:role/... |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use `us-east-1` if unset |
+| `{{user.StateMachineName}}` | User input | Ask once; reuse |
+| `{{user.StateMachineArn}}` | User input | Ask once; reuse |
+| `{{user.ExecutionArn}}` | User input | Ask once; reuse |
+| `{{user.RoleArn}}` | User input | Ask once; reuse |
+| `{{user.Definition}}` | User input | ASL definition (JSON) |
+| `{{output.ExecArn}}` | Last API response | Parse `.executionArn` |
 
 ## Execution Flow
 
-### Pre-flight
+**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify IAM role and check state machine definition syntax.
 
-**Step 1: Check CLI**
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+**CLI (primary)**: `aws stepfunctions [command] --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
-**Step 2: Load & Verify Credentials**
-```bash
-aws sts get-caller-identity --output json
-```
+**boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
+**Validate**: Use `describe-state-machine` or `describe-execution` to confirm.
 
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
-```
-
-```
-3. Verify IAM role exists: aws iam get-role --role-name {{user.RoleName}}
-4. Check state machine definition syntax
-```
-
-### Execute (Primary: CLI)
-```
-aws stepfunctions create-state-machine \
-  --name "{{user.StateMachineName}}" \
-  --definition '{{user.Definition}}' \
-  --role-arn "{{user.RoleArn}}" \
-  --type STANDARD \
-  --output json
-```
-
-### Execute (Fallback: boto3)
-```python
-import boto3
-sfn = boto3.client('stepfunctions')
-response = sfn.create_state_machine(
-    name='{{user.StateMachineName}}',
-    definition='{{user.Definition}}',
-    roleArn='{{user.RoleArn}}'
-)
-```
+**Common Recovery**:
+| Error | Action |
+|-------|--------|
+| InvalidDefinition (400) | Fix ASL syntax; retry once |
+| StateMachineDoesNotExist | Verify SM ARN |
+| ExecutionDoesNotExist | Verify execution ARN |
+| Throttling (429) | Backoff, retry 3x |
+| InternalError (5xx) | Retry 3x; HALT |
 
 ## Safety Gates
 
 ### Delete State Machine
 ```
-BEFORE delete-state-machine:
-1. Check for running executions
-2. Stop active executions
-3. Ask: "Type 'DELETE {{user.StateMachineName}}' to confirm"
+⚠️ Deleting state machine will remove all executions and history.
+Before proceeding:
+1. Check for running executions via `list-executions`
+2. Stop active executions via `stop-execution`
+3. Confirm: Type DELETE {{user.StateMachineName}} to proceed.
 ```
-
-## Output Convention
-
-Key JSON paths:
-- `.stateMachineArn` - ARN
-- `.executionArn` - execution ARN
-- `.status` - RUNNING/SUCCEEDED/FAILED
-- `.output` - execution output
-- `.startDate` - start timestamp
 
 ## Related Skills
 
@@ -152,8 +109,8 @@ Key JSON paths:
 
 ## Reference Files
 
-- `references/aws-cli-usage.md`
-- `references/boto3-sdk-usage.md`
-- `references/core-concepts.md`
-- `references/troubleshooting.md`
-- `assets/example-config.yaml`
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](../aws-skill-generator/references/integration.md)

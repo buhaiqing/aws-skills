@@ -14,29 +14,39 @@ license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to RDS endpoints.
+metadata:
+  author: aws
+  version: "1.0.0"
+  last_updated: "2026-05-10"
+  runtime: Harness AI Agent
+  cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_DEFAULT_REGION
 ---
-# AWS RDS Ops Skill
 
 AWS Relational Database Service (RDS) operational skill for AI Agent automation.
 
-## Triggers
+## Trigger & Scope
 
-**SHOULD activate when:**
+### SHOULD Use When
+- User mentions "RDS", "Relational Database Service", "managed database"
 - User requests DB instance creation, modification, or deletion
 - User asks to create, restore, or manage database snapshots
 - User needs read replica setup or management
 - User requests parameter group configuration
 - User asks about Aurora cluster operations
-- User mentions "RDS", "managed database", "MySQL/PostgreSQL on AWS", "Aurora"
-- User needs database backup or recovery operations
+- Keywords: database, mysql, postgresql, aurora, snapshot, replica, failover
 - (AIOps) User reports slow database, connection issues, storage warning, backup compliance
 - (AIOps) User asks for cost optimization or capacity forecast
 
-**SHOULD-NOT activate when:**
-- DynamoDB → `aws-dynamodb-ops` / ElastiCache → `aws-elasticache-ops` / Redshift → `aws-redshift-ops`
+### SHOULD NOT Use When
+- DynamoDB → delegate to: `aws-dynamodb-ops`
+- ElastiCache → delegate to: `aws-elasticache-ops`
 - EC2 self-managed DB / DocumentDB / Neptune
 
-**Delegation:**
+### Delegation
 - Security groups → `aws-ec2-ops` | IAM roles → `aws-iam-ops` | KMS keys → `aws-kms-ops`
 - CloudWatch alarms → `aws-cloudwatch-ops` | S3 backup → `aws-s3-ops`
 
@@ -57,12 +67,16 @@ AWS Relational Database Service (RDS) operational skill for AI Agent automation.
 
 ## Variable Convention
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `{{env.*}}` | Environment | `AWS_ACCESS_KEY_ID`, `AWS_DEFAULT_REGION` |
-| `{{user.*}}` | User input | `DBInstanceIdentifier`, `DBEngine`, `MasterUsername` |
-
-**Never commit real credentials. Always use `{{env.*}}` or `{{user.*}}` placeholders.**
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{user.DBInstanceIdentifier}}` | User input | Ask once; reuse |
+| `{{user.DBEngine}}` | User input | mysql, postgres, aurora-mysql, etc. |
+| `{{user.MasterUsername}}` | User input | Ask once; reuse |
+| `{{output.DBArn}}` | Last API response | Parse: `.DBInstance.DBInstanceArn` |
+| `{{output.Endpoint}}` | Last API response | Parse: `.DBInstance.Endpoint.Address` |
 
 ## Execution Flow
 

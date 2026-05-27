@@ -1,88 +1,76 @@
 # AWS CLI Usage - SNS
 
-AWS CLI commands for SNS operations. All commands use `--output json`.
+AWS CLI commands for SNS operations. All commands use `--region {{r.region}} --output json`.
+
+## Common JSON Paths (Centralized)
+
+```
+# Create Topic:   .TopicArn
+# Publish:        .MessageId
+# Subscribe:      .SubscriptionArn
+# Unsubscribe:    Empty (success)
+# List Topics:    .Topics[]
+# List Subs:      .Subscriptions[].{SubscriptionArn,Protocol,Endpoint}
+# Set Filter:     Empty (success)
+```
 
 ## Topic Operations
 
 ### Create Topic
 ```bash
 # Standard topic
-aws sns create-topic \
-  --name {{user.TopicName}} \
-  --output json
+aws sns create-topic --name {{u.name}}
 
 # FIFO topic
-aws sns create-topic \
-  --name {{user.TopicName}}.fifo \
-  --attributes FifoTopic=true,ContentBasedDeduplication=true \
-  --output json
+aws sns create-topic --name {{u.name}}.fifo \
+  --attributes FifoTopic=true,ContentBasedDeduplication=true
 ```
 
 ### Get Topic Attributes
 ```bash
-aws sns get-topic-attributes \
-  --topic-arn {{user.TopicArn}} \
-  --output json
+aws sns get-topic-attributes --topic-arn {{u.arn}}
 ```
 
 ### List Topics
 ```bash
-aws sns list-topics --output json
+aws sns list-topics
 ```
 
 ### Delete Topic
 ```bash
-aws sns delete-topic \
-  --topic-arn {{user.TopicArn}} \
-  --output json
+aws sns delete-topic --topic-arn {{u.arn}}
 ```
 
 ## Subscription Operations
 
 ### Subscribe
 ```bash
-# Email subscription
-aws sns subscribe \
-  --topic-arn {{user.TopicArn}} \
-  --protocol email \
-  --notification-endpoint {{user.Email}} \
-  --output json
+# Email
+aws sns subscribe --topic-arn {{u.arn}} --protocol email --notification-endpoint {{u.endpoint}}
 
-# Lambda subscription
-aws sns subscribe \
-  --topic-arn {{user.TopicArn}} \
-  --protocol lambda \
-  --notification-endpoint {{user.LambdaArn}} \
-  --output json
+# Lambda
+aws sns subscribe --topic-arn {{u.arn}} --protocol lambda --notification-endpoint {{u.endpoint}}
 
-# SQS subscription
-aws sns subscribe \
-  --topic-arn {{user.TopicArn}} \
-  --protocol sqs \
-  --notification-endpoint {{user.QueueArn}} \
-  --output json
+# SQS
+aws sns subscribe --topic-arn {{u.arn}} --protocol sqs --notification-endpoint {{u.endpoint}}
+
+# HTTP/HTTPS
+aws sns subscribe --topic-arn {{u.arn}} --protocol https --notification-endpoint {{u.endpoint}}
 ```
 
 ### List Subscriptions
 ```bash
-aws sns list-subscriptions-by-topic \
-  --topic-arn {{user.TopicArn}} \
-  --output json
+aws sns list-subscriptions-by-topic --topic-arn {{u.arn}}
 ```
 
 ### Unsubscribe
 ```bash
-aws sns unsubscribe \
-  --subscription-arn {{user.SubscriptionArn}} \
-  --output json
+aws sns unsubscribe --subscription-arn {{u.sub_arn}}
 ```
 
 ### Confirm Subscription
 ```bash
-aws sns confirm-subscription \
-  --topic-arn {{user.TopicArn}} \
-  --token {{user.Token}} \
-  --output json
+aws sns confirm-subscription --topic-arn {{u.arn}} --token {{u.token}}
 ```
 
 ## Message Operations
@@ -90,18 +78,11 @@ aws sns confirm-subscription \
 ### Publish
 ```bash
 # Simple message
-aws sns publish \
-  --topic-arn {{user.TopicArn}} \
-  --message "{{user.Message}}" \
-  --subject "{{user.Subject}}" \
-  --output json
+aws sns publish --topic-arn {{u.arn}} --message "{{u.msg}}" --subject "{{u.subject}}"
 
-# Message with attributes
-aws sns publish \
-  --topic-arn {{user.TopicArn}} \
-  --message "{{user.Message}}" \
-  --message-attributes '{"priority":{"DataType":"String","StringValue":"high"}}' \
-  --output json
+# With message attributes
+aws sns publish --topic-arn {{u.arn}} --message "{{u.msg}}" \
+  --message-attributes '{"priority":{"DataType":"String","StringValue":"high"}}'
 ```
 
 ## Filter Policies
@@ -109,18 +90,19 @@ aws sns publish \
 ### Set Subscription Filter
 ```bash
 aws sns set-subscription-attributes \
-  --subscription-arn {{user.SubscriptionArn}} \
+  --subscription-arn {{u.sub_arn}} \
   --attribute-name FilterPolicy \
-  --attribute-value '{"priority":["high","critical"]}' \
-  --output json
+  --attribute-value '{"priority":["high","critical"]}'
 ```
 
 ## Common Options
 
-```bash
---topic-arn {{user.TopicArn}}           # Topic ARN
---protocol email|sqs|lambda|http|sms    # Subscription protocol
---notification-endpoint {{endpoint}}      # Subscriber endpoint
---message "{{user.Message}}"            # Message body
---subject "{{user.Subject}}"            # Email subject
-```
+| Option | Description |
+|--------|-------------|
+| `--topic-arn` | Topic ARN |
+| `--protocol` | `email\|sqs\|lambda\|http\|https\|sms` |
+| `--notification-endpoint` | Subscriber endpoint |
+| `--message` | Message body |
+| `--subject` | Email subject |
+| `--message-attributes` | Filterable key-value pairs |
+| `--subscription-arn` | Subscription ARN |

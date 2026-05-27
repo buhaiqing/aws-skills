@@ -1,18 +1,30 @@
 # AWS CLI Usage — EC2
 
+## Common JSON Paths (Centralized)
+
+```
+# Run:         .Instances[0].InstanceId
+# Describe:    .Reservations[0].Instances[0].{InstanceId,State.Name,InstanceType,PrivateIpAddress,LaunchTime,VpcId}
+# List:        .Reservations[].Instances[].{InstanceId,State.Name,InstanceType,Tags}
+# Start:       .StartingInstances[0].InstanceId
+# Stop:        .StoppingInstances[0].InstanceId
+# Terminate:   .TerminatingInstances[0].InstanceId
+# Create KP:   .KeyMaterial
+# Describe KPs: .KeyPairs[]
+# Describe AMI: .Images[]
+```
+
 ## Command Map
 
-| Goal | CLI Command | JSON Output Path |
-|------|-------------|------------------|
-| Run instance | `aws ec2 run-instances` | `.Instances[0].InstanceId` |
-| Describe instance | `aws ec2 describe-instances` | `.Reservations[0].Instances[0]` |
-| Start instance | `aws ec2 start-instances` | `.StartingInstances[0].InstanceId` |
-| Stop instance | `aws ec2 stop-instances` | `.StoppingInstances[0].InstanceId` |
-| Terminate instance | `aws ec2 terminate-instances` | `.TerminatingInstances[0].InstanceId` |
-| List instances | `aws ec2 describe-instances` | `.Reservations[].Instances[]` |
-| Create keypair | `aws ec2 create-key-pair` | `.KeyMaterial` (private key) |
-| Describe keypairs | `aws ec2 describe-key-pairs` | `.KeyPairs[]` |
-| Describe images (AMIs) | `aws ec2 describe-images` | `.Images[]` |
+| Goal | CLI Command |
+|------|-------------|
+| Run instance | `aws ec2 run-instances` |
+| Describe instance | `aws ec2 describe-instances` |
+| Start/Stop/Terminate | `aws ec2 start/stop/terminate-instances` |
+| List instances | `aws ec2 describe-instances` |
+| Create keypair | `aws ec2 create-key-pair` |
+| Describe keypairs | `aws ec2 describe-key-pairs` |
+| Describe images (AMIs) | `aws ec2 describe-images` |
 
 ## Key CLI Conventions
 
@@ -77,21 +89,6 @@ aws ec2 describe-images \
   --region us-east-1 \
   --output text
 ```
-
-## CLI vs API Coverage Gap
-
-| Operation (API) | CLI Available | Notes |
-|-----------------|---------------|-------|
-| RunInstances | ✅ | `run-instances` |
-| DescribeInstances | ✅ | `describe-instances` |
-| StartInstances | ✅ | `start-instances` |
-| StopInstances | ✅ | `stop-instances` |
-| TerminateInstances | ✅ | `terminate-instances` |
-| ModifyInstanceAttribute | ✅ | `modify-instance-attribute` |
-| CreateKeyPair | ✅ | `create-key-pair` |
-| DescribeKeyPairs | ✅ | `describe-key-pairs` |
-| DescribeImages | ✅ | `describe-images` |
-| CreateSecurityGroup | ✅ | `create-security-group` (delegate to appropriate skill) |
 
 ## Credential Handling
 

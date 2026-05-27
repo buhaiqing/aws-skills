@@ -27,6 +27,18 @@ metadata:
 
 # AWS EC2 Operations Skill
 
+## Common JSON Paths (Centralized)
+
+```
+# Run/Describe Instance: .Instances[0].{InstanceId,State.Name,InstanceType,PrivateIpAddress,LaunchTime}
+# Describe (list):       .Reservations[].Instances[].{InstanceId,State.Name,InstanceType,Tags}
+# Create Volume:         .VolumeId
+# Describe Volume:       .Volumes[0].{VolumeId,Size,VolumeType,State,Attachments[0].InstanceId}
+# Create Snapshot:       .Snapshots[0].SnapshotId
+# Create Image:          .ImageId
+# Create KeyPair:        .KeyMaterial
+```
+
 ## Overview
 
 Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. This skill is an **operational runbook** with explicit scope, credential rules, pre-flight checks, dual-path execution (AWS CLI + boto3 SDK), validation, and recovery.

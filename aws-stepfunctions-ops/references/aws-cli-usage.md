@@ -2,6 +2,18 @@
 
 AWS CLI commands for Step Functions operations.
 
+## Common JSON Paths (Centralized)
+
+```
+# Create SM:       .stateMachineArn
+# Describe SM:     .{stateMachineArn,name,status,definition}
+# List SMs:        .stateMachines[].{stateMachineArn,name,creationDate}
+# Start Exec:      .executionArn
+# Describe Exec:   .{executionArn,status,output,startDate}
+# Stop Exec:       Empty (success)
+# Get History:     .events[].{id,type,timestamp}
+```
+
 ## State Machine Operations
 
 ### Create State Machine
@@ -100,14 +112,4 @@ aws stepfunctions get-execution-history \
 aws stepfunctions list-activities \
   --max-results 10 \
   --output json
-```
-
-## Common Options
-
-```bash
---state-machine-arn "{{user.ARN}}"     # State machine ARN
---definition '{{user.Definition}}'     # ASL definition (JSON)
---role-arn "{{user.RoleArn}}"          # IAM role ARN
---input '{{user.Input}}'               # Execution input (JSON)
---name "{{user.Name}}"                 # Execution name
 ```

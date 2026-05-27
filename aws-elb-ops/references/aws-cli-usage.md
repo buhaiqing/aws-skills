@@ -1,32 +1,47 @@
 # AWS CLI Usage — ELB
 
+## Common JSON Paths (Centralized)
+
+```
+# elbv2:
+#   Create LB:         .LoadBalancers[0].{LoadBalancerArn,DNSName}
+#   Describe LBs:      .LoadBalancers[].{LoadBalancerName,Type,State.Code,VpcId,DNSName}
+#   Create TG:         .TargetGroups[0].TargetGroupArn
+#   Describe TGs:      .TargetGroups[].{TargetGroupName,Protocol,Port,HealthCheckConfig}
+#   Describe Health:   .TargetHealthDescriptions[].{Target.Id,TargetHealth.State}
+#   Create Listener:   .Listeners[0].ListenerArn
+#   Create Rule:       .Rules[0].RuleArn
+# elb (Classic):
+#   Create CLB:        .LoadBalancerName
+#   Describe CLBs:     .LoadBalancerDescriptions[].{LoadBalancerName,DNSName}
+```
+
 ## Command Map (elbv2 for ALB/NLB)
 
-| Goal | CLI Command | JSON Output Path |
-|------|-------------|------------------|
-| Create ALB/NLB | `aws elbv2 create-load-balancer` | `.LoadBalancers[0].LoadBalancerArn` |
-| Describe LBs | `aws elbv2 describe-load-balancers` | `.LoadBalancers[]` |
-| Delete LB | `aws elbv2 delete-load-balancer` | Empty (success) |
-| Create Target Group | `aws elbv2 create-target-group` | `.TargetGroups[0].TargetGroupArn` |
-| Describe Target Groups | `aws elbv2 describe-target-groups` | `.TargetGroups[]` |
-| Delete Target Group | `aws elbv2 delete-target-group` | Empty (success) |
-| Register Targets | `aws elbv2 register-targets` | Empty (success) |
-| Deregister Targets | `aws elbv2 deregister-targets` | Empty (success) |
-| Create Listener | `aws elbv2 create-listener` | `.Listeners[0].ListenerArn` |
-| Describe Listeners | `aws elbv2 describe-listeners` | `.Listeners[]` |
-| Delete Listener | `aws elbv2 delete-listener` | Empty (success) |
-| Describe Target Health | `aws elbv2 describe-target-health` | `.TargetHealthDescriptions[]` |
-| Modify LB | `aws elbv2 modify-load-balancer-attributes` | `.Attributes[]` |
+| Goal | CLI Command |
+|------|-------------|
+| Create ALB/NLB | `aws elbv2 create-load-balancer` |
+| Describe LBs | `aws elbv2 describe-load-balancers` |
+| Delete LB | `aws elbv2 delete-load-balancer` |
+| Create Target Group | `aws elbv2 create-target-group` |
+| Describe Target Groups | `aws elbv2 describe-target-groups` |
+| Delete Target Group | `aws elbv2 delete-target-group` |
+| Register/Deregister Targets | `aws elbv2 register/deregister-targets` |
+| Create Listener | `aws elbv2 create-listener` |
+| Describe Listeners | `aws elbv2 describe-listeners` |
+| Delete Listener | `aws elbv2 delete-listener` |
+| Describe Target Health | `aws elbv2 describe-target-health` |
+| Modify LB | `aws elbv2 modify-load-balancer-attributes` |
 
 ## Classic Load Balancer (elb)
 
-| Goal | CLI Command | JSON Output Path |
-|------|-------------|------------------|
-| Create CLB | `aws elb create-load-balancer` | `.LoadBalancerName` |
-| Describe CLBs | `aws elb describe-load-balancers` | `.LoadBalancerDescriptions[]` |
-| Delete CLB | `aws elb delete-load-balancer` | Empty (success) |
-| Configure Health Check | `aws elb configure-health-check` | `.HealthCheck` |
-| Register Instances | `aws elb register-instances-with-load-balancer` | `.Instances[]` |
+| Goal | CLI Command |
+|------|-------------|
+| Create CLB | `aws elb create-load-balancer` |
+| Describe CLBs | `aws elb describe-load-balancers` |
+| Delete CLB | `aws elb delete-load-balancer` |
+| Configure Health Check | `aws elb configure-health-check` |
+| Register Instances | `aws elb register-instances-with-load-balancer` |
 
 ## Key CLI Conventions
 

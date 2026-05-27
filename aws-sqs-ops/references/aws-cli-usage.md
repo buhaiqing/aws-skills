@@ -2,6 +2,21 @@
 
 AWS CLI commands for SQS operations. All commands use `--output json`.
 
+## Common JSON Paths (Centralized)
+
+```
+# Create Queue:            .QueueUrl
+# List Queues:             .QueueUrls[]
+# Get Queue URL:           .QueueUrl
+# Send Message:            .MessageId
+# Receive Messages:        .Messages[].{MessageId,ReceiptHandle,Body}
+# Delete Message:          Empty (success)
+# Delete Message Batch:    .Successful[].Id
+# Get Queue Attributes:    .Attributes
+# Set Queue Attributes:    Empty (success)
+# Purge Queue:             Empty (success)
+```
+
 ## Queue Operations
 
 ### Create Queue
@@ -90,6 +105,12 @@ aws sqs get-queue-attributes \
   --queue-url {{user.QueueUrl}} \
   --attribute-names All \
   --output json
+
+# Specific attribute
+aws sqs get-queue-attributes \
+  --queue-url {{user.QueueUrl}} \
+  --attribute-names ApproximateNumberOfMessages \
+  --output json
 ```
 
 ### Set Queue Attributes
@@ -100,8 +121,6 @@ aws sqs set-queue-attributes \
   --output json
 ```
 
-## Queue Operations
-
 ### Purge Queue
 ```bash
 aws sqs purge-queue \
@@ -109,22 +128,14 @@ aws sqs purge-queue \
   --output json
 ```
 
-### Get Queue Attributes
-```bash
-aws sqs get-queue-attributes \
-  --queue-url {{user.QueueUrl}} \
-  --attribute-names ApproximateNumberOfMessages \
-  --output json
+## Common Option Flags
+
 ```
-
-## Common Options
-
-```bash
---queue-url {{user.QueueUrl}}              # Queue URL
+--queue-url {{user.QueueUrl}}              # Queue URL (from create/get-queue-url)
 --queue-name {{user.QueueName}}            # Queue name
 --message-body "{{user.MessageBody}}"      # Message content
 --delay-seconds 0                          # Delay delivery (0-900)
---max-number-of-messages 10                  # Receive up to 10
+--max-number-of-messages 10                # Receive batch size (1-10)
 --visibility-timeout 30                    # Visibility timeout (0-43200)
 --wait-time-seconds 20                     # Long polling (0-20)
 ```

@@ -1,19 +1,30 @@
 # AWS CLI Usage — S3
 
+## Common JSON Paths (Centralized)
+
+```
+# Create:  .Location  (bucket ARN)
+# List:    .Buckets[].{Name,CreationDate}
+# Head:    Empty (204 — check via HTTP response)
+# Put/Get/Copy:  .ETag
+# Delete:  Empty (success — verify via head-object or list)
+# List Objects:  .Contents[].{Key,Size,LastModified} / .IsTruncated
+```
+
 ## Command Map
 
-| Goal | CLI Command | JSON Output Path |
-|------|-------------|------------------|
-| Create bucket | `aws s3api create-bucket` | `.Location` |
-| Delete bucket | `aws s3api delete-bucket` | Empty response |
-| List buckets | `aws s3api list-buckets` | `.Buckets[]` |
-| Head bucket (check exists) | `aws s3api head-bucket` | Empty (204) |
-| Put object | `aws s3api put-object` | `.ETag` |
-| Get object | `aws s3api get-object` | `.ETag` (file written to local) |
-| List objects | `aws s3api list-objects-v2` | `.Contents[]` |
-| Delete object | `aws s3api delete-object` | Empty response |
-| Copy object | `aws s3api copy-object` | `.CopyObjectResult.ETag` |
-| Head object | `aws s3api head-object` | `.ContentLength, .ETag, .LastModified` |
+| Goal | CLI Command |
+|------|-------------|
+| Create bucket | `aws s3api create-bucket` |
+| Delete bucket | `aws s3api delete-bucket` |
+| List buckets | `aws s3api list-buckets` |
+| Head bucket (check exists) | `aws s3api head-bucket` |
+| Put object | `aws s3api put-object` |
+| Get object | `aws s3api get-object` |
+| List objects | `aws s3api list-objects-v2` |
+| Delete object | `aws s3api delete-object` |
+| Copy object | `aws s3api copy-object` |
+| Head object | `aws s3api head-object` |
 
 ## Key CLI Conventions
 
@@ -119,24 +130,6 @@ aws s3api upload-part --bucket my-bucket --key large-file --part-number 1 --body
 # Complete multipart upload
 aws s3api complete-multipart-upload --bucket my-bucket --key large-file --upload-id UPLOAD_ID --multipart-upload file://parts.json --output json
 ```
-
-## CLI vs API Coverage Gap
-
-| Operation (API) | CLI Available | Notes |
-|-----------------|---------------|-------|
-| CreateBucket | ✅ | `s3api create-bucket` |
-| DeleteBucket | ✅ | `s3api delete-bucket` |
-| ListBuckets | ✅ | `s3api list-buckets` |
-| PutObject | ✅ | `s3api put-object`, `s3 cp` |
-| GetObject | ✅ | `s3api get-object`, `s3 cp` |
-| ListObjects | ✅ | `s3api list-objects-v2` |
-| DeleteObject | ✅ | `s3api delete-object`, `s3 rm` |
-| HeadObject | ✅ | `s3api head-object` |
-| PutBucketPolicy | ✅ | `s3api put-bucket-policy` |
-| GetBucketPolicy | ✅ | `s3api get-bucket-policy` |
-| PutBucketVersioning | ✅ | `s3api put-bucket-versioning` |
-| PutBucketEncryption | ✅ | `s3api put-bucket-encryption` |
-| PutBucketLifecycleConfiguration | ✅ | `s3api put-bucket-lifecycle-configuration` |
 
 ## Credential Handling
 

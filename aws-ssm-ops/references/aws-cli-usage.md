@@ -1,5 +1,16 @@
 # AWS CLI Usage — Systems Manager (SSM)
 
+## Common JSON Paths (Centralized)
+
+```
+# Send Command:              .Command.CommandId
+# Get Invocation:            .{Status,ResponseCode,StandardOutputContent,StandardErrorContent}
+# List Invocations:          .CommandInvocations[].{InstanceId,Status}
+# Describe Instances:        .InstanceInformationList[].{InstanceId,PingStatus,PlatformType}
+# Start Session:             .SessionId
+# Cancel Command:            Empty (success)
+```
+
 ## Command Overview
 
 | Command | Purpose | Primary Use |
@@ -28,21 +39,6 @@ aws ssm send-command \
   --output json
 ```
 
-**Response Structure**:
-```json
-{
-  "Command": {
-    "CommandId": "cmd-1234567890abcdef0",
-    "DocumentName": "AWS-RunShellScript",
-    "InstanceIds": ["i-1234567890abcdef0"],
-    "Status": "Pending",
-    "RequestedDateTime": "2026-05-10T12:00:00Z"
-  }
-}
-```
-
-**JSON Path**: `.Command.CommandId`
-
 ---
 
 ## get-command-invocation
@@ -55,25 +51,6 @@ aws ssm get-command-invocation \
   --instance-id "i-1234567890abcdef0" \
   --output json
 ```
-
-**Response Structure**:
-```json
-{
-  "CommandId": "cmd-1234567890abcdef0",
-  "InstanceId": "i-1234567890abcdef0",
-  "Status": "Success",
-  "ResponseCode": 0,
-  "StandardOutputContent": "Filesystem      Size  Used Avail Use% Mounted on...",
-  "StandardErrorContent": "",
-  "ExecutionEndDate": "2026-05-10T12:01:00Z"
-}
-```
-
-**JSON Paths**:
-- `.Status` — Execution status (Success/Failed/TimedOut)
-- `.ResponseCode` — Exit code (0 = success)
-- `.StandardOutputContent` — STDOUT
-- `.StandardErrorContent` — STDERR
 
 ---
 
@@ -88,21 +65,6 @@ aws ssm list-command-invocations \
   --output json
 ```
 
-**Response Structure**:
-```json
-{
-  "CommandInvocations": [
-    {
-      "CommandId": "cmd-1234567890abcdef0",
-      "InstanceId": "i-1234567890abcdef0",
-      "InstanceName": "web-server-01",
-      "Status": "Success",
-      "InvocationType": "Command"
-    }
-  ]
-}
-```
-
 ---
 
 ## describe-instance-information
@@ -115,26 +77,6 @@ aws ssm describe-instance-information \
   --output json
 ```
 
-**Response Structure**:
-```json
-{
-  "InstanceInformationList": [
-    {
-      "InstanceId": "i-1234567890abcdef0",
-      "PingStatus": "Online",
-      "PlatformType": "Linux",
-      "PlatformName": "Amazon Linux",
-      "AgentVersion": "3.2.1234.0",
-      "IsLatestVersion": true
-    }
-  ]
-}
-```
-
-**JSON Paths**:
-- `.PingStatus` — Agent status (Online/Offline/ConnectionLost)
-- `.AgentVersion` — Installed agent version
-
 ---
 
 ## start-session (Session Manager)
@@ -146,14 +88,6 @@ aws ssm start-session \
   --target "i-1234567890abcdef0" \
   --document-name "AWS-StartInteractiveSession" \
   --output json
-```
-
-**Response Structure**:
-```json
-{
-  "SessionId": "session-1234567890abcdef0",
-  "Url": "https://streaming.session-manager..."
-}
 ```
 
 **Note**: Requires `session-manager-plugin` installed locally for interactive terminal.

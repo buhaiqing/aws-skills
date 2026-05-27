@@ -1,63 +1,48 @@
-# S3 Bucket Policy Example (Public Read - Use Carefully)
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::{{user.bucket_name}}/*"
-    }
-  ]
-}
+# S3 Bucket & Object Configuration Examples (YAML Anchors)
+# ==========================================================
+# Template: Replace {{user.*}} placeholders at runtime.
+# Use YAML anchors to avoid repeating common policy structures.
 
-# S3 Lifecycle Policy Example (Transition to Glacier)
-{
-  "Rules": [
-    {
-      "ID": "TransitionToGlacier",
-      "Status": "Enabled",
-      "Filter": {},
-      "Transitions": [
-        {
-          "Days": 90,
-          "StorageClass": "GLACIER"
-        }
-      ],
-      "Expiration": {
-        "Days": 365
-      }
-    }
-  ]
-}
+# Shared policy skeleton
+x-policy: &policy
+  Version: "2012-10-17"
 
-# S3 Versioning Configuration
-{
-  "Status": "Enabled"
-}
+# --- Bucket Policies ---
 
-# S3 Encryption Configuration (SSE-S3)
-{
-  "Rules": [
-    {
-      "ApplyServerSideEncryptionByDefault": {
-        "SSEAlgorithm": "AES256"
-      },
-      "BucketKeyEnabled": false
-    }
-  ]
-}
+bucket_policies:
+  public_read:
+    <<: *policy
+    Statement:
+      - Sid: "PublicReadGetObject"
+        Effect: "Allow"
+        Principal: "*"
+        Action: "s3:GetObject"
+        Resource: "arn:aws:s3:::{{user.bucket_name}}/*"
 
-# S3 CORS Configuration
-{
-  "CORSRules": [
-    {
-      "AllowedOrigins": ["*"],
-      "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-      "AllowedHeaders": ["*"],
-      "MaxAgeSeconds": 3000,
-      "ExposeHeaders": ["ETag"]
-    }
-  ]
-}
+  sse_s3_encryption:
+    Rules:
+      - ApplyServerSideEncryptionByDefault: {SSEAlgorithm: "AES256"}
+        BucketKeyEnabled: false
+
+# --- Lifecycle Policy ---
+
+lifecycle_policy:
+  Rules:
+    - ID: "TransitionToGlacier"
+      Status: "Enabled"
+      Filter: {}
+      Transitions:
+        - {Days: 90, StorageClass: "GLACIER"}
+      Expiration: {Days: 365}
+
+# --- Versioning ---
+versioning: {Status: "Enabled"}
+
+# --- CORS ---
+cors:
+  CORSRules:
+    - AllowedOrigins: ["*"]
+      AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"]
+      AllowedHeaders: ["*"]
+      MaxAgeSeconds: 3000
+      ExposeHeaders: ["ETag"]

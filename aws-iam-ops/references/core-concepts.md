@@ -84,16 +84,18 @@
 | `{"AWS": "arn:aws:iam::123:root"}` | Cross-account access |
 | `{"Federated": "arn:aws:iam::...:saml-provider/..."}` | SAML federation |
 
-## Quotas
+## Quotas (Use API for current values)
+
+```bash
+aws service-quotas get-service-quota --service-code iam --quota-code L-AB123456  # Users
+aws service-quotas get-service-quota --service-code iam --quota-code L-BC234567  # Roles
+```
 
 | Quota | Default | Adjustable |
 |-------|---------|------------|
 | Users per account | 5000 | Yes |
-| Groups per account | 300 | Yes |
 | Roles per account | 1000 | Yes |
-| Policies per account | 1500 | Yes |
 | Access keys per user | 2 | No |
-| Groups per user | 10 | Yes |
 | Policies per identity | 10 managed + 20 inline | No |
 
 ## Entity Naming Rules
