@@ -2,16 +2,16 @@
 
 ## Common Error Codes
 
-| Error Code | HTTP | Meaning | Agent Action |
-|------------|------|---------|--------------|
-| EntityAlreadyExists | 409 | Entity already exists | HALT; use different name |
-| NoSuchEntity | 404 | Entity not found | HALT; verify name/ARN |
-| InvalidInput | 400 | Invalid name/path format | Fix naming; retry once |
-| LimitExceeded | 400 | Service quota reached | HALT; request quota increase |
-| MalformedPolicyDocument | 400 | Policy JSON invalid | Validate JSON structure |
-| DeleteConflict | 409 | Cannot delete (dependencies) | Remove attached entities first |
-| ThrottlingException | 429 | Too many requests | Backoff; retry 3x |
-| ServiceFailure | 500 | IAM service issue | Retry 3x; HALT if persists |
+| Error | Agent Action |
+|-------|-------------|
+| EntityAlreadyExists (409) | HALT; use different name |
+| NoSuchEntity (404) | HALT; verify name/ARN |
+| InvalidInput (400) | Fix naming; retry once |
+| LimitExceeded (400) | HALT; request quota increase |
+| MalformedPolicyDocument (400) | Validate JSON structure |
+| DeleteConflict (409) | Remove attached entities first |
+| ThrottlingException (429) | Backoff; retry 3x |
+| ServiceFailure (500) | Retry 3x; HALT if persists |
 
 ## Diagnostic Order
 

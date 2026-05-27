@@ -8,7 +8,6 @@ description: >-
   if they don't say "IAM" and instead say "set up user access in AWS", "create
   a service role for AWS", "configure AWS permissions", "grant cross-account
   access", or "attach policies to an IAM role".
----
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
@@ -26,6 +25,15 @@ metadata:
 ---
 
 # AWS IAM Operations Skill
+
+## Common JSON Paths (Centralized)
+
+```
+# Create:  .User.{UserId,Arn,CreateDate}  /  .Role.{RoleId,Arn,CreateDate}  /  .Group.{GroupId,Arn}
+#          .Policy.{PolicyId,Arn}  /  .AccessKey.{AccessKeyId,SecretAccessKey,Status}
+# Describe: .User / .Role / .Group / .Policy
+# List:     .Users[]  /  .Roles[]  /  .Groups[]  /  .Policies[]  /  .AccessKeyMetadata[]
+```
 
 ## Overview
 

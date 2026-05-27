@@ -1,25 +1,33 @@
 # AWS CLI Usage — IAM
 
+## Common JSON Paths (Centralized)
+
+```
+# Create/Get:  .User.{UserId,Arn,CreateDate,UserName}  /  .Role.{RoleId,Arn,RoleName}
+#              .Group.{GroupId,Arn,GroupName}  /  .Policy.{PolicyId,Arn}
+#              .AccessKey.{AccessKeyId,SecretAccessKey,Status}
+# List:        .Users[] / .Roles[] / .Groups[] / .Policies[] / .AccessKeyMetadata[]
+# Delete/Attach/Detach: Empty (success — check via get/list)
+```
+
 ## Command Map
 
-| Goal | CLI Command | JSON Output Path |
-|------|-------------|------------------|
-| Create user | `aws iam create-user` | `.User.Arn` |
-| Get user | `aws iam get-user` | `.User` |
-| List users | `aws iam list-users` | `.Users[]` |
-| Delete user | `aws iam delete-user` | Empty (success) |
-| Create role | `aws iam create-role` | `.Role.Arn` |
-| Get role | `aws iam get-role` | `.Role` |
-| List roles | `aws iam list-roles` | `.Roles[]` |
-| Delete role | `aws iam delete-role` | Empty (success) |
-| Create group | `aws iam create-group` | `.Group.Arn` |
-| List groups | `aws iam list-groups` | `.Groups[]` |
-| Create policy | `aws iam create-policy` | `.Policy.Arn` |
-| List policies | `aws iam list-policies` | `.Policies[]` |
-| Attach role policy | `aws iam attach-role-policy` | Empty (success) |
-| Attach user policy | `aws iam attach-user-policy` | Empty (success) |
-| Create access key | `aws iam create-access-key` | `.AccessKey` |
-| Delete access key | `aws iam delete-access-key` | Empty (success) |
+| Goal | CLI Command |
+|------|-------------|
+| Create user | `aws iam create-user` |
+| Get user | `aws iam get-user` |
+| List users | `aws iam list-users` |
+| Delete user | `aws iam delete-user` |
+| Create role | `aws iam create-role` |
+| Get role | `aws iam get-role` |
+| List roles | `aws iam list-roles` |
+| Delete role | `aws iam delete-role` |
+| Create group | `aws iam create-group` |
+| List groups | `aws iam list-groups` |
+| Create policy | `aws iam create-policy` |
+| List policies | `aws iam list-policies` |
+| Attach/detach policy | `aws iam attach/detach-role/user/group-policy` |
+| Create/delete access key | `aws iam create/delete-access-key` |
 
 ## Key CLI Conventions
 
@@ -134,49 +142,10 @@ aws iam remove-user-from-group --user-name john --group-name developers
 aws iam delete-user --user-name john
 ```
 
-### List All Policies (AWS Managed)
+### List AWS Managed Policies
 ```bash
-aws iam list-policies --scope AWS --output json
+aws iam list-policies --scope AWS --output json | jq -r '.Policies[].{PolicyName,Arn}'
 ```
-
-### List All Policies (Customer Managed)
-```bash
-aws iam list-policies --scope Local --output json
-```
-
-## CLI vs API Coverage Gap
-
-| Operation (API) | CLI Available | Notes |
-|-----------------|---------------|-------|
-| CreateUser | ✅ | `create-user` |
-| GetUser | ✅ | `get-user` |
-| ListUsers | ✅ | `list-users` |
-| DeleteUser | ✅ | `delete-user` |
-| CreateRole | ✅ | `create-role` |
-| GetRole | ✅ | `get-role` |
-| ListRoles | ✅ | `list-roles` |
-| DeleteRole | ✅ | `delete-role` |
-| CreateGroup | ✅ | `create-group` |
-| AddUserToGroup | ✅ | `add-user-to-group` |
-| CreatePolicy | ✅ | `create-policy` |
-| AttachRolePolicy | ✅ | `attach-role-policy` |
-| AttachUserPolicy | ✅ | `attach-user-policy` |
-| CreateAccessKey | ✅ | `create-access-key` |
-| DeleteAccessKey | ✅ | `delete-access-key` |
-| PutRolePolicy (inline) | ✅ | `put-role-policy` |
-| GetPolicyDocument | ✅ | `get-policy-version` |
-
-## AWS Managed Policy ARNs (Common)
-
-| Policy | ARN |
-|--------|-----|
-| AdministratorAccess | `arn:aws:iam::aws:policy/AdministratorAccess` |
-| PowerUserAccess | `arn:aws:iam::aws:policy/PowerUserAccess` |
-| ReadOnlyAccess | `arn:aws:iam::aws:policy/ReadOnlyAccess` |
-| AmazonS3FullAccess | `arn:aws:iam::aws:policy/AmazonS3FullAccess` |
-| AmazonS3ReadOnlyAccess | `arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess` |
-| AmazonEC2FullAccess | `arn:aws:iam::aws:policy/AmazonEC2FullAccess` |
-| AmazonRDSFullAccess | `arn:aws:iam::aws:policy/AmazonRDSFullAccess` |
 
 ## Credential Handling
 

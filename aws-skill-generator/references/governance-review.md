@@ -13,7 +13,7 @@ This document defines lightweight governance for `aws-*-ops` skills in this repo
 > **地位：宪章条款 — 所有生成的 SKILL.md 必须遵守，否则视为无效技能。**
 > **自解机制：Agent 在生成完成后自动执行合规检查，不符合则自动触发修复。**
 
-以下 5 条为不可违背的基本原则（INVIOLABLE PRINCIPLES）：
+以下 6 条为不可违背的基本原则（INVIOLABLE PRINCIPLES）：
 
 | # | 原则 | 检查方法 | 违背后果 |
 |---|------|----------|----------|
@@ -23,7 +23,9 @@ This document defines lightweight governance for `aws-*-ops` skills in this repo
 | **C4** | **Variable Convention 章节存在** | 搜索 `## Variable Convention` 表格 | **自动修复** — Agent 必须添加占位符表格 |
 | **C5** | **Pre-flight 安全门存在** | 破坏性操作前有确认步骤 | **自动修复** — Agent 必须添加安全门 |
 
-> **自解规则**：如果任何 C1-C5 不满足，Agent 必须：
+| **C6** | **Token Efficiency 6 条规则落实** | 检查 TE-1~TE-6 每条已应用 | **自动修复** — Agent 必须按 Token Efficiency Requirements 逐条修复 |
+
+> **自解规则**：如果任何 C1-C6 不满足，Agent 必须：
 > 1. 立即停止，报告违规项 `[CHARTER VIOLATION] C{n}: {原因}`
 > 2. 自动修复缺失章节（使用模板内容填充）
 > 3. 重新执行合规检查
@@ -57,8 +59,9 @@ This document defines lightweight governance for `aws-*-ops` skills in this repo
 - [ ] **C3:** Trigger & Scope section complete with product keywords
 - [ ] **C4:** Variable Convention table with `{{env.AWS_*}}`, `{{user.*}}`, `{{output.*}}`
 - [ ] **C5:** Pre-flight safety gates for destructive operations
+- [ ] **C6:** Token Efficiency applied (TE-1~TE-6)
 
-> **自解触发**：如果任何 C1-C5 未通过，Agent 必须立即自动修复，不允许跳过。
+> **自解触发**：如果任何 C1-C6 未通过，Agent 必须立即自动修复，不允许跳过。
 
 ### Standard Checklist
 
@@ -70,6 +73,12 @@ This document defines lightweight governance for `aws-*-ops` skills in this repo
 - [ ] **CLI fidelity**: `--output json` used; JSON paths verified with real runs
 - [ ] **Recovery**: HALT vs retry specified for quota, throttling, invalid parameters
 - [ ] **Polling**: Interval and max wait stated for async operations
+- [ ] **[TE] Static data → API query**: No hardcoded version/port/state tables
+- [ ] **[TE] No docstrings in SDK**: boto3 uses inline comments only
+- [ ] **[TE] Compact error format**: Error tables ≤3 columns
+- [ ] **[TE] JSON paths centralized**: File-top block, not per-command
+- [ ] **[TE] YAML anchors**: example-config.yaml uses anchors for shared fields
+- [ ] **[TE] No duplicate flows**: Complete Workflow only in SKILL.md
 
 ## Adversarial Scenarios
 
@@ -112,8 +121,9 @@ This document defines lightweight governance for `aws-*-ops` skills in this repo
 | H3 | Trigger & Scope | `grep -c "Trigger & Scope" SKILL.md` | ≥ 1 match | Add from template |
 | H4 | Variable Convention | `grep -c "Variable Convention" SKILL.md` | ≥ 1 match | Add placeholder table |
 | H5 | Safety Gates | Check destructive ops have confirmation | All have safety gate | Add confirmation step |
+| **H6** | **Token Efficiency** | Check TE-1~TE-6 rules applied (no static tables, no docstrings, compact errors, centralized JSON paths, YAML anchors, no duplicate flows) | All TE rules pass | Fix per TE guidelines |
 
-> **自解流程**：H1-H5 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
+> **自解流程**：H1-H6 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
 
 ## Relationship to Meta-Skill
 

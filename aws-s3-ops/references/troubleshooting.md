@@ -2,18 +2,18 @@
 
 ## Common Error Codes
 
-| Error Code | HTTP | Meaning | Agent Action |
-|------------|------|---------|--------------|
-| BucketAlreadyExists | 409 | Bucket name taken globally | Use different name |
-| InvalidBucketName | 400 | Name violates rules | Fix naming (3-63 chars, lowercase, no special chars) |
-| NoSuchBucket | 404 | Bucket doesn't exist | Verify bucket name and region |
-| NoSuchKey | 404 | Object doesn't exist | Verify object key |
-| AccessDenied | 403 | IAM policy denies action | Add S3 permissions to IAM role |
-| EntityTooLarge | 400 | Object > 5TB | Not possible; use multipart upload for large files |
-| KeyTooLong | 400 | Key exceeds length limit | Shorten object key |
-| InvalidRequest | 400 | Invalid parameter combination | Review API docs |
-| ThrottlingException | 429 | Too many requests | Backoff; retry 3x |
-| InternalError | 500 | AWS service issue | Retry 3x; HALT if persists |
+| Error | Agent Action |
+|-------|-------------|
+| BucketAlreadyExists (409) | Use different name |
+| InvalidBucketName (400) | Fix naming (3-63 chars, lowercase, no special chars) |
+| NoSuchBucket (404) | Verify bucket name and region |
+| NoSuchKey (404) | Verify object key |
+| AccessDenied (403) | Add S3 permissions to IAM role |
+| EntityTooLarge (400) | Use multipart upload for large files |
+| KeyTooLong (400) | Shorten object key |
+| InvalidRequest (400) | Review API docs |
+| ThrottlingException (429) | Backoff; retry 3x |
+| InternalError (500) | Retry 3x; HALT if persists |
 
 ## Diagnostic Order
 

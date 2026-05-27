@@ -2,21 +2,21 @@
 
 ## Common Error Codes
 
-| Error Code | HTTP | Meaning | Agent Action |
-|------------|------|---------|--------------|
-| DuplicateLoadBalancerName | 400 | LB name already exists | HALT; use different name |
-| InvalidSubnet | 400 | Subnet ID invalid or wrong VPC | HALT; verify subnets |
-| InvalidSecurityGroup | 400 | SG ID invalid or wrong VPC | HALT; verify SG |
-| InvalidVpcId | 400 | VPC ID not found | HALT; verify VPC |
-| InvalidParameterValue | 400 | Parameter value invalid | Fix parameter; retry once |
-| QuotaExceeded | 400 | Service quota reached | HALT; request quota increase |
-| ListenerNotFound | 404 | Listener ARN not found | HALT; verify ARN |
-| LoadBalancerNotFound | 404 | LB ARN not found | HALT; verify ARN |
-| TargetGroupNotFound | 404 | TG ARN not found | HALT; verify ARN |
-| ResourceInUse | 409 | Cannot delete (dependencies) | Remove dependencies first |
-| InvalidConfigurationRequest | 400 | Configuration conflict | Review config; retry once |
-| ThrottlingException | 429 | Too many requests | Backoff; retry 3x |
-| ServiceUnavailable | 500 | ELB service issue | Retry 3x; HALT if persists |
+| Error | Agent Action |
+|-------|-------------|
+| DuplicateLoadBalancerName (400) | HALT; use different name |
+| InvalidSubnet (400) | HALT; verify subnets |
+| InvalidSecurityGroup (400) | HALT; verify SG |
+| InvalidVpcId (400) | HALT; verify VPC |
+| InvalidParameterValue (400) | Fix parameter; retry once |
+| QuotaExceeded (400) | HALT; request quota increase |
+| ListenerNotFound (404) | HALT; verify ARN |
+| LoadBalancerNotFound (404) | HALT; verify ARN |
+| TargetGroupNotFound (404) | HALT; verify ARN |
+| ResourceInUse (409) | Remove dependencies first |
+| InvalidConfigurationRequest (400) | Review config; retry once |
+| ThrottlingException (429) | Backoff; retry 3x |
+| ServiceUnavailable (500) | Retry 3x; HALT if persists |
 
 ## Diagnostic Order
 

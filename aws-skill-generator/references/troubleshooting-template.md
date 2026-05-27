@@ -24,6 +24,8 @@ Use this template when creating `references/troubleshooting.md` for a new AWS se
 | InsufficientCapacity | 500 | AWS capacity unavailable | Retry later or different region |
 ```
 
+**Token Efficiency**: Use compact tables (≤4 columns). Each error = 1 row, not 8-15 lines of prose. Avoid repeating the same Cause/Resolution prose structure for each error—let the table columns carry the semantics.
+
 ## Diagnostic Order Template
 
 ```markdown

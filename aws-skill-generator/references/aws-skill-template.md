@@ -154,3 +154,38 @@ Poll until terminal state (running/available) with max wait.
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](references/integration.md)
+
+## Token Efficiency Guidelines (P0)
+
+Generated skills MUST follow these 6 rules to minimize Token consumption:
+
+### TE-1: API Query > Static Tables
+Use API commands instead of hardcoding version/port/limit tables.
+```markdown
+# DO: minimal table + API fallback
+aws [service] describe-[something] --query "..."
+| Engine | Port | Min |
+|--------|------|-----|
+| EngineA | 1234 | X GB |
+```
+### TE-2: No docstrings in boto3 SDK
+```python
+# DO: inline comments only
+def create_resource(name):
+    try: return client.create_resource(Name=name)['Resource']
+    except ClientError as e: handle_error(e)
+```
+### TE-3: Compact error tables
+```markdown
+| Error | Resolution |
+|-------|-----------|
+| InvalidParameter | HALT — fix params |
+```
+### TE-4: Centralized JSON paths
+File-top comment block; one per resource type.
+### TE-5: YAML anchors in example-config.yaml
+Use `&dev` / `&prod` anchors to eliminate repeated fields.
+### TE-6: Eliminate cross-file duplicate flows
+SKILL.md already has full flow → no Complete Workflow in config or SDK file.
+
+**See**: `aws-skill-generator` SKILL.md §Token Efficiency Requirements for detailed examples.

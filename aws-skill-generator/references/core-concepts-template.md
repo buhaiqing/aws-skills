@@ -47,6 +47,8 @@ Use this template when creating `references/core-concepts.md` for a new AWS serv
 - Rate limits: [specify]
 ```
 
+**Token Efficiency**: Prefer a single compact table (≤5 columns) over bullet lists. Version/port/engine tables that can be queried via API should be replaced with CLI commands (e.g. `aws [service] describe-... --query "..."`).
+
 ### 4. Resource Lifecycle
 
 ```markdown
