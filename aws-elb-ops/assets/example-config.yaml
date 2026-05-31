@@ -508,3 +508,170 @@ targets:
 targets:
   - id: arn:aws:lambda:us-east-1:123456789:function:my-function:1
 ```
+
+---
+
+## AIOps: Monitoring & Auto-Healing Configuration
+
+### CloudWatch Anomaly Detection Alarms
+
+```yaml
+alarms:
+  # Latency anomaly — ML-based seasonal detection
+  - name: "{{lb_name}}-Latency-Anomaly"
+    type: anomaly_detection
+    namespace: AWS/ApplicationELB
+    metric: TargetResponseTime
+    dimension: LoadBalancer
+    statistic: p99
+    period: 300
+    anomaly_deviation: 2  # 1=tight, 6=loose, default=2
+    evaluation_periods: 2
+    sns_actions: "{{sns_arn}}"
+    description: "AIOps: ML-based latency anomaly detection for seasonal patterns"
+
+  # Error rate — static threshold
+  - name: "{{lb_name}}-5XX-Error-Spike"
+    type: static_threshold
+    namespace: AWS/ApplicationELB
+    metric: HTTPCode_Target_5XX
+    dimension: LoadBalancer
+    statistic: Sum
+    period: 60
+    threshold: 10
+    comparison: GreaterThanThreshold
+    evaluation_periods: 2
+    sns_actions: "{{sns_arn}}"
+    description: "AIOps: Backend 5XX error spike alert"
+
+  # Health composite alarm
+  - name: "{{lb_name}}-Backend-Health"
+    type: composite
+    alarm_rule: 'ALARM("{{lb_name}}-HealthyHosts-Low") OR ALARM("{{lb_name}}-Latency-Anomaly")'
+    sns_actions: "{{sns_arn}}"
+    description: "AIOps: Composite health alert — low healthy hosts OR high latency"
+```
+
+### Self-Healing Policies
+
+```yaml
+auto_heal:
+  policies:
+    # Target re-registration on flapping
+    - id: AH-01
+      name: "Target Re-registration"
+      trigger:
+        metric: UnHealthyHostCount
+        condition: "> 0"
+        duration: "2 min"
+      action: "deregister → 30s wait → re-register → verify healthy"
+      decision: "[AUTO_HEAL]"
+      max_retry: 2
+      fallback: "[MANUAL]"
+
+    # Cross-AZ rebalance
+    - id: AH-03
+      name: "Cross-AZ Rebalance"
+      trigger:
+        metric: RequestCount
+        statistic: std_dev > 30% across AZs
+        duration: "10 min"
+      action: "cross_zone.enabled = true"
+      decision: "[AUTO_HEAL]"
+      fallback: "[AI_ASSIST] — suggest adding targets in under-loaded AZ"
+```
+
+### Compliance Baseline
+
+```yaml
+compliance:
+  - rule: deletion_protection.enabled
+    expected: true
+    check_command: |-
+      aws elbv2 describe-load-balancer-attributes --load-balancer-arn {{lb_arn}}
+        --query "Attributes[?Key=='deletion_protection.enabled'].Value" --output text
+    auto_heal: true
+    severity: HIGH
+
+  - rule: access_logs.s3.enabled
+    expected: true
+    check_command: |-
+      aws elbv2 describe-load-balancer-attributes --load-balancer-arn {{lb_arn}}
+        --query "Attributes[?Key=='access_logs.s3.enabled'].Value" --output text
+    auto_heal: false  # needs S3 bucket confirmation
+    severity: MEDIUM
+
+  - rule: load_balancing.cross_zone.enabled
+    expected: true
+    check_command: |-
+      aws elbv2 describe-load-balancer-attributes --load-balancer-arn {{lb_arn}}
+        --query "Attributes[?Key=='load_balancing.cross_zone.enabled'].Value" --output text
+    auto_heal: true
+    severity: MEDIUM
+
+  - rule: routing.http.drop_invalid_header_fields.enabled (ALB only)
+    expected: true
+    auto_heal: true
+    severity: MEDIUM
+```
+
+### Cost Optimization Monitoring
+
+```yaml
+cost_optimization:
+  idle_detection:
+    metric: ActiveConnectionCount
+    period: 86400  # 24h
+    threshold: 0
+    duration: "7 days"
+    action: "[AI_ASSIST] Recommend deletion if unused"
+
+  overspec_detection:
+    condition: "ALB with only TCP listeners"
+    action: "[AI_ASSIST] Suggest migrating to NLB (~25-40% cost reduction)"
+```
+
+### Health Check Adaptive Configuration
+
+```yaml
+# AIOps: Recommended health check params by workload type
+health_check_profiles:
+  api_service:
+    description: "Latency-sensitive API"
+    interval_seconds: 10
+    timeout_seconds: 3
+    healthy_threshold: 3
+    unhealthy_threshold: 2
+    matcher: { http_code: "200,201,204" }
+
+  batch_processing:
+    description: "Tolerant of normal variance"
+    interval_seconds: 60
+    timeout_seconds: 10
+    healthy_threshold: 5
+    unhealthy_threshold: 3
+    matcher: { http_code: "200-299" }
+
+  database:
+    description: "TCP-based, precise detection"
+    protocol: TCP
+    interval_seconds: 15
+    timeout_seconds: 5
+    healthy_threshold: 2
+    unhealthy_threshold: 2
+```
+
+### AIOps Tags (Mandatory)
+
+```yaml
+# All resources must include these tags for automated lifecycle management
+tags:
+  - Key: AIOps
+    Value: "true"
+  - Key: AIOpsModule
+    Value: "aws-elb-ops"
+  - Key: AIOpsVersion
+    Value: "2.0.0"
+  - Key: Environment
+    Value: "{{environment}}"  # production / staging / dev
+```

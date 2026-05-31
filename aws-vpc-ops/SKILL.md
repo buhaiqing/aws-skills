@@ -9,8 +9,8 @@ compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with EC2/VPC permissions.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-05-28"
+  version: "1.2.0"
+  last_updated: "2026-05-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -18,6 +18,11 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
+  cross_skill_deps:
+    - aws-elb-ops             # ELB subnet/SG integration
+    - aws-ec2-ops              # EC2 instance network checks
+    - aws-cloudwatch-ops      # NAT Gateway monitoring
+    - aws-cloudtrail-ops      # SG/NACL change audit
 ---
 # AWS VPC Ops Skill
 
@@ -31,6 +36,12 @@ AWS VPC operational skill for AI Agent automation.
 - User requests VPC Peering connection setup
 - Keywords: vpc, subnet, cidr, security-group, route, gateway, peering
 - Network connectivity troubleshooting within VPC scope
+- **(AIOps)** Network anomaly detection for LB health check failures
+- **(AIOps)** VPC Flow Log analysis for connection timeout RCA
+- **(AIOps)** Security group drift detection
+- **(AIOps)** NAT Gateway connection saturation monitoring
+- **(AIOps)** Cross-AZ traffic flow analysis for load balancer performance
+- Keywords: flow-logs, vpc-diagnostics, sg-drift, nat-monitor, reachability
 
 ### SHOULD NOT Use When
 - EC2 instance ops → delegate to: `aws-ec2-ops`
@@ -148,3 +159,98 @@ All commands use `--output json`. Key JSON paths (centralized):
 - `references/core-concepts.md` — Architecture, CIDR, quotas
 - `references/troubleshooting.md` — Error codes, cleanup, connectivity
 - `assets/example-config.yaml` — Configuration templates
+
+---
+
+## AIOps: Network Diagnostics for Load Balancer Integration
+
+### AIOps Data Collection
+
+| Data Source | Namespace / Source | AIOps Use |
+|------------|--------------------|-----------|
+| NAT Gateway `ActiveConnectionCount` | AWS/NATGateway | Connection saturation detecting → ELB connection timeout |
+| NAT Gateway `PacketsDropCount` | AWS/NATGateway | Packet loss detection → ELB latency spike |
+| VPC Flow Logs (S3/CloudWatch) | S3 / Logs | Connection timeout RCA, traffic pattern analysis |
+| Security Group changes | CloudTrail | SG drift detection → ELB health check failure |
+| Network ACL changes | CloudTrail | NACL drift detection → connectivity issues |
+| VPC Reachability Analyzer | EC2 API | Path validation between LB and targets |
+
+### AIOps Diagnostic Flows
+
+#### NF-01: NLB Connection Timeout Network RCA
+
+```
+Trigger: NLB reports connection timeouts
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 1 — Check NAT Gateway Metrics                                  │
+│ aws cloudwatch get-metric-statistics --namespace AWS/NATGateway     │
+│   --metric-name ActiveConnectionCount                               │
+│   --dimensions Name=NatGatewayId,Value={{nat_id}}                   │
+│   --statistics Maximum --period 60                                  │
+│ # > 80% of limit → possible saturation                              │
+│                                                                     │
+│ Step 2 — Check NAT Packet Drops                                     │
+│ aws cloudwatch get-metric-statistics --namespace AWS/NATGateway     │
+│   --metric-name PacketsDropCount                                    │
+│   --statistics Sum --period 300                                     │
+│ # > 0 → packets being dropped due to connection exhaustion          │
+│                                                                     │
+│ Step 3 — VPC Flow Log Analysis                                      │
+│ # Look for REJECT records between LB subnet and target subnet       │
+│ aws logs start-query ... --query-string '                           │
+│   filter action = "REJECT"                                          │
+│   | stats count() by dstaddr, dstport                               │
+│   | sort count desc | limit 20'                                     │
+│                                                                     │
+│ Step 4 — Check SG and NACL Changes                                  │
+│ aws cloudtrail lookup-events                                        │
+│   --lookup-attributes AttributeKey=ResourceType,                    │
+│     AttributeValue=AWS::EC2::SecurityGroup                          │
+│   --start-time "{{T0-60m}}"                                         │
+│                                                                     │
+│ Step 5 — Action                                                     │
+│ → NAT saturated → [AI_ASSIST] Add NAT GW or distribute subnets      │
+│ → Flow Log REJECT → [AI_ASSIST] Check SG/NACL rules                │
+│ → SG changed → [MANUAL] Review and revert if needed                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### NF-02: Security Group Drift Detection [AI_ASSIST]
+
+```bash
+# Capture SG baseline
+aws ec2 describe-security-groups --group-ids {{sg_id}} \
+  --query "SecurityGroups[0].{GroupId:GroupId, IpPermissions:IpPermissions, IpPermissionsEgress:IpPermissionsEgress}" \
+  > /tmp/sg_baseline.json
+
+# Compare with current state (later)
+aws ec2 describe-security-groups --group-ids {{sg_id}} \
+  --query "SecurityGroups[0].{GroupId:GroupId, IpPermissions:IpPermissions, IpPermissionsEgress:IpPermissionsEgress}" \
+  > /tmp/sg_current.json
+
+diff /tmp/sg_baseline.json /tmp/sg_current.json && echo "No drift" || echo "SG drift detected"
+```
+
+#### NF-03: VPC Reachability Analysis
+
+```bash
+# Create path analysis between LB subnet and target
+aws ec2 create-network-insights-path \
+  --source "{{lb_eni}}" \
+  --destination "{{target_eni}}" \
+  --protocol TCP \
+  --destination-port {{health_check_port}}
+
+# Analyze
+aws ec2 start-network-insights-analysis \
+  --network-insights-path-id {{path_id}}
+```
+
+### Cross-Module Integration
+
+| Condition | Delegate To |
+|-----------|-------------|
+| ELB connection timeout diagnosis | `aws-elb-ops` (RCA coordination) |
+| EC2 instance-level network check | `aws-ec2-ops` (SSM diagnostics) |
+| CloudWatch metrics setup | `aws-cloudwatch-ops` (alarms) |
+| CloudTrail audit | `aws-cloudtrail-ops` (event analysis) |

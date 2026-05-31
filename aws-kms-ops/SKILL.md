@@ -4,19 +4,20 @@ description: >-
   Use when the user needs to create, manage, or rotate AWS KMS encryption keys;
   encrypt and decrypt data using AWS-managed keys; configure key policies,
   grants, or aliases; enable automatic key rotation; schedule or cancel key
-  deletion; implement envelope encryption with data keys; or integrate SSE-KMS
-  with other AWS services, even if they don't say "KMS" and instead say
-  "manage encryption keys in AWS", "encrypt my data with AWS keys", "set up
-  AWS key rotation", "configure SSE-KMS encryption", or "implement envelope
-  encryption with data keys in AWS".
+  deletion; implement envelope encryption with data keys; perform encryption
+  health audits across AWS services; diagnose key issues with root cause
+  analysis; enable self-healing for key compliance; or integrate SSE-KMS with
+  other AWS services. Keywords: KMS, encryption key, data key, CMK, envelope
+  encryption, key rotation, key policy, grant, alias, key health audit,
+  encryption compliance.
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
-  to KMS endpoints.
+  to KMS and CloudWatch endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: "2.0.0"
+  last_updated: "2026-05-29"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -24,6 +25,8 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
+    - AWS_PROFILE
+    - AWS_ACCOUNT_ID
 ---
 # AWS KMS Ops Skill
 
@@ -77,7 +80,8 @@ Operational runbook for AWS KMS — key lifecycle, encryption, grants, policies,
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default; allow override |
 | `{{env.AWS_SESSION_TOKEN}}` | Runtime env | STS temp creds only |
 | `{{env.AWS_PROFILE}}` | Runtime env | Overrides explicit keys |
-| `{{r.region}}` | User input or env | Default `us-east-1` |
+| `{{env.AWS_ACCOUNT_ID}}` | Runtime env | Required for ARN construction |
+| `{{u.region}}` | User input or env | Default `us-east-1` |
 | `{{u.key_id}}` | User input | Key ID, ARN, or `alias/` prefix |
 | `{{u.alias}}` | User input | Without `alias/` prefix |
 | `{{u.desc}}` | User input | Description for key |
@@ -85,6 +89,44 @@ Operational runbook for AWS KMS — key lifecycle, encryption, grants, policies,
 | `{{u.ciphertext}}` | User input | Base64 encoded ciphertext |
 | `{{u.grantee}}` | User input | IAM role/user ARN |
 | `{{o.*}}` | Last API response | Parse from JSON output |
+
+## Config File Placeholders
+
+`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
+
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
+| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
+| `{{user.AccountId}}` | User input | Ask once; substitute |
+
+## FinOps Cost Awareness
+
+| Cost Component | Price | Optimization Strategy |
+|----------------|-------|----------------------|
+| Customer managed keys | $1.00/key/month | Delete unused keys; use aliases instead of creating new keys |
+| Symmetric API requests | $0.03/10,000 | Use data key caching; batch operations |
+| Free tier | 20,000 requests/month | Monitor usage to stay within free tier |
+
+### Cost Pre-flight
+```bash
+aws kms list-keys --region {{u.region}} --output json | jq '.Keys | length'
+```
+```
+Keys(N): N keys = $N.00/month
+Tip: Unused keys in Disabled state still incur monthly charge
+```
+
+### Cost Anomaly Detection
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/KMS \
+  --metric-name ThrottledRequests \
+  --statistics Sum --period 86400 \
+  --start-time $(date -d '-30 days' -u +%Y-%m-%dT00:00:00Z) \
+  --end-time $(date -u +%Y-%m-%dT00:00:00Z) \
+  --region {{u.region}}
+```
 
 ## Execution Flow
 
@@ -132,6 +174,138 @@ List affected services first. Continue? (yes/no)
 ℹ️ Rotation generates new key material. Old material preserved. Existing data remains usable.
 ```
 
+## Operations
+
+Every operation follows: **Pre-flight → Execute → Validate → Recover**
+
+### OP: Create Key
+`create-key` — Create symmetric or asymmetric encryption key.
+```bash
+aws kms create-key --description "{{u.desc}}" --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT
+```
+Pre-flight: Verify quota via `list-keys`. Validate: `describe-key` → KeyState=Enabled.
+
+### OP: Rotate Key (Automatic)
+`enable-key-rotation` — Enable annual automatic rotation for symmetric keys.
+```bash
+aws kms enable-key-rotation --key-id {{u.key_id}}
+aws kms get-key-rotation-status --key-id {{u.key_id}}
+```
+Pre-flight: Verify key spec is SYMMETRIC_DEFAULT (asymmetric keys don't support auto-rotation).
+
+### OP: Encrypt/Decrypt
+`encrypt` / `decrypt` — Encrypt plaintext or decrypt ciphertext.
+```bash
+aws kms encrypt --key-id {{u.key_id}} --plaintext "{{u.plaintext}}" --encryption-context env=prod
+aws kms decrypt --ciphertext-blob {{u.ciphertext}} --encryption-context env=prod
+```
+Pre-flight: Verify key is Enabled. **Note**: Encryption context must match exactly for decrypt.
+
+### OP: Generate Data Key
+`generate-data-key` — Create data key for envelope encryption.
+```bash
+aws kms generate-data-key --key-id {{u.key_id}} --key-spec AES_256
+```
+Returns: Plaintext key (use immediately, discard) + CiphertextBlob (store with encrypted data).
+
+### OP: Diagnose Key Issue (RCA)
+Systematic diagnosis when key operations fail.
+```bash
+# 1. Check key state
+aws kms describe-key --key-id {{u.key_id}} --query "KeyMetadata.{State:KeyState,Enabled:Enabled}"
+# 2. Check IAM permissions
+aws iam simulate-principal-policy --policy-source-arn {{u.principal_arn}} --action-names kms:Decrypt --resource-arns arn:aws:kms:{{u.region}}:{{env.AWS_ACCOUNT_ID}}:key/{{u.key_id}}
+# 3. Check CloudTrail for recent errors
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=ResourceName,AttributeValue={{u.key_id}} --start-time $(date -d '-24 hours' -u +%Y-%m-%dT%H:%M:%SZ)
+```
+**RCA Decision Matrix:**
+| Symptom | Key State | Decision | SLA |
+|---------|-----------|----------|-----|
+| Decrypt fails | Disabled | [AUTO_HEAL] enable-key | P0 |
+| Decrypt fails | PendingDeletion | [AUTO_HEAL] cancel-key-deletion | P0 |
+| Access denied | Enabled | [MANUAL] Review IAM/Key Policy | P2 |
+| Throttling | Enabled | [AI_ASSIST] Implement caching | P2 |
+| Unused key (90d+) | Enabled | [AI_ASSIST] Review/delete idle key | P3 |
+| Missing Env tags | Enabled | [AI_ASSIST] Apply standard tags | P3 |
+| Orphaned aliases | N/A | [AI_ASSIST] Clean up stale alias | P3 |
+| Grant count near limit | Enabled | [AI_ASSIST] Audit retired grants | P3 |
+| Key description empty | Enabled | [AI_ASSIST] Document key purpose | P3 |
+
+### OP: Rotation Compliance Scan
+Scan all keys for rotation compliance.
+```bash
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  rotation=$(aws kms get-key-rotation-status --key-id $key_id --query "KeyRotationEnabled" --output text)
+  spec=$(aws kms describe-key --key-id $key_id --query "KeyMetadata.KeySpec" --output text)
+  [ "$rotation" = "False" ] && [ "$spec" = "SYMMETRIC_DEFAULT" ] && echo "WARN: $key_id rotation disabled"
+done
+```
+Decision: [AUTO_HEAL] Enable rotation for symmetric keys in production.
+
+### OP: Schedule Key Deletion (Destructive)
+**Safety Gate**: Explicit confirmation required (see Safety Gates above).
+```bash
+aws kms schedule-key-deletion --key-id {{u.key_id}} --pending-window-in-days 30
+```
+Pre-flight: Identify dependent services. Validate: `describe-key` → DeletionDate set.
+
+## Cross-Cutting Scenarios
+
+### Encryption Health Audit (Cross-Skill)
+Cross-service encryption compliance check.
+```
+Trigger: "帮我做一次全账户加密健康巡检"
+Trigger: "Run comprehensive encryption audit"
+```
+Execution chain:
+```
+aws-kms-ops → Key rotation compliance, key states, grant audit
+    ↓
+aws-s3-ops  → Check SSE-KMS encryption on buckets
+aws-rds-ops → Verify storage encryption enabled
+aws-ec2-ops → Check EBS volume encryption
+aws-lambda-ops → Verify environment variable encryption
+```
+Output: Compliance report with [AUTO_HEAL] / [AI_ASSIST] / [MANUAL] actions.
+
+### Key Recovery Flow
+```
+1. Identify error type from CloudTrail/CLI error
+2. Check key state with describe-key
+3. For Disabled → [AUTO_HEAL] enable-key
+4. For PendingDeletion → [AUTO_HEAL] cancel-key-deletion
+5. For AccessDenied → [MANUAL] Review policies
+6. For Throttling → [AI_ASSIST] Implement caching
+7. Max 3 retries for transient errors
+8. HALT for quota/permanent errors
+```
+
+### Security Monitoring
+| Check | Method | Alert Threshold | Decision |
+|-------|--------|-----------------|----------|
+| Key disabled | CloudTrail: DisableKey | Any unexpected disable | [AUTO_HEAL] |
+| Key deletion scheduled | CloudTrail: ScheduleKeyDeletion | Any unplanned deletion | [AUTO_HEAL] |
+| Key policy changed | CloudTrail: PutKeyPolicy | Broad permission grant | [MANUAL] |
+| API throttling | CloudWatch: ThrottledRequests | >1000/hour | [AI_ASSIST] |
+| Unused keys | CloudTrail: No Decrypt in 90d | Zero usage | [AI_ASSIST] |
+
+## Decision Types
+
+| Type | Label | Meaning | Example |
+|------|-------|---------|---------|
+| Manual | `[MANUAL]` | AI identifies issue; human decides action | Key policy changes |
+| AI Assist | `[AI_ASSIST]` | AI recommends; human confirms | Enable rotation on prod keys |
+| Auto Heal | `[AUTO_HEAL]` | AI executes automatically | Re-enable accidentally disabled key |
+
+### Auto-Heal Boundary Conditions
+Auto-heal **downgrades** to AI_ASSIST or MANUAL when:
+| Condition | Downgrade | Reason |
+|-----------|-----------|--------|
+| Data deletion involved | `[MANUAL]` | Irreversible |
+| Cross-account operation | `[MANUAL]` | Authorization complexity |
+| First-time error pattern | `[AI_ASSIST]` | No historical reference |
+| Auto-heal failed 2x | `[MANUAL]` | Prevent cascade failure |
+
 ## Related Skills
 
 - `aws-iam-ops` - IAM policies for key access control
@@ -144,6 +318,7 @@ List affected services first. Continue? (yes/no)
 
 ## Reference Files
 
+- [Prompt Examples](references/prompt-examples.md) — Concrete user prompts for KMS operations
 - [AWS CLI Usage](references/aws-cli-usage.md)
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
 - [Core Concepts](references/core-concepts.md)

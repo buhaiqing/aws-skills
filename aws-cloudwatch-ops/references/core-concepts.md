@@ -239,3 +239,77 @@ CloudWatch alarms can trigger multiple action targets:
 - Use metric filters to extract metrics from logs
 - Use Logs Insights for ad-hoc log analysis
 - **FinOps**: Set retention to 90/30/7 days based on log criticality
+
+## ELB AIOps Metrics Reference
+
+### ALB (AWS/ApplicationELB) — Complete Metric Mapping
+
+| Metric | Statistic | AIOps Use | Alarm Threshold |
+|--------|-----------|-----------|-----------------|
+| TargetResponseTime | p50, p90, p99 | Latency anomaly detection | Baseline + 3σ or > 1000ms (p99) |
+| HTTPCode_Target_2XX | Sum | Success rate monitoring | > X expected per period (lower bound) |
+| HTTPCode_Target_3XX | Sum | Redirect tracking | Threshold if unexpected redirect spike |
+| HTTPCode_Target_4XX | Sum | Client error detection | > Y (baseline-dependent) |
+| HTTPCode_Target_5XX | Sum | Backend error rate | > 5% of total OR > baseline + 2σ |
+| HTTPCode_ELB_5XX | Sum | ELB infra issue (502/503/504) | > 0 (should always be 0) |
+| HealthyHostCount | Average, Minimum | Target health level | < min_healthy_threshold |
+| UnHealthyHostCount | Maximum | Health degradation | > 0 (any unhealthy target) |
+| RequestCount | Sum | Traffic volume anomalies | ANOMALY_DETECTION_BAND |
+| ActiveConnectionCount | Average, Maximum | Connection pool saturation | > 80% of max capacity |
+| NewConnectionCount | Sum | New connection rate | ANOMALY_DETECTION_BAND |
+| RejectedConnectionCount | Sum | Capacity exhaustion | > 0 (should always be 0) |
+| ConsumedLCUs | Average | Cost & capacity tracking | FORECAST for planning |
+| ProcessedBytes | Sum | Throughput anomaly | ANOMALY_DETECTION_BAND |
+| ClientTLSNegotiationErrorCount | Sum | TLS/certificate issues | > 0 (indicates cert or client issue) |
+
+### NLB (AWS/NetworkELB) — Complete Metric Mapping
+
+| Metric | Statistic | AIOps Use | Alarm Threshold |
+|--------|-----------|-----------|-----------------|
+| ActiveFlowCount | Average, Maximum | Flow capacity | > 80% of limit |
+| NewFlowCount | Sum | Traffic surge detection | ANOMALY_DETECTION_BAND |
+| ProcessedBytes | Sum | Throughput anomaly | ANOMALY_DETECTION_BAND |
+| HealthyHostCount | Average, Minimum | Target health level | < min_healthy_threshold |
+| UnHealthyHostCount | Maximum | Health degradation | > 0 |
+| ConsumedLCUs | Average | Cost tracking | FORECAST for planning |
+
+### ELB Key Dimensions
+
+| Dimension | Description | Use Case |
+|-----------|-------------|----------|
+| LoadBalancer | LB ARN | Aggregate metrics for whole LB |
+| TargetGroup | TG ARN | Metrics per target group |
+| AvailabilityZone | AZ name | Cross-AZ traffic distribution analysis |
+| LoadBalancer + TargetGroup | Combined | Per-service health monitoring |
+
+### Derived Metric Formulas for AIOps
+
+```bash
+# Error rate (%)
+Expression: HTTPCode_Target_5XX / RequestCount * 100
+Use: Track backend error percentage over time
+
+# Cross-AZ distribution variance
+Expression: (RequestCount per AZ) — std dev analysis
+Use: Detect imbalanced traffic distribution
+
+# Connection utilization rate
+Expression: ActiveConnectionCount / (max_connections) * 100
+Use: Predict connection pool exhaustion
+
+# Cost per request (micro-cost analysis)
+Expression: ConsumedLCUs / RequestCount
+Use: Detect cost efficiency changes after deployments
+```
+
+### Recommended ELB AIOps Alarm Set
+
+| Alarm | Metric | Type | Threshold | SLA |
+|-------|--------|------|-----------|-----|
+| High Latency | TargetResponseTime (p99) | Static | > 1000ms for 3 min | P0 (15 min) |
+| Error Spike | HTTPCode_Target_5XX | Static | > 10 in 5 min | P0 (15 min) |
+| Health Degradation | HealthyHostCount | Static | < min threshold for 2 min | P0 (15 min) |
+| Traffic Anomaly | RequestCount | Anomaly Detection | 2σ deviation | P1 (1 h) |
+| Connection Saturation | ActiveConnectionCount | Static | > 80% for 5 min | P1 (1 h) |
+| Capacity Forecast | ConsumedLCUs | FORECAST | > 80% in 7 days | P1 (1 h) |
+| TLS Errors | ClientTLSNegotiationErrorCount | Static | > 0 | P1 (1 h)

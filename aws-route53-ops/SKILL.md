@@ -16,8 +16,8 @@ compatibility: >-
   to Route53 endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: "1.1.0"
+  last_updated: "2026-05-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -25,6 +25,11 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
+  cross_skill_deps:
+    - aws-elb-ops             # ELB health-based DNS failover
+    - aws-cloudwatch-ops      # Health check monitoring
+    - aws-acm-ops              # DNS validation for certificates
+    - aws-cloudfront-ops      # CloudFront alias records
 ---
 # AWS Route53 Ops Skill
 
@@ -52,6 +57,11 @@ AWS Route53 DNS operational skill for AI Agent automation.
 - User needs to troubleshoot DNS resolution issues
 - User asks about latency-based or geolocation routing
 - User needs to configure alias records for AWS resources
+- **(AIOps)** DNS failover automation for ELB health-based routing
+- **(AIOps)** Route53 health check integration with ELB target health
+- **(AIOps)** DNS propagation monitoring after LB or ELB changes
+- **(AIOps)** Auto-failover when ELB targets are unhealthy
+- Keywords: failover, dns-health, elb-dns, dns-failover, route53-healthcheck
 
 ### SHOULD NOT Use When
 - Domain registration only (use AWS Console)
@@ -135,3 +145,87 @@ Confirm: Type DELETE {{user.ZoneName}} to proceed.
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+
+---
+
+## AIOps: DNS Routing Automation for ELB Failover
+
+### AIOps Data Collection
+
+| Data Source | AIOps Use |
+|-------------|-----------|
+| Route53 Health Check Status | ELB health-based DNS failover detection |
+| CloudWatch `HealthCheckStatus` | Health check status monitoring |
+| CloudTrail `ChangeResourceRecordSets` | DNS change detection and rollback |
+| ELB `HealthyHostCount` | Trigger DNS failover when targets are unhealthy |
+
+### Auto-Failover with Route53 Health Checks
+
+DNS failover architecture:
+```
+User → Route53 Alias Record
+         ├── Primary (weight=100) → ALB-A (us-east-1a)
+         │    └── Health Check → ALB-A's Target Group health
+         │
+         └── Secondary (weight=0) → ALB-B (us-east-1b)  [activated on failover]
+              └── Health Check → ALB-B's Target Group health
+```
+
+#### AH-R53-01: Automated DNS Failover [AUTO_HEAL]
+
+When ELB health check detects all targets in one AZ are unhealthy:
+
+```bash
+# 1. Verify health check exists for this LB
+aws route53 list-health-checks \
+  --query "HealthChecks[?HealthCheckConfig.FullyQualifiedDomainName.contains(@, '{{lb_dns_name}}')]"
+
+# 2. Update failover record
+# Change primary weight to 0, secondary weight to 100
+aws route53 change-resource-record-sets \
+  --hosted-zone-id {{zone_id}} \
+  --change-batch '{
+    "Changes": [
+      {
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "{{record_name}}",
+          "Type": "A",
+          "SetIdentifier": "primary",
+          "Failover": "PRIMARY",
+          "Weight": 0,
+          "AliasTarget": {
+            "DNSName": "{{primary_lb_dns}}",
+            "EvaluateTargetHealth": true
+          }
+        }
+      },
+      {
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "{{record_name}}",
+          "Type": "A",
+          "SetIdentifier": "secondary",
+          "Failover": "SECONDARY",
+          "Weight": 100,
+          "AliasTarget": {
+            "DNSName": "{{secondary_lb_dns}}",
+            "EvaluateTargetHealth": true
+          }
+        }
+      }
+    ]
+  }'
+```
+
+**Decision**: `[AUTO_HEAL]` (reversible, no data loss).
+**Fallback**: If no secondary LB exists → `[AI_ASSIST]` inform user.
+
+### Cross-Module Integration
+
+| Condition | Delegate To |
+|-----------|-------------|
+| ELB health check state | `aws-elb-ops` (target group health) |
+| DNS change monitoring | `aws-cloudwatch-ops` (alarms on DNS changes) |
+| Health check status | `aws-cloudwatch-ops` (HealthCheckStatus metric) |
+| SSL certificate for DNS | `aws-acm-ops` (cert validation) |

@@ -360,12 +360,118 @@ aws sts get-caller-identity --output json
 | aws-sns-ops | SNS (Notification) | ✅ Complete |
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete |
 | aws-stepfunctions-ops | Step Functions | ✅ Complete |
+| aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
+| aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
+
+## AIOps Architecture
+
+This project includes a **full-chain AIOps closed-loop** architecture across 6 modules, AI-led and data-driven. The architecture is built on the original "Pre-flight → Execute → Validate → Recover" pattern, extended with 6 AIOps layers:
+
+```
+Layer 1: 数据采集层 (Data Collection)
+          CloudWatch Metrics | Access Logs | CloudTrail Events
+          VPC Flow Logs | AWS Config | AWS Health
+
+Layer 2: 检测分析层 (Detection & Analysis)
+          ML Anomaly Detection | FORECAST | Logs Insights
+          Contributor Insights | Time-Series Alignment
+
+Layer 3: 根因诊断层 (Root Cause Analysis)
+          Cross-Module Correlation | Time-Line Tracing
+          CloudTrail Change Association | Dependency Graph
+
+Layer 4: 决策规划层 (Decision & Planning)
+          [AUTO_HEAL] — automatic execution (< 15 min)
+          [AI_ASSIST] — recommend, user confirms (1-4 h)
+          [MANUAL] — human judgment required (> 4 h)
+
+Layer 5: 自动执行层 (Automated Execution)
+          Target Re-registration | EC2 Reboot
+          DNS Failover | Compliance Fix | Capacity Scaling
+
+Layer 6: 反馈学习层 (Feedback & Learning)
+          Success Tracking | Model Calibration
+          Knowledge Base Update | Progressive Tuning
+```
+
+### AIOps Decision Types
+
+| Label | Meaning | Response SLA | When Used |
+|-------|---------|-------------|----------|
+| `[AUTO_HEAL]` | AI executes fix autonomously | < 15 min | Target re-registration, EC2 reboot, DNS failover, cross-zone enable, compliance fix |
+| `[AI_ASSIST]` | AI recommends, user confirms | 1-4 h | Health check tuning, EC2 resize, capacity scaling, SSM diagnostics |
+| `[MANUAL]` | AI identifies, human decides | > 4 h | SG changes, resource deletion, cost > $100/month changes |
+
+### AIOps Scenario Coverage (31 Scenarios)
+
+| Domain | Scenarios | Key Modules |
+|--------|-----------|-------------|
+| **Fault Detection** (6) | Health flapping, latency spikes, error surges, connection exhaustion, cross-AZ imbalance, traffic anomalies | `aws-elb-ops` + `aws-cloudwatch-ops` |
+| **Predictive Analysis** (5) | Capacity saturation, quota exhaustion, cert expiry, cost overrun, traffic peaks | `aws-cloudwatch-ops` + `aws-elb-ops` + `aws-acm-ops` |
+| **Auto-Healing** (12) | Target re-registration, EC2 reboot/restart, DNS failover, cross-AZ rebalance, compliance fix, health check tuning | `aws-elb-ops` + `aws-ec2-ops` + `aws-route53-ops` + `aws-vpc-ops` |
+| **Root Cause Analysis** (7) | 502 error, high latency, unhealthy target, connection timeout, TLS handshake, cost anomaly, cert expiry | All 6 AIOps modules |
+| **Change Management** (4) | Pre-change impact, post-change validation, auto-rollback, compliance scanning | `aws-elb-ops` + `aws-vpc-ops` + `aws-cloudtrail-ops` |
+| **Cost Optimization** (3) | Idle LB detection, overspec recommendation, cross-AZ cost analysis | `aws-elb-ops` + `aws-cloudwatch-ops` |
+
+### Auto-Heal Boundary Conditions
+
+| Condition | Degrade To | Reason |
+|-----------|-----------|--------|
+| Involves data deletion | `[MANUAL]` | Irreversible |
+| Cross-account operation | `[MANUAL]` | Needs cross-account auth |
+| Cost change > $100/month | `[AI_ASSIST]` | User must be aware |
+| First-seen anomaly type | `[AI_ASSIST]` | No historical pattern |
+| Auto-heal fails 2x | `[MANUAL]` | Prevent crash cascade |
+| ALL targets unhealthy | `[AI_ASSIST]` | May indicate app outage |
+
+### Cross-Module RCA Chains
+
+| Scenario | Diagnostic Chain |
+|----------|-----------------|
+| 502 Error | `aws-elb-ops` → `aws-ec2-ops` → `aws-vpc-ops` → `aws-cloudtrail-ops` |
+| High Latency | `aws-elb-ops` → `aws-ec2-ops` → `aws-rds-ops`/`aws-eks-ops` → `aws-cloudwatch-ops` |
+| Connection Timeout | `aws-elb-ops` → `aws-vpc-ops` → `aws-ec2-ops` |
+| TLS Handshake Failure | `aws-elb-ops` → `aws-acm-ops` → `aws-cloudwatch-ops` |
+
+### Enhanced Modules
+
+| Module | Original Version | Current Version | Enhancement |
+|--------|-----------------|----------------|-------------|
+| `aws-elb-ops` | v1.0.0 | **v2.0.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management |
+| `aws-cloudwatch-ops` | v2.1.0 | **v2.1.0+** | ELB-specific alarms, metrics mapping, layered inspection |
+| `aws-ec2-ops` | v1.1.0 | **v1.1.0+** | LB-target diagnostics, auto-reboot, capacity prediction |
+| `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA |
+| `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration |
+| `aws-acm-ops` | — | **v1.0.0 (new)** | Certificate lifecycle, expiry monitoring, auto-renewal |
 
 ## References
 
 - [AWS CLI Documentation](https://docs.aws.amazon.com/cli/)
 - [boto3 Documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)
 - [Agent Skills OpenSpec](https://agentskills.io/specification)
+
+## Data Source Dependencies
+
+| Level | Scenarios Covered | Requires | Cost |
+|-------|------------------|----------|------|
+| **Level 1** — ELB API + CloudWatch | 18 scenarios | Nothing (default ON) | Free |
+| **Level 2** — + CloudTrail Management Events | 5 scenarios | CloudTrail (default ON) | Free |
+| **Level 3** — + Access Logs / Flow Logs | 5 scenarios (optional depth) | S3 / Logs | Minimal |
+
+See `aws-elb-ops/references/integration.md` for detailed CloudTrail and AWS Config integration.
+
+## Still Needs Enhancement
+
+| # | Area | Priority | Detail |
+|---|------|----------|--------|
+| 1 | ✅ `aws-waf-ops` module | Done | Created v1.0.0 with AH-08 DDoS auto-mitigation |
+| 2 | ✅ CloudWatch dashboard | Done | 8-component dashboard JSON in aws-cloudwatch-ops/assets/ |
+| 3 | ✅ EventBridge automation | Done | 3 event patterns in aws-waf-ops/references/ |
+| 4 | ✅ Cost Explorer integration | Done | Per-LB cost via tags in aws-elb-ops/references/ |
+| 5 | ✅ ACM auto-bind to ELB | Done | AH-ACM-01 in aws-acm-ops/SKILL.md |
+| 6 | ✅ Multi-region AIOps | Done | Cross-region health/latency/failover in aws-route53-ops/references/ |
+| 7 | ✅ Feedback loop persistence | Done | CloudWatch Logs feedback storage in aws-cloudwatch-ops/references/ |
+| 8 | ✅ SLA breach escalation | Done | PagerDuty/Jira integration in aws-elb-ops/references/ |
 
 ## License
 

@@ -116,3 +116,202 @@ aws kms update-primary-region --key-id {{u.key_id}} --primary-region {{u.new_pri
 | PendingDeletion | CancelKeyDeletion, DescribeKey |
 | PendingImport | ImportKeyMaterial, DescribeKey |
 | Unavailable | DescribeKey only |
+
+## CloudWatch/CloudTrail Integration
+
+### Monitor API Throttling
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/KMS \
+  --metric-name ThrottledRequests \
+  --dimensions Name=KeyId,Value={{u.key_id}} \
+  --statistics Sum --period 3600 \
+  --start-time $(date -d '-7 days' -u +%Y-%m-%dT00:00:00Z) \
+  --end-time $(date -u +%Y-%m-%dT00:00:00Z) \
+  --region {{u.region}}
+```
+
+### Audit Security Events
+```bash
+# Monitor key disable events
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=DisableKey \
+  --start-time $(date -d '-24 hours' -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Monitor key deletion scheduling
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=ScheduleKeyDeletion \
+  --start-time $(date -d '-7 days' -u +%Y-%m-%dT00:00:00Z)
+
+# Monitor policy changes
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=PutKeyPolicy \
+  --start-time $(date -d '-7 days' -u +%Y-%m-%dT00:00:00Z)
+```
+
+### Find Unused Keys
+```bash
+# Keys with no Decrypt operations in 90 days
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  usage=$(aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue=$key_id \
+    --start-time $(date -d '-90 days' -u +%Y-%m-%dT00:00:00Z) \
+    --query "Events[?EventName=='Decrypt']" --output text)
+  [ -z "$usage" ] && echo "UNUSED: $key_id"
+done
+```
+
+### Compliance Scan Scripts
+```bash
+# Rotation compliance scan
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  rotation=$(aws kms get-key-rotation-status --key-id $key_id --query "KeyRotationEnabled" --output text)
+  spec=$(aws kms describe-key --key-id $key_id --query "KeyMetadata.KeySpec" --output text)
+  [ "$rotation" = "False" ] && [ "$spec" = "SYMMETRIC_DEFAULT" ] && echo "NON_COMPLIANT: $key_id"
+done
+
+# Key state audit
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  state=$(aws kms describe-key --key-id $key_id --query "KeyMetadata.KeyState" --output text)
+  [ "$state" != "Enabled" ] && echo "ALERT: $key_id state=$state"
+done
+```
+
+## P3 Maintenance Scripts
+
+### Find Keys Missing Environment Tags
+```bash
+#!/bin/bash
+echo "=== Keys Missing Environment Tag ==="
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  env_tag=$(aws kms list-resource-tags --key-id "$key_id" \
+    --query "Tags[?TagKey=='Environment'].TagValue" --output text)
+  if [ -z "$env_tag" ]; then
+    alias=$(aws kms list-aliases --key-id "$key_id" \
+      --query "Aliases[0].AliasName" --output text)
+    echo "MISSING_ENV_TAG: $key_id (alias: $alias)"
+  fi
+done
+```
+
+### Find Orphaned Aliases
+```bash
+#!/bin/bash
+echo "=== Orphaned Aliases ==="
+for alias_name in $(aws kms list-aliases --query "Aliases[].AliasName" --output text); do
+  target_key=$(aws kms list-aliases \
+    --query "Aliases[?AliasName=='$alias_name'].TargetKeyId" --output text)
+
+  if [ -n "$target_key" ]; then
+    # Check if target key exists
+    if ! aws kms describe-key --key-id "$target_key" --query "KeyMetadata.KeyState" --output text 2>/dev/null; then
+      echo "ORPHANED_ALIAS: $alias_name -> $target_key (KEY_NOT_FOUND)"
+    fi
+  fi
+done
+```
+
+### Find Keys Without Description
+```bash
+#!/bin/bash
+echo "=== Keys Without Description ==="
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  desc=$(aws kms describe-key --key-id "$key_id" \
+    --query "KeyMetadata.Description" --output text)
+  if [ -z "$desc" ]; then
+    alias=$(aws kms list-aliases --key-id "$key_id" \
+      --query "Aliases[0].AliasName" --output text)
+    echo "NO_DESCRIPTION: $key_id (alias: $alias)"
+  fi
+done
+```
+
+### Audit Grant Count Per Key
+```bash
+#!/bin/bash
+echo "=== Grant Count Audit (threshold: 400) ==="
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  grant_count=$(aws kms list-grants --key-id "$key_id" \
+    --query "Grants | length" --output text)
+  if [ "$grant_count" -gt 400 ]; then
+    echo "HIGH_GRANT_COUNT: $key_id has $grant_count grants (limit: 500)"
+  fi
+done
+```
+
+### Quarterly Health Check Report
+```bash
+#!/bin/bash
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║           KMS Quarterly Health Check Report                      ║"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
+
+total_keys=0
+healthy_keys=0
+p0_issues=0
+p2_issues=0
+p3_issues=0
+
+# Scan all keys
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  ((total_keys++))
+
+  # Check key state
+  state=$(aws kms describe-key --key-id "$key_id" \
+    --query "KeyMetadata.KeyState" --output text)
+
+  if [ "$state" = "Disabled" ]; then
+    echo "[P0] $key_id: Key disabled"
+    ((p0_issues++))
+    continue
+  elif [ "$state" = "PendingDeletion" ]; then
+    echo "[P0] $key_id: Key pending deletion"
+    ((p0_issues++))
+    continue
+  fi
+
+  # Check rotation for symmetric keys
+  spec=$(aws kms describe-key --key-id "$key_id" \
+    --query "KeyMetadata.KeySpec" --output text)
+
+  if [ "$spec" = "SYMMETRIC_DEFAULT" ]; then
+    rotation=$(aws kms get-key-rotation-status --key-id "$key_id" \
+      --query "KeyRotationEnabled" --output text)
+    if [ "$rotation" = "False" ]; then
+      echo "[P2] $key_id: Rotation not enabled"
+      ((p2_issues++))
+    fi
+  fi
+
+  # Check tags
+  env_tag=$(aws kms list-resource-tags --key-id "$key_id" \
+    --query "Tags[?TagKey=='Environment']" --output text)
+  if [ -z "$env_tag" ]; then
+    echo "[P3] $key_id: Missing Environment tag"
+    ((p3_issues++))
+  fi
+
+  # Count healthy
+  ((healthy_keys++))
+done
+
+# Calculate compliance score
+if [ "$total_keys" -gt 0 ]; then
+  score=$((healthy_keys * 100 / total_keys))
+else
+  score=0
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║ Summary                                                           ║"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+printf "║ %-64s ║\n" "Total Keys: $total_keys"
+printf "║ %-64s ║\n" "Healthy: $healthy_keys"
+printf "║ %-64s ║\n" "P0 Issues: $p0_issues (Critical)"
+printf "║ %-64s ║\n" "P2 Issues: $p2_issues (Important)"
+printf "║ %-64s ║\n" "P3 Issues: $p3_issues (Maintenance)"
+printf "║ %-64s ║\n" "Compliance Score: $score/100"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+```

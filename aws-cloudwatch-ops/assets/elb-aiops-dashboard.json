@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "name": "ELB-AIOps-{{lb_name}}",
+    "description": "AIOps: ELB Health/Latency/Error/Cost/Compliance",
+    "widgets": [
+      {"type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","HealthyHostCount","TargetGroup","{{tg_arn}}",{"stat":"Minimum","label":"Healthy"}],["AWS/ApplicationELB","UnHealthyHostCount","TargetGroup","{{tg_arn}}",{"stat":"Maximum","label":"Unhealthy"}]],"period":60,"region":"{{region}}","title":"Health State"}},
+      {"type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","TargetResponseTime","LoadBalancer","{{lb_arn}}",{"stat":"p50"}],[ ".",".",".",".",{"stat":"p90"}],[ ".",".",".",".",{"stat":"p99"}]],"period":60,"region":"{{region}}","title":"Latency p50/p90/p99"}},
+      {"type": "metric", "x": 0, "y": 6, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","HTTPCode_Target_5XX","LoadBalancer","{{lb_arn}}",{"stat":"Sum"}],["AWS/ApplicationELB","HTTPCode_ELB_5XX",".",".",{"stat":"Sum"}]],"period":60,"region":"{{region}}","title":"Error Rate"}},
+      {"type": "metric", "x": 8, "y": 6, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","RequestCount","LoadBalancer","{{lb_arn}}",{"stat":"Sum"}],["AWS/ApplicationELB","ActiveConnectionCount",".",".",{"stat":"Average"}]],"period":60,"region":"{{region}}","title":"Traffic"}},
+      {"type": "metric", "x": 16, "y": 6, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","ConsumedLCUs","LoadBalancer","{{lb_arn}}",{"stat":"Average"}]],"period":3600,"region":"{{region}}","title":"LCU Cost"}},
+      {"type": "metric", "x": 0, "y": 12, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/WAFV2","BlockedRequests","WebACL","waf-{{lb_name}}",{"stat":"Sum"}]],"period":300,"region":"{{region}}","title":"WAF Blocked"}},
+      {"type": "metric", "x": 8, "y": 12, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/ApplicationELB","RejectedConnectionCount","LoadBalancer","{{lb_arn}}",{"stat":"Sum"}]],"period":300,"region":"{{region}}","title":"Connection Rejected"}},
+      {"type": "metric", "x": 16, "y": 12, "width": 8, "height": 6,
+       "properties": {"metrics": [["AWS/NATGateway","ActiveConnectionCount","NatGatewayId","{{nat_gw_id}}",{"stat":"Maximum"}],["AWS/NATGateway","PacketsDropCount",".",".",{"stat":"Sum"}]],"period":60,"region":"{{region}}","title":"NAT Gateway"}}
+    ]
+  }
+}

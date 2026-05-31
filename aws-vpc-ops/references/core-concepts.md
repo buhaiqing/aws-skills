@@ -68,3 +68,92 @@ Virtual Private Cloud architecture, components, and AWS quotas.
 - **Security**: Least-privilege SGs, reference SGs not CIDRs, enable Flow Logs, use NACLs sparingly.
 - **HA**: NAT Gateway per AZ. Gateway Endpoints for S3/DynamoDB.
 - **Cost**: NAT Instance for dev, consolidate NAT Gateways, right-size subnets.
+
+## AIOps: VPC Flow Logs for Network Diagnostics
+
+### Enabling Flow Logs
+
+```bash
+# Create Flow Log to CloudWatch Logs
+aws ec2 create-flow-logs \
+  --resource-type VPC \
+  --resource-ids {{vpc_id}} \
+  --log-group-name /aws/vpc/flow-logs/{{vpc_name}} \
+  --traffic-type ALL \
+  --log-destination-type cloud-watch-logs \
+  --max-aggregation-interval 60
+```
+
+### Flow Log Record Format
+
+```
+version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
+```
+
+Key fields for ELB AIOps:
+| Field | AIOps Use |
+|-------|-----------|
+| `srcaddr` | Client IP (for NLB), LB private IP (for ALB) |
+| `dstaddr` | Target IP |
+| `dstport` | Target port (health check or traffic) |
+| `action` | ACCEPT or REJECT — connectivity filter |
+| `packets` / `bytes` | Traffic volume |
+| `log-status` | OK / NODATA / SKIPDATA — data quality |
+
+### Flow Log Analysis Queries
+
+```bash
+# Logs Insights: REJECT traffic from LB to targets
+aws logs start-query \
+  --log-group-name /aws/vpc/flow-logs/{{vpc_name}} \
+  --start-time "$(date -d '-1 hour' +%s)" \
+  --end-time "$(date +%s)" \
+  --query-string 'fields @timestamp, srcaddr, dstaddr, dstport, action
+    | filter action = "REJECT"
+      and dstaddr like /10\.0\./
+    | stats count() by dstaddr, dstport
+    | sort count desc
+    | limit 20'
+
+# Logs Insights: Connection timeout detection (packet count = 0 for SYN)
+aws logs start-query \
+  --log-group-name /aws/vpc/flow-logs/{{vpc_name}} \
+  --query-string 'fields @timestamp, srcaddr, dstaddr, dstport, packets, action
+    | filter action = "ACCEPT" and packets = 0
+    | stats count() by dstaddr
+    | sort count desc'
+```
+
+### NAT Gateway Monitoring for ELB Performance
+
+| Metric | Namespace | Threshold | AIOps Use |
+|--------|-----------|-----------|-----------|
+| `ActiveConnectionCount` | AWS/NATGateway | > 80% of limit (50,000 per GW) | Connection pool exhaustion |
+| `PacketsDropCount` | AWS/NATGateway | > 0 | Packet loss → retransmission → latency |
+| `BytesOutToSource` | AWS/NATGateway | Baseline + 3σ | Traffic surge detection |
+| `ErrorPortAllocation` | AWS/NATGateway | > 0 | Port exhaustion → connections rejected |
+
+```bash
+# Check NAT Gateway health for ELB latency RCA
+aws cloudwatch get-metric-statistics --namespace AWS/NATGateway \
+  --metric-name ActiveConnectionCount \
+  --dimensions Name=NatGatewayId,Value={{nat_id}} \
+  --statistics Maximum --period 60 \
+  --start-time "$(date -d '-30 minutes' -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+### VPC Reachability Analyzer
+
+```bash
+# Analyze path from LB to target (troubleshoot health check failures)
+aws ec2 create-network-insights-path \
+  --source "{{lb_network_interface_id}}" \
+  --destination "{{target_network_interface_id}}" \
+  --protocol TCP \
+  --destination-port {{health_check_port}}
+
+# Start analysis
+aws ec2 start-network-insights-analysis \
+  --network-insights-path-id "{{path_id}}"
+```

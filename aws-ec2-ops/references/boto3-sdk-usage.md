@@ -167,5 +167,125 @@ from botocore.config import Config
 config = Config(
     retries={'max_attempts': 3, 'mode': 'adaptive'}
 )
+
+---
+
+## AIOps: EC2-LB Target Diagnostics & Auto-Healing
+
+### AH-EC2-01: Reboot Unhealthy Instance [AUTO_HEAL]
+
+```python
+import time
+import boto3
+from datetime import datetime, timedelta
+
+ec2 = boto3.client('ec2')
+cw = boto3.client('cloudwatch')
+
+def reboot_and_verify_health(instance_id: str) -> bool:
+    """Reboot EC2 and wait for status check recovery.
+    Decision: [AUTO_HEAL] — reversible, no data loss.
+    """
+    ec2.reboot_instances(InstanceIds=[instance_id])
+    print(f"Rebooted {instance_id}")
+    
+    for i in range(24):  # max 120s
+        time.sleep(5)
+        status = ec2.describe_instance_status(
+            InstanceIds=[instance_id]
+        )['InstanceStatuses']
+        
+        if status:
+            s = status[0]
+            sys_ok = s['SystemStatus']['Status'] == 'ok'
+            ins_ok = s['InstanceStatus']['Status'] == 'ok'
+            if sys_ok and ins_ok:
+                print(f"Instance healthy after { (i+1) * 5 }s")
+                return True
+        else:
+            print("Instance status not yet available...")
+    
+    print("Status check not recovered after 120s")
+    return False
+```
+
+### RC-EC2-01: Unhealthy Target Diagnosis (ELB Integration)
+
+```python
+def diagnose_unhealthy_target(target_id: str, tg_arn: str):
+    """Cross-module diagnosis: why is this EC2 instance unhealthy in LB?"""
+    # 1. Check EC2 status
+    status = ec2.describe_instance_status(
+        InstanceIds=[target_id]
+    )['InstanceStatuses']
+    if status:
+        s = status[0]
+        print(f"System: {s['SystemStatus']['Status']}, "
+              f"Instance: {s['InstanceStatus']['Status']}")
+    
+    # 2. Check CPU trend (last 30 min)
+    end = datetime.utcnow()
+    start = end - timedelta(minutes=30)
+    cpu = cw.get_metric_statistics(
+        Namespace='AWS/EC2',
+        MetricName='CPUUtilization',
+        Dimensions=[{'Name': 'InstanceId', 'Value': target_id}],
+        StartTime=start, EndTime=end,
+        Period=300, Statistics=['Average']
+    )
+    avg_cpu = sum(dp['Average'] for dp in cpu['Datapoints']) / max(len(cpu['Datapoints']), 1)
+    print(f"CPU trend (30min): {avg_cpu:.1f}%")
+    
+    # 3. Check CloudTrail (cross-module)
+    ct = boto3.client('cloudtrail')
+    events = ct.lookup_events(
+        LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': target_id}],
+        StartTime=end - timedelta(hours=1), EndTime=end
+    )
+    for event in events.get('Events', []):
+        print(f"Config change: {event['EventName']} at {event['EventTime']}")
+    
+    # 4. RCA conclusion
+    if status and status[0]['SystemStatus']['Status'] != 'ok':
+        return {'root_cause': 'AWS hardware issue', 'decision': '[AI_ASSIST]'}
+    elif status and status[0]['InstanceStatus']['Status'] != 'ok':
+        return {'root_cause': 'OS hang', 'decision': '[AUTO_HEAL] reboot'}
+    elif avg_cpu > 90:
+        return {'root_cause': 'CPU saturation', 'decision': '[AI_ASSIST] resize'}
+    else:
+        return {'root_cause': 'Application-level issue', 'decision': '[AI_ASSIST] SSM diagnostic'}
+```
+
+### AH-EC2-04: Capacity Pre-Warning (FORECAST)
+
+```python
+def forecast_cpu(instance_id: str) -> dict:
+    """Predict CPU utilization for next 7 days."""
+    cw_data = cw.get_metric_data(
+        MetricDataQueries=[
+            {'Id': 'm1', 'MetricStat': {
+                'Metric': {'Namespace': 'AWS/EC2', 'MetricName': 'CPUUtilization',
+                           'Dimensions': [{'Name': 'InstanceId', 'Value': instance_id}]},
+                'Period': 3600, 'Stat': 'Average'}},
+            {'Id': 'fc', 'Expression': 'FORECAST(m1, \"linear\", 168)',
+             'Label': '7-Day Forecast'}
+        ],
+        StartTime=datetime.utcnow() - timedelta(days=14),
+        EndTime=datetime.utcnow()
+    )
+    
+    forecast_values = []
+    for result in cw_data['MetricDataResults']:
+        if result['Id'] == 'fc':
+            forecast_values = result.get('Values', [])
+    
+    peak = max(forecast_values) if forecast_values else 0
+    return {
+        'instance_id': instance_id,
+        'forecast_peak_cpu': peak,
+        'exceeds_80pct': peak > 80,
+        'recommendation': 'Resize instance' if peak > 80 else 'No action needed'
+    }
+```
 client = boto3.client('ec2', config=config)
 ```

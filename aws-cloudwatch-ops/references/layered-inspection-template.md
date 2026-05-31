@@ -284,3 +284,88 @@ VPC 路由表、EIP 绑定、安全组规则。
 | "帮我看看 EKS 为什么有问题" | 仅应用层 + 根因诊断 | AI_ASSIST 为主 |
 | "帮我排查一下 EC2 CPU 高的原因" | 单资源 + 深度 RCA | AUTO_HEAL (ASG) / AI_ASSIST (扩容) |
 | "自治愈巡检" | 三层全量 | 仅 AUTO_HEAL 项执行，其余列出等待确认 |
+
+---
+
+## ELB 专属巡检与根因分析
+
+### 一句话触发
+
+> **"帮我检查一下负载均衡器 🅇 的健康状况，包含根因分析和自治愈建议"**
+
+Agent 执行 ELB 专项巡检 → 逐项健康分析 → 跨模块 RCA → 按决策类型输出。
+
+### 专项巡检检查项
+
+```
+1. LB 状态：State.Code 是否 active？是否存在 active_impaired 或 failed？
+2. 目标组健康度：HealthyHostCount vs UnHealthyHostCount 趋势
+3. 延迟分析：TargetResponseTime p50/p90/p99 是否在基线范围内
+4. 错误率：HTTPCode_Target_5XX / HTTPCode_ELB_5XX 是否异常
+5. 连接池：ActiveConnectionCount vs RejectedConnectionCount
+6. 跨AZ分布：各AZ间 RequestCount 是否均衡（std dev < 30%）
+7. 合规扫描：deletion_protection、access_logs、invalid_header_drop
+8. 容量预测：FORECAST 7天连接数趋势 → 是否超出配额
+9. 配置变更：CloudTrail 最近1小时是否有 LB/SG/TG 变更
+10. 证书状态：HTTPS 监听器绑定的证书是否有效、到期时间
+```
+
+### ELB 异常检测输出格式
+
+```
+╔══════════════════════════════════════════════════════════╗
+║  ELB 巡检 #1: ALB / my-web-alb                          ║
+╠══════════════════════════════════════════════════════════╣
+║                                                          ║
+║ [发现] UnHealthyHostCount > 0                            ║
+║   当前: 2/5 targets unhealthy (40%)                      ║
+║   基线: 0 unhealthy targets                               ║
+║   趋势: 过去30分钟从 0→1→2 逐步恶化                        ║
+║                                                          ║
+║ [RCA] 根因分析                                            ║
+║   ├─ 直接原因: Target i-yyy CPU=95%, i-zzz StatusCheck=failed ║
+║   ├─ 跨层关联:                                           ║
+║   │  EC2 CPU 指标: 持续上升 (T0-30min 开始)              ║
+║   │  CloudTrail: 无变更事件                                ║
+║   └─ 判定: 容量饱和导致健康检查超时                        ║
+║                                                          ║
+║ [决策] 决策类型: [AI_ASSIST]                              ║
+║   ├─ 方案A: 扩容 i-yyy (t3.medium→t3.large, +$12/月)   ║
+║   │    并重新注册到目标组                                   ║
+║   ├─ 方案B: 新增目标实例，分担负载                          ║
+║   └─ 失败回退: 2次自动修复失败 → [MANUAL] 人工介入        ║
+║                                                          ║
+║ [SLA] P0 (15分钟) — 40% 目标不可用 = 业务降级              ║
+╚══════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════╗
+║  ELB 巡检 #2: NLB / my-game-nlb                          ║
+╠══════════════════════════════════════════════════════════╣
+║                                                          ║
+║ [发现] ActiveFlowCount 接近上限                           ║
+║   当前: ActiveFlowCount = 82000 (上限 100000)            ║
+║   预测: FORECAST 显示 7 天后达到 95000                   ║
+║                                                          ║
+║ [决策] [AI_ASSIST] 建议扩容或优化                        ║
+║   ├─ 方案: 请求提高流配额或启用 cross-zone                ║
+║   └─ 预期: 分散流量可延缓达到上限                           ║
+║                                                          ║
+║ [SLA] P2 (24小时) — 尚有容量余量                          ║
+╚══════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════╗
+║  ELB 巡检 #3: Compliance Check                           ║
+╠══════════════════════════════════════════════════════════╣
+║                                                          ║
+║ [发现] deletion_protection 未开启                         ║
+║   当前: false → [AUTO_HEAL] 立即修复                      ║
+║                                                          ║
+║  [发现] access_logs 未开启                                ║
+║   当前: false → [AI_ASSIST] 建议开启（需要用户确认S3桶）  ║
+║                                                          ║
+║  [发现] cross_zone.enabled=true     ✅                    ║
+║  [发现] http.drop_invalid_header=true ✅                   ║
+║                                                          ║
+║ [SLA] P2 (24小时) — 合规整改                               ║
+╚══════════════════════════════════════════════════════════╝
+```

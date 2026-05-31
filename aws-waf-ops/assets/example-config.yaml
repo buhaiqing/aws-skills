@@ -1,0 +1,97 @@
+# WAF Example Configurations
+
+## Basic Web ACL with AWS Managed Rules
+
+```yaml
+web_acl:
+  name: prod-web-acl
+  scope: REGIONAL  # REGIONAL or CLOUDFRONT
+  default_action: Allow
+
+  rules:
+    # AWS Managed Rules — baseline protection
+    - name: AWS-AWSManagedRulesCommonRuleSet
+      priority: 0
+      type: managed_rule_group
+      vendor: AWS
+      managed_rule_name: AWSManagedRulesCommonRuleSet
+      action: Count  # Start with Count, switch to Block after tuning
+      cloudwatch_metric: CommonRuleSet
+
+    - name: AWS-AWSManagedRulesAmazonIpReputationList
+      priority: 1
+      type: managed_rule_group
+      vendor: AWS
+      managed_rule_name: AWSManagedRulesAmazonIpReputationList
+      action: Block
+      cloudwatch_metric: IPReputation
+
+    # Rate-based rule — DDoS protection
+    - name: RateLimit-2000
+      priority: 10
+      type: rate_based
+      limit: 2000  # requests per 5 min from single IP
+      aggregate_key: IP
+      action: Block
+      cloudwatch_metric: RateLimit-2000
+
+  tags:
+    - Key: AIOps
+      Value: "true"
+    - Key: Environment
+      Value: production
+```
+
+## WAF + ALB Association
+
+```yaml
+association:
+  web_acl_name: prod-web-acl
+  scope: REGIONAL
+  resource_arn: arn:aws:elasticloadbalancing:region:account:loadbalancer/app/my-alb/xxx
+```
+
+## AIOps: Auto-Mitigation Configuration
+
+```yaml
+aiops_mitigation:
+  # AH-08: Auto-enable rate limiting during traffic anomaly
+  rate_limit_auto_enable:
+    enabled: true
+    trigger_metric: RequestCount
+    trigger_namespace: AWS/ApplicationELB
+    anomaly_deviation: 3  # standard deviations above baseline
+    rate_limit_multiplier: 2  # baseline * 2 as rate limit
+    decision: "[AUTO_HEAL]"
+
+  # Emergency block IP set
+  emergency_block:
+    enabled: true
+    max_ips: 100
+    block_duration: "24h"
+    decision: "[AI_ASSIST]"
+```
+
+## WAF Logging Configuration
+
+```yaml
+logging:
+  enabled: true
+  destination: firehose  # or s3, cloudwatch-logs
+  firehose_arn: arn:aws:firehose:region:account:deliverystream/aws-waf-logs-prod
+  redacted_fields:
+    - single_header: authorization
+    - single_header: cookie
+```
+
+## AIOps Tags
+
+```yaml
+tags:
+  - Key: AIOps
+    Value: "true"
+  - Key: AIOpsModule
+    Value: "aws-waf-ops"
+  - Key: AIOpsVersion
+    Value: "1.0.0"
+```

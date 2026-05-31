@@ -184,3 +184,88 @@ aws route53 list-resource-record-sets \
 | DNS Query Rate | > 1000/min | > 10000/min | Review traffic |
 | Change Status | PENDING > 5 min | PENDING > 30 min | Contact AWS |
 | Record Count | > 8000 | > 9500 | Request increase |
+
+## AIOps: DNS Failover Automation
+
+### AH-R53-01: ELB Health-Based DNS Failover [AUTO_HEAL]
+
+When ELB reports all targets unhealthy, trigger DNS failover to secondary LB:
+
+```
+Trigger: aws-elb-ops detects HealthyHostCount = 0 for all target groups
+┌───────────────────────────────────────────────────────────────────┐
+│ Step 1 — Verify health check status                               │
+│ aws route53 get-health-check-status --health-check-id {{hc_id}}   │
+│                                                                   │
+│ Step 2 — Identify primary and secondary records                  │
+│ aws route53 list-resource-record-sets --hosted-zone-id {{zone}}   │
+│   --query "ResourceRecordSets[?Failover != null]"                  │
+│                                                                   │
+│ Step 3 — Execute failover                                         │
+│ # Swap weights: primary=0, secondary=100                          │
+│ aws route53 change-resource-record-sets ... (see SKILL.md)        │
+│                                                                   │
+│ Step 4 — Validate                                                 │
+│ aws route53 get-change --id {{change_id}}                         │
+│ # Wait for INSYNC                                                 │
+│ dig {{record_name}} +short  # Should return secondary LB IP       │
+│                                                                   │
+│ Step 5 — Notify                                                   │
+│ "DNS failover activated: primary LB unhealthy, traffic redirected │
+│  to secondary LB. Monitor and revert once primary recovers."      │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**Decision**: `[AUTO_HEAL]`
+**Boundary**: Only if `EvaluateTargetHealth=true` AND secondary LB exists.
+**Rollback**: Swap weights back when primary recovers.
+
+### Health Check RCA for ELB Integration
+
+```
+Trigger: Route53 health check shows unhealthy for LB endpoint
+┌───────────────────────────────────────────────────────────────────┐
+│ Step 1 — Check health check config                                │
+│ aws route53 get-health-check --health-check-id {{hc_id}}          │
+│                                                                   │
+│ Step 2 — Check ELB target health (delegate aws-elb-ops)          │
+│ aws elbv2 describe-target-health --target-group-arn {{tg_arn}}    │
+│                                                                   │
+│ Step 3 — Check endpoint manually                                  │
+│ # From Route53 health checker perspective                         │
+│ curl -I http://{{lb_dns_name}}:{{port}}/{{path}}                  │
+│                                                                   │
+│ Step 4 — Check SG allows Route53 IPs                              │
+│ # Route53 health check IP ranges: https://ip-ranges.amazonaws.com │
+│                                                                   │
+│ Step 5 — Action                                                   │
+│ → LB targets healthy but HC failing → SG blocking Route53 IPs    │
+│ → LB targets unhealthy → ELB-level issue (delegate to elb-ops)   │
+│ → Endpoint returns non-200 → Application issue                    │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### DNS Propagation Monitoring
+
+```bash
+# After DNS change, monitor propagation across global resolvers
+for ns in $(dig NS {{zone_name}} +short); do
+  echo "Nameserver: $ns"
+  dig @$ns {{record_name}} A +short
+done
+
+# Or use Route53 test-dns-answer
+aws route53 test-dns-answer \
+  --hosted-zone-id {{zone_id}} \
+  --record-name {{record_name}} \
+  --record-type A
+```
+
+### Cross-Module Integration for Failover
+
+| Condition | Delegate To |
+|-----------|-------------|
+| Primary health check failure | `aws-elb-ops` (check target health) |
+| Failover decision based on LB metrics | `aws-cloudwatch-ops` (HealthyHostCount) |
+| Certificate validation for HTTPS | `aws-acm-ops` (SSL check) |
+| Secondary LB creation if missing | `aws-elb-ops` (create secondary ALB) |

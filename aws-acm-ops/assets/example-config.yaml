@@ -1,0 +1,123 @@
+# ACM Example Configurations
+
+## Request Certificate (DNS Validation)
+
+```yaml
+certificate:
+  domain_name: example.com
+  validation_method: DNS  # Recommended: enables auto-renewal
+  subject_alternative_names:
+    - www.example.com
+    - api.example.com
+
+  tags:
+    - Key: AIOps
+      Value: "true"
+    - Key: Environment
+      Value: production
+    - Key: Application
+      Value: web-service
+```
+
+## Request Certificate (Wildcard)
+
+```yaml
+certificate:
+  domain_name: "*.example.com"
+  validation_method: DNS
+  # Covers all subdomains: www.example.com, api.example.com, etc.
+```
+
+## DNS Validation Records (to create in Route53)
+
+```yaml
+# Read from: aws acm describe-certificate --certificate-arn {{arn}}
+# Then delegate to aws-route53-ops to create:
+validation_records:
+  - domain: example.com
+    type: CNAME
+    name: "_xxxxxxxxx.example.com"
+    value: "_yyyyyyyyy.acm-validations.aws."
+    ttl: 60
+
+  - domain: www.example.com
+    type: CNAME
+    name: "_zzzzzzzzz.www.example.com"
+    value: "_wwwwwwwww.acm-validations.aws."
+    ttl: 60
+```
+
+## Import Certificate (Third-Party CA)
+
+```yaml
+certificate:
+  type: imported
+  source: "Let's Encrypt / DigiCert / etc."
+  files:
+    certificate: /path/to/cert.pem
+    private_key: /path/to/private-key.pem  # Never commit to git
+    certificate_chain: /path/to/chain.pem
+
+  tags:
+    - Key: AIOps
+      Value: "true"
+    - Key: AutoRenew
+      Value: "false"  # Imported certs require manual re-import
+```
+
+## AIOps: Certificate Expiry Monitoring
+
+```yaml
+# Custom CloudWatch metric for expiry monitoring
+# Published via: aws cloudwatch put-metric-data ...
+monitoring:
+  - metric_name: CertDaysToExpiry
+    namespace: AWS/AIOps
+    dimensions:
+      - Name: Domain
+        Value: example.com
+      - Name: Environment
+        Value: production
+    alarm:
+      name: "example-com-Cert-Expiry"
+      threshold: 30  # Alert when < 30 days remaining
+      comparison: LessThanThreshold
+      evaluation_periods: 1
+      sns_actions: "{{sns_arn}}"
+
+  # AIOps expiry action matrix
+  expiry_actions:
+    - days_remaining: "> 45"
+      decision: "[MANUAL]"
+      action: "No action; periodic monitoring"
+    - days_remaining: "30-45 (DNS-validated)"
+      decision: "[MANUAL]"
+      action: "Verify auto-renewal is in progress"
+    - days_remaining: "7-30 (DNS-validated)"
+      decision: "[AUTO_HEAL]"
+      action: "Trigger renew-certificate if renewal not started"
+    - days_remaining: "< 7"
+      decision: "[MANUAL]"
+      action: "Critical: risk of HTTPS failure — immediate action required"
+```
+
+## AIOps: Certificate Health Audit
+
+```yaml
+# Weekly audit configuration
+audit:
+  schedule: "every Monday 09:00 UTC"
+  regions:
+    - us-east-1      # CloudFront requires certs here
+    - us-west-2      # Primary workload region
+    - eu-west-1      # EU workload region
+  checks:
+    - expiry: "< 30 days"
+      severity: WARNING
+    - expiry: "< 7 days"
+      severity: CRITICAL
+    - expired: true
+      severity: "IMMEDIATE ACTION"
+    - unused: true
+      severity: INFO  # Not bound to any service
+```

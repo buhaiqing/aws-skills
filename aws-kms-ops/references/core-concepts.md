@@ -616,6 +616,40 @@ Replica: eu-west-1
 - **20,000 requests/month** free
 - Applies to standard symmetric operations
 
+## AIOps for KMS
+
+### Automated Diagnosis (RCA)
+| Error Pattern | Detection | Decision | Action |
+|--------------|-----------|----------|--------|
+| Decrypt fails | `describe-key` shows Disabled | [AUTO_HEAL] | `enable-key` |
+| Key deletion scheduled | State=PendingDeletion | [AUTO_HEAL] | `cancel-key-deletion` |
+| Access denied | IAM simulation fails | [MANUAL] | Review policies |
+| API throttled | CloudWatch ThrottledRequests>1000 | [AI_ASSIST] | Implement caching |
+| Rotation non-compliant | Symmetric key, rotation=false | [AUTO_HEAL] | `enable-key-rotation` |
+| Unused key | No Decrypt in 90 days | [AI_ASSIST] | Consider deletion |
+
+### Self-Healing Scenarios
+```bash
+# [AUTO_HEAL] Re-enable accidentally disabled key
+aws kms enable-key --key-id {{key_id}}
+
+# [AUTO_HEAL] Cancel unplanned deletion
+aws kms cancel-key-deletion --key-id {{key_id}}
+
+# [AUTO_HEAL] Enable rotation for production keys
+aws kms enable-key-rotation --key-id {{key_id}}
+
+# [AI_ASSIST] Identify unused keys for cost optimization
+aws cloudtrail lookup-events --lookup-attributes AttributeKey=ResourceName,AttributeValue={{key_id}} --start-time $(date -d '-90 days' -u +%Y-%m-%dT00:00:00Z)
+```
+
+### Monitoring Integration
+| Integration | Command | Use Case |
+|-------------|---------|----------|
+| CloudWatch Metrics | `get-metric-statistics --namespace AWS/KMS` | Throttling, API rates |
+| CloudTrail Events | `lookup-events --lookup-attributes EventName=DisableKey` | Security auditing |
+| IAM Policy Sim | `simulate-principal-policy` | Permission debugging |
+
 ## Security Best Practices
 
 ### Key Management
@@ -633,8 +667,8 @@ Replica: eu-west-1
 - Remove unused grants
 
 ### Monitoring
-- Monitor API call rates
-- Alert on unusual patterns
+- Monitor API call rates via CloudWatch
+- Alert on DisableKey/ScheduleKeyDeletion via CloudTrail
 - Track key state changes
 - Audit key policy changes
 - Monitor for unauthorized access

@@ -442,4 +442,234 @@ from botocore.config import Config
 
 config = Config(retries={'max_attempts': 3, 'mode': 'standard'})
 client = boto3.client('elbv2', region_name='us-east-1', config=config)
+
+---
+
+## AIOps: Health Diagnostics & Auto-Healing (boto3)
+
+### Auto-Heal AH-01: Target Re-Registration
+
+```python
+import time
+import boto3
+
+client = boto3.client('elbv2')
+cw = boto3.client('cloudwatch')
+
+def auto_heal_target(tg_arn: str, target_id: str, port: int = 80, max_retry: int = 2):
+    """AH-01: Deregister, wait, re-register, verify health.
+    Decision: [AUTO_HEAL] — reversible, low risk.
+    """
+    for attempt in range(max_retry):
+        print(f"Attempt {attempt + 1}: Re-registering {target_id}")
+        
+        # 1. Deregister
+        client.deregister_targets(
+            TargetGroupArn=tg_arn,
+            Targets=[{'Id': target_id}]
+        )
+        print("Deregistered")
+        
+        # 2. Wait for completion
+        for _ in range(12):  # max 60s
+            try:
+                resp = client.describe_target_health(
+                    TargetGroupArn=tg_arn,
+                    Targets=[{'Id': target_id}]
+                )
+                state = resp['TargetHealthDescriptions'][0]['TargetHealth']['State']
+                if state == 'unused':
+                    break
+            except:
+                break  # target removed from TG
+            time.sleep(5)
+        
+        # 3. Wait 30s for stabilization
+        time.sleep(30)
+        
+        # 4. Re-register
+        client.register_targets(
+            TargetGroupArn=tg_arn,
+            Targets=[{'Id': target_id, 'Port': port}]
+        )
+        print("Re-registered")
+        
+        # 5. Verify healthy (max 180s)
+        for _ in range(36):
+            resp = client.describe_target_health(
+                TargetGroupArn=tg_arn,
+                Targets=[{'Id': target_id}]
+            )
+            state = resp['TargetHealthDescriptions'][0]['TargetHealth']['State']
+            if state == 'healthy':
+                print(f"Target healthy after re-registration")
+                return True
+            time.sleep(5)
+        
+        print(f"Attempt {attempt + 1} failed")
+    
+    print(f"Auto-heal failed after {max_retry} attempts. Downgrade to [MANUAL].")
+    return False
+```
+
+### AH-03: Enable Cross-Zone Load Balancing
+
+```python
+def enable_cross_zone(lb_arn: str) -> bool:
+    """AH-03: Auto-enable cross-zone load balancing.
+    Decision: [AUTO_HEAL] — no data loss, reversible.
+    """
+    response = client.modify_load_balancer_attributes(
+        LoadBalancerArn=lb_arn,
+        Attributes=[
+            {'Key': 'load_balancing.cross_zone.enabled', 'Value': 'true'}
+        ]
+    )
+    
+    # Verify
+    attrs = client.describe_load_balancer_attributes(
+        LoadBalancerArn=lb_arn
+    )['Attributes']
+    for attr in attrs:
+        if attr['Key'] == 'load_balancing.cross_zone.enabled':
+            return attr['Value'] == 'true'
+    return False
+```
+
+### RC-01: 502 Error Diagnostics (Multi-Metric Correlation)
+
+```python
+from datetime import datetime, timedelta
+from dateutil.parser import parse
+
+def diagnose_502_errors(lb_arn: str, tg_arn: str, target_ids: list[str]):
+    """RC-01: Cross-module 502 error RCA.
+    Collects evidence from ELB metrics + EC2 status + CloudTrail.
+    """
+    end = datetime.utcnow()
+    start = end - timedelta(hours=1)
+    
+    # 1. Check LB metrics
+    metrics = cw.get_metric_statistics(
+        Namespace='AWS/ApplicationELB',
+        MetricName='HTTPCode_ELB_5XX',
+        Dimensions=[{'Name': 'LoadBalancer', 'Value': lb_arn}],
+        StartTime=start,
+        EndTime=end,
+        Period=300,
+        Statistics=['Sum']
+    )
+    print(f"ELB 5XX count in last hour: {sum(dp['Sum'] for dp in metrics['Datapoints'])}")
+    
+    # 2. Check target health
+    health = client.describe_target_health(
+        TargetGroupArn=tg_arn
+    )
+    for desc in health['TargetHealthDescriptions']:
+        target = desc['Target']['Id']
+        state = desc['TargetHealth']['State']
+        reason = desc['TargetHealth'].get('Description', '')
+        print(f"Target {target}: {state} ({reason})")
+    
+    # 3. Check target EC2 CPU (cross-module)
+    ec2 = boto3.client('ec2')
+    for tid in target_ids:
+        status = ec2.describe_instance_status(
+            InstanceIds=[tid]
+        )['InstanceStatuses']
+        if status:
+            s = status[0]
+            print(f"EC2 {tid}: System={s['SystemStatus']['Status']}, "
+                  f"Instance={s['InstanceStatus']['Status']}")
+    
+    # 4. Check CloudTrail for changes (cross-module)
+    ct = boto3.client('cloudtrail')
+    events = ct.lookup_events(
+        LookupAttributes=[{
+            'AttributeKey': 'ResourceType',
+            'AttributeValue': 'AWS::ElasticLoadBalancing::LoadBalancer'
+        }],
+        StartTime=start,
+        EndTime=end
+    )
+    for event in events.get('Events', []):
+        print(f"Change detected: {event['EventName']} by {event['Username']} at {event['EventTime']}")
+```
+
+### Compliance Scan (AUTO_HEAL)
+
+```python
+def scan_and_fix_compliance(lb_arn: str) -> dict:
+    """Run compliance scan, auto-fix where possible."""
+    results = {}
+    attrs = client.describe_load_balancer_attributes(
+        LoadBalancerArn=lb_arn
+    )['Attributes']
+    
+    attr_map = {a['Key']: a['Value'] for a in attrs}
+    
+    # Check deletion protection
+    if attr_map.get('deletion_protection.enabled') != 'true':
+        client.modify_load_balancer_attributes(
+            LoadBalancerArn=lb_arn,
+            Attributes=[{'Key': 'deletion_protection.enabled', 'Value': 'true'}]
+        )
+        results['deletion_protection'] = 'FIXED [AUTO_HEAL]'
+    else:
+        results['deletion_protection'] = 'PASS'
+    
+    # Check cross-zone
+    if attr_map.get('load_balancing.cross_zone.enabled') != 'true':
+        enable_cross_zone(lb_arn)
+        results['cross_zone'] = 'FIXED [AUTO_HEAL]'
+    else:
+        results['cross_zone'] = 'PASS'
+    
+    # Check invalid header dropping (ALB only)
+    if 'routing.http.drop_invalid_header_fields.enabled' in attr_map:
+        if attr_map['routing.http.drop_invalid_header_fields.enabled'] != 'true':
+            client.modify_load_balancer_attributes(
+                LoadBalancerArn=lb_arn,
+                Attributes=[{'Key': 'routing.http.drop_invalid_header_fields.enabled', 'Value': 'true'}]
+            )
+            results['invalid_header_drop'] = 'FIXED [AUTO_HEAL]'
+        else:
+            results['invalid_header_drop'] = 'PASS'
+    
+    return results
+```
+
+### Cost: Idle LB Detection
+
+```python
+def detect_idle_lbs() -> list[dict]:
+    """CO-01: Detect load balancers with 0 connections for 24h+."""
+    idle = []
+    paginator = client.get_paginator('describe_load_balancers')
+    
+    for page in paginator.paginate():
+        for lb in page['LoadBalancers']:
+            metrics = cw.get_metric_statistics(
+                Namespace='AWS/ApplicationELB',
+                MetricName='ActiveConnectionCount',
+                Dimensions=[{'Name': 'LoadBalancer', 'Value': lb['LoadBalancerArn']}],
+                StartTime=datetime.utcnow() - timedelta(days=1),
+                EndTime=datetime.utcnow(),
+                Period=86400,
+                Statistics=['Sum']
+            )
+            total_connections = sum(
+                dp['Sum'] for dp in metrics['Datapoints']
+            )
+            if total_connections == 0:
+                idle.append({
+                    'name': lb['LoadBalancerName'],
+                    'arn': lb['LoadBalancerArn'],
+                    'type': lb['Type'],
+                    'created': str(lb['CreatedTime'])
+                })
+                print(f"[AI_ASSIST] Idle LB: {lb['LoadBalancerName']} — 0 connections in 24h")
+    
+    return idle
+```
 ```

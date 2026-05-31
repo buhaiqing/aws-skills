@@ -595,39 +595,291 @@ def create_key_complete(config: dict) -> dict:
 
 ```python
 def handle_kms_error(error: ClientError):
-    """
-    Handle KMS errors with recovery guidance.
-    
-    Args:
-        error: ClientError from boto3
-    
-    Raises:
-        Exception with recovery guidance
-    """
+    """Handle KMS errors with recovery guidance."""
     error_code = error.response['Error']['Code']
     error_message = error.response['Error']['Message']
     
+    # AIOps Decision Matrix
     recovery_map = {
         'AlreadyExistsException': 'HALT - Key or alias already exists.',
         'NotFoundException': 'HALT - Key not found. Check ID/alias.',
-        'DisabledException': 'FIX - Enable key with enable_key.',
+        'DisabledException': '[AUTO_HEAL] - Enable key with enable_key.',
         'InvalidKeyState': 'HALT - Key state incompatible. Check describe-key.',
-        'InvalidKeyUsageException': 'FIX - Key not valid for operation. Check key usage.',
+        'InvalidKeyUsageException': '[MANUAL] - Key not valid for operation. Check key usage.',
         'DependencyTimeoutException': 'RETRY - Service timeout, max 3 retries.',
-        'KMSInvalidStateException': 'FIX - Fix key state before operation.',
+        'KMSInvalidStateException': '[AUTO_HEAL] - Fix key state before operation.',
         'LimitExceededException': 'HALT - Quota exceeded. Request increase.',
         'InvalidGrantIdException': 'HALT - Grant does not exist.',
         'InvalidGrantTokenException': 'HALT - Grant token invalid or expired.',
-        'MalformedPolicyDocumentException': 'FIX - Key policy JSON invalid.',
-        'TagException': 'FIX - Invalid tags. Check tag format.',
-        'CloudHsmClusterInUseException': 'HALT - CloudHSM cluster in use.',
-        'CloudHsmClusterNotActiveException': 'FIX - CloudHSM cluster not active.',
-        'CustomKeyStoreHasCMKsException': 'HALT - Custom key store has keys.',
-        'CustomKeyStoreInvalidStateException': 'FIX - Custom key store state invalid.',
-        'CustomKeyStoreNotFoundException': 'HALT - Custom key store not found.',
+        'MalformedPolicyDocumentException': '[MANUAL] - Key policy JSON invalid.',
+        'ThrottlingException': '[AI_ASSIST] - Implement exponential backoff.',
     }
     
     recovery = recovery_map.get(error_code, 'HALT - Check AWS documentation.')
     
     raise Exception(f"KMS Error [{error_code}]: {error_message}\nRecovery: {recovery}")
+
+
+## AIOps Automation Functions
+
+def heal_disabled_key(key_id: str) -> dict:
+    """[AUTO_HEAL] Re-enable a disabled key."""
+    try:
+        key = kms.describe_key(KeyId=key_id)['KeyMetadata']
+        if key['KeyState'] == 'Disabled':
+            kms.enable_key(KeyId=key_id)
+            return {'action': 'enabled', 'key_id': key_id}
+        return {'action': 'none', 'reason': 'key_not_disabled'}
+    except ClientError as e:
+        return {'action': 'failed', 'error': str(e)}
+
+def heal_pending_deletion(key_id: str) -> dict:
+    """[AUTO_HEAL] Cancel scheduled key deletion."""
+    try:
+        key = kms.describe_key(KeyId=key_id)['KeyMetadata']
+        if key['KeyState'] == 'PendingDeletion':
+            kms.cancel_key_deletion(KeyId=key_id)
+            return {'action': 'cancelled_deletion', 'key_id': key_id}
+        return {'action': 'none', 'reason': 'key_not_pending_deletion'}
+    except ClientError as e:
+        return {'action': 'failed', 'error': str(e)}
+
+def enable_rotation_if_needed(key_id: str) -> dict:
+    """[AUTO_HEAL] Enable rotation for symmetric keys without rotation."""
+    try:
+        key = kms.describe_key(KeyId=key_id)['KeyMetadata']
+        if key['KeySpec'] != 'SYMMETRIC_DEFAULT':
+            return {'action': 'skipped', 'reason': 'asymmetric_not_supported'}
+        rotation = kms.get_key_rotation_status(KeyId=key_id)
+        if not rotation['KeyRotationEnabled']:
+            kms.enable_key_rotation(KeyId=key_id)
+            return {'action': 'rotation_enabled', 'key_id': key_id}
+        return {'action': 'none', 'reason': 'already_enabled'}
+    except ClientError as e:
+        return {'action': 'failed', 'error': str(e)}
+
+def scan_rotation_compliance() -> list:
+    """[AI_ASSIST] Scan all keys for rotation compliance."""
+    non_compliant = []
+    try:
+        paginator = kms.get_paginator('list_keys')
+        for page in paginator.paginate():
+            for key in page['Keys']:
+                key_id = key['KeyId']
+                metadata = kms.describe_key(KeyId=key_id)['KeyMetadata']
+                if metadata['KeySpec'] == 'SYMMETRIC_DEFAULT':
+                    rotation = kms.get_key_rotation_status(KeyId=key_id)
+                    if not rotation['KeyRotationEnabled']:
+                        non_compliant.append({
+                            'key_id': key_id,
+                            'arn': metadata['Arn'],
+                            'action': '[AUTO_HEAL] enable rotation'
+                        })
+        return non_compliant
+    except ClientError as e:
+        return [{'error': str(e)}]
+
+def diagnose_key_issue(key_id: str, principal_arn: str = None) -> dict:
+    """[RCA] Systematic diagnosis of key issues."""
+    diagnosis = {'key_id': key_id, 'checks': {}}
+    
+    # Check 1: Key state
+    try:
+        key = kms.describe_key(KeyId=key_id)['KeyMetadata']
+        diagnosis['checks']['state'] = {
+            'state': key['KeyState'],
+            'enabled': key['Enabled']
+        }
+        
+        if key['KeyState'] == 'Disabled':
+            diagnosis['decision'] = '[AUTO_HEAL] enable-key'
+            diagnosis['sla'] = 'P0'
+            return diagnosis
+        elif key['KeyState'] == 'PendingDeletion':
+            diagnosis['decision'] = '[AUTO_HEAL] cancel-key-deletion'
+            diagnosis['sla'] = 'P0'
+            return diagnosis
+    except ClientError as e:
+        diagnosis['checks']['state'] = {'error': str(e)}
+        diagnosis['decision'] = 'HALT'
+        return diagnosis
+    
+    # Check 2: IAM permissions (if principal provided)
+    if principal_arn:
+        # Would need iam.simulate_principal_policy here
+        diagnosis['checks']['permissions'] = 'manual_check_required'
+    
+    diagnosis['decision'] = '[MANUAL] Further investigation needed'
+    diagnosis['sla'] = 'P2'
+    return diagnosis
+
+
+## P3 Maintenance Functions (Low Priority)
+
+def find_keys_missing_tags(required_tags: list = ['Environment']) -> list:
+    """[AI_ASSIST] P3 - Find keys missing required tags."""
+    missing_tags = []
+    try:
+        paginator = kms.get_paginator('list_keys')
+        for page in paginator.paginate():
+            for key in page['Keys']:
+                key_id = key['KeyId']
+                tags_response = kms.list_resource_tags(KeyId=key_id)
+                existing_tags = {tag['TagKey'] for tag in tags_response.get('Tags', [])}
+                missing = [tag for tag in required_tags if tag not in existing_tags]
+                if missing:
+                    missing_tags.append({
+                        'key_id': key_id,
+                        'missing_tags': missing,
+                        'decision': '[AI_ASSIST] P3',
+                        'action': f'Apply tags: {missing}'
+                    })
+        return missing_tags
+    except ClientError as e:
+        return [{'error': str(e)}]
+
+def find_orphaned_aliases() -> list:
+    """[AI_ASSIST] P3 - Find aliases pointing to deleted keys."""
+    orphaned = []
+    try:
+        paginator = kms.get_paginator('list_aliases')
+        for page in paginator.paginate():
+            for alias in page['Aliases']:
+                target_key_id = alias.get('TargetKeyId')
+                if target_key_id:
+                    try:
+                        kms.describe_key(KeyId=target_key_id)
+                    except ClientError as e:
+                        if e.response['Error']['Code'] == 'NotFoundException':
+                            orphaned.append({
+                                'alias_name': alias['AliasName'],
+                                'target_key_id': target_key_id,
+                                'decision': '[AI_ASSIST] P3',
+                                'action': f'delete-alias {alias["AliasName"]}'
+                            })
+        return orphaned
+    except ClientError as e:
+        return [{'error': str(e)}]
+
+def find_keys_without_description() -> list:
+    """[AI_ASSIST] P3 - Find keys with empty description."""
+    no_desc = []
+    try:
+        paginator = kms.get_paginator('list_keys')
+        for page in paginator.paginate():
+            for key in page['Keys']:
+                key_id = key['KeyId']
+                metadata = kms.describe_key(KeyId=key_id)['KeyMetadata']
+                if not metadata.get('Description'):
+                    no_desc.append({
+                        'key_id': key_id,
+                        'arn': metadata['Arn'],
+                        'decision': '[AI_ASSIST] P3',
+                        'action': 'Document key purpose in tags or CMDB'
+                    })
+        return no_desc
+    except ClientError as e:
+        return [{'error': str(e)}]
+
+def audit_grant_usage(threshold: int = 400) -> list:
+    """[AI_ASSIST] P3 - Audit keys with high grant count."""
+    high_grant_keys = []
+    try:
+        paginator = kms.get_paginator('list_keys')
+        for page in paginator.paginate():
+            for key in page['Keys']:
+                key_id = key['KeyId']
+                grants = kms.list_grants(KeyId=key_id)
+                grant_count = len(grants.get('Grants', []))
+                if grant_count > threshold:
+                    high_grant_keys.append({
+                        'key_id': key_id,
+                        'grant_count': grant_count,
+                        'limit': 500,
+                        'decision': '[AI_ASSIST] P3',
+                        'action': 'Audit and retire unused grants'
+                    })
+        return high_grant_keys
+    except ClientError as e:
+        return [{'error': str(e)}]
+
+def quarterly_health_check() -> dict:
+    """[AI_ASSIST] P3 - Comprehensive quarterly key health check."""
+    report = {
+        'total_keys': 0,
+        'healthy': 0,
+        'p0_issues': [],
+        'p2_issues': [],
+        'p3_issues': [],
+        'compliance_score': 0
+    }
+    
+    try:
+        # Scan all keys
+        paginator = kms.get_paginator('list_keys')
+        for page in paginator.paginate():
+            for key in page['Keys']:
+                key_id = key['KeyId']
+                report['total_keys'] += 1
+                
+                # Check key state
+                metadata = kms.describe_key(KeyId=key_id)['KeyMetadata']
+                
+                # P0 checks
+                if metadata['KeyState'] == 'Disabled':
+                    report['p0_issues'].append({
+                        'key_id': key_id,
+                        'issue': 'Key disabled',
+                        'action': '[AUTO_HEAL] enable-key'
+                    })
+                    continue
+                elif metadata['KeyState'] == 'PendingDeletion':
+                    report['p0_issues'].append({
+                        'key_id': key_id,
+                        'issue': 'Key pending deletion',
+                        'action': '[AUTO_HEAL] cancel-key-deletion'
+                    })
+                    continue
+                
+                # P2 checks - rotation
+                if metadata['KeySpec'] == 'SYMMETRIC_DEFAULT':
+                    rotation = kms.get_key_rotation_status(KeyId=key_id)
+                    if not rotation['KeyRotationEnabled']:
+                        report['p2_issues'].append({
+                            'key_id': key_id,
+                            'issue': 'Rotation not enabled',
+                            'action': '[AUTO_HEAL] enable-key-rotation'
+                        })
+                
+                # P3 checks - tags, description
+                tags = kms.list_resource_tags(KeyId=key_id).get('Tags', [])
+                if not any(tag['TagKey'] == 'Environment' for tag in tags):
+                    report['p3_issues'].append({
+                        'key_id': key_id,
+                        'issue': 'Missing Environment tag',
+                        'action': '[AI_ASSIST] Apply standard tag'
+                    })
+                
+                if not metadata.get('Description'):
+                    report['p3_issues'].append({
+                        'key_id': key_id,
+                        'issue': 'No description',
+                        'action': '[AI_ASSIST] Document key purpose'
+                    })
+                
+                # Count healthy
+                if (metadata['KeyState'] == 'Enabled' and 
+                    (metadata['KeySpec'] != 'SYMMETRIC_DEFAULT' or 
+                     kms.get_key_rotation_status(KeyId=key_id)['KeyRotationEnabled'])):
+                    report['healthy'] += 1
+        
+        # Calculate compliance score
+        if report['total_keys'] > 0:
+            report['compliance_score'] = int(
+                (report['healthy'] / report['total_keys']) * 100
+            )
+        
+        return report
+    except ClientError as e:
+        return {'error': str(e)}
 ```

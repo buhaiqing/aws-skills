@@ -10,8 +10,8 @@ compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access to CloudWatch endpoints.
 metadata:
   author: aws
-  version: "2.1.0"
-  last_updated: "2026-05-28"
+  version: "2.2.0"
+  last_updated: "2026-05-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -20,6 +20,13 @@ metadata:
     - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
     - AWS_PROFILE
+  cross_skill_deps:
+    - aws-elb-ops             # ELB metrics, alarm templates
+    - aws-ec2-ops              # EC2 metric correlation
+    - aws-vpc-ops              # VPC Flow Logs integration
+    - aws-route53-ops          # DNS health check monitoring
+    - aws-acm-ops              # Certificate expiry monitoring
+    - aws-cloudtrail-ops       # API event correlation
 ---
 
 # AWS CloudWatch Operations Skill
@@ -34,6 +41,11 @@ Operational runbook for CloudWatch metrics, alarms, logs, dashboards, anomaly de
 - User mentions "CloudWatch", "CW", "metrics", "alarms", "monitoring"
 - Task involves **metrics, alarms, dashboards, log groups, logs insights, anomaly detection, metric math, forecast, cost analysis**
 - Keywords: alarm, metric, dashboard, threshold, namespace, dimension, anomaly, forecast, logs, insight, contributor, synthetics, cost
+- **(AIOps)** ELB latency/error anomaly diagnosis via metrics and logs
+- **(AIOps)** Certificate expiry monitoring via custom metrics
+- **(AIOps)** Cross-module RCA: correlate ELB/EC2/VPC metrics
+- **(AIOps)** Capacity planning via FORECAST for service modules
+- Keywords: elb-monitoring, elb-anomaly, elb-capacity, elb-rca, cert-expiry, cross-module-rca
 
 ### SHOULD NOT Use When
 - EC2 instance ops → `aws-ec2-ops`
@@ -337,7 +349,144 @@ See [references/layered-inspection-template.md](references/layered-inspection-te
 | S3 | AWS/S3 | BucketSizeBytes, NumberOfObjects |
 | RDS | AWS/RDS | CPUUtilization, FreeStorageSpace |
 | Lambda | AWS/Lambda | Invocations, Errors, Duration |
+| ALB | AWS/ApplicationELB | TargetResponseTime, HTTPCode_Target_5XX, HealthyHostCount, UnHealthyHostCount, RequestCount, ActiveConnectionCount, ConsumedLCUs |
+| NLB | AWS/NetworkELB | ActiveFlowCount, NewFlowCount, ProcessedBytes, HealthyHostCount |
 | EKS (Container Insights) | AWS/ContainerInsights | pod_cpu_utilization, pod_memory_utilization, node_cpu_utilization, node_memory_utilization |
+
+## ELB-Specific Monitoring Templates
+
+### Anomaly Detection Alarm for ALB Request Count
+```bash
+# Pre-flight: verify ≥ 2 weeks metric data
+aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name RequestCount \
+  --statistics Sum --period 3600 \
+  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --start-time $(date -d '-30 days' -u +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  | jq '.Datapoints | length'
+```
+
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{lb_name}}-RequestCount-Anomaly" \
+  --alarm-description "AIOps: Seasonal anomaly detection for ALB request count" \
+  --metrics '[{"Id":"m1","MetricStat":{"Metric":{"Namespace":"AWS/ApplicationELB","MetricName":"RequestCount","Dimensions":[{"Name":"LoadBalancer","Value":"{{lb_arn}}"}]},"Period":300,"Stat":"Sum"}},{"Id":"ad","Expression":"ANOMALY_DETECTION_BAND(m1,2)"}]' \
+  --threshold-metric-id "ad" \
+  --comparison-operator "LessThanLowerOrGreaterThanUpperThreshold" \
+  --evaluation-periods 2 \
+  --alarm-actions "{{sns_arn}}"
+```
+
+### Latency Monitoring Alarm (p99)
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{lb_name}}-p99-Latency-High" \
+  --alarm-description "AIOps: p99 latency exceeds 1000ms for 3 consecutive periods" \
+  --namespace AWS/ApplicationELB \
+  --metric-name TargetResponseTime \
+  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --statistic p99 --period 60 \
+  --threshold 1000 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 3 \
+  --alarm-actions "{{sns_arn}}"
+```
+
+### Health Composite Alarm (ELB + EC2)
+```bash
+# Create individual alarms first
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{lb_name}}-HealthyHosts-Low" \
+  --namespace AWS/ApplicationELB \
+  --metric-name HealthyHostCount \
+  --dimensions Name=TargetGroup,Value={{tg_arn}} \
+  --statistic Minimum --period 60 \
+  --threshold {{min_healthy}} \
+  --comparison-operator LessThanThreshold \
+  --evaluation-periods 2
+
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{lb_name}}-5XX-Errors" \
+  --namespace AWS/ApplicationELB \
+  --metric-name HTTPCode_Target_5XX \
+  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --statistic Sum --period 60 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2
+
+# Composite: alert if BOTH health AND errors indicate backend issue
+aws cloudwatch put-composite-alarm \
+  --alarm-name "{{lb_name}}-Backend-Health-Composite" \
+  --alarm-rule '(ALARM("{{lb_name}}-HealthyHosts-Low") OR ALARM("{{lb_name}}-5XX-Errors"))' \
+  --alarm-actions "{{sns_arn}}"
+  # Saves: $0.10/alarm/mo compared to 2 separate alarms
+```
+
+### ELB Health Dashboard Widget
+```json
+{
+  "type": "metric",
+  "properties": {
+    "metrics": [
+      ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "{{lb_arn}}", {"stat": "p99"}],
+      ["AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", "{{tg_arn}}", {"stat": "Minimum"}],
+      ["AWS/ApplicationELB", "HTTPCode_Target_5XX", "LoadBalancer", "{{lb_arn}}", {"stat": "Sum"}],
+      [".", "RequestCount", ".", ".", {"stat": "Sum"}],
+      ["AWS/ApplicationELB", "ActiveConnectionCount", "LoadBalancer", "{{lb_arn}}", {"stat": "Average"}]
+    ],
+    "period": 300,
+    "stat": "Average",
+    "region": "{{r.region}}",
+    "title": "{{lb_name}} — Real-Time Health"
+  }
+}
+```
+
+### FORECAST: ELB Capacity Planning
+```bash
+aws cloudwatch get-metric-data \
+  --metric-data-queries '[
+    {"Id":"m1","MetricStat":{"Metric":{"Namespace":"AWS/ApplicationELB","MetricName":"ActiveConnectionCount","Dimensions":[{"Name":"LoadBalancer","Value":"{{lb_arn}}"}]},"Period":3600,"Stat":"Maximum"},"Label":"ActiveConnections"},
+    {"Id":"fc","Expression":"FORECAST(m1, \"linear\", 168)","Label":"7-Day Forecast"}
+  ]' \
+  --start-time "$(date -d '-14 days' -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+### Certificate Expiry Alarm (via custom metric)
+```bash
+# Publish certificate expiry as custom metric
+aws cloudwatch put-metric-data \
+  --namespace AWS/AIOps \
+  --metric-data '[{"MetricName":"CertDaysToExpiry","Dimensions":[{"Name":"Domain","Value":"{{domain}}"}],"Value":{{days}}, "Unit":"Count"}]'
+
+# Alarm when < 30 days
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{domain}}-Cert-Expiry" \
+  --namespace AWS/AIOps \
+  --metric-name CertDaysToExpiry \
+  --dimensions Name=Domain,Value={{domain}} \
+  --statistic Minimum --period 86400 \
+  --threshold 30 \
+  --comparison-operator LessThanThreshold \
+  --evaluation-periods 1
+```
+
+### Cross-Module: ELB → EC2 Latency Correlation Dashboard
+```json
+{
+  "type": "metric",
+  "properties": {
+    "metrics": [
+      ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "{{lb_arn}}", {"stat": "p99", "label": "ALB Latency"}],
+      ["AWS/EC2", "CPUUtilization", "InstanceId", "{{instance_id}}", {"stat": "Average", "label": "EC2 CPU", "yAxis": "right"}],
+      ["AWS/EC2", "NetworkIn", "InstanceId", "{{instance_id}}", {"stat": "Average", "yAxis": "right"}]
+    ],
+    "period": 300,
+    "title": "Latency Correlation: ELB → Backend EC2"
+  }
+}
+```
 
 ## Reference Files
 

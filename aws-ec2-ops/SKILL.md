@@ -15,14 +15,19 @@ compatibility: >-
   to EC2 endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-05-28"
+  version: "1.2.0"
+  last_updated: "2026-05-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  cross_skill_deps:
+    - aws-elb-ops             # LB target health diagnostics
+    - aws-cloudwatch-ops      # EC2 metrics monitoring & FORECAST
+    - aws-cloudtrail-ops      # EC2 config change audit
+    - aws-ssm-ops             # SSM RunCommand for diagnostics
 ---
 
 # AWS EC2 Operations Skill
@@ -48,7 +53,12 @@ Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. Thi
 ### SHOULD Use When
 - User mentions "EC2", "Elastic Compute Cloud", "instance", "VM"
 - Task involves CRUD on **EC2 instances** (run, stop, start, terminate, describe)
-- Keywords: instance, ami, volume, keypair, security-group, launch
+- **(AIOps)** EC2 instance behind a load balancer is unhealthy
+- **(AIOps)** LB health check failure root cause
+- **(AIOps)** Auto-recover EC2 instance for LB target group
+- **(AIOps)** EC2 capacity for LB scaling
+- **(AIOps)** Instance status check failed — LB not receiving traffic
+- Keywords: balance, distribute, health-check, listener, target-group, unhealthy-instance, ec2-lb-diagnostics
 
 ### SHOULD NOT Use When
 - Billing only → delegate to: `aws-cost-ops`
@@ -623,3 +633,126 @@ client.modify_instance_attribute(
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
 - [Example Configuration](assets/example-config.yaml)
+
+---
+
+## AIOps: EC2 as Load Balancer Target — Diagnostics & Auto-Healing
+
+### AIOps Data Collection: EC2 Health Metrics for LB RCA
+
+| Metric | Namespace | AIOps Use |
+|--------|-----------|-----------|
+| `CPUUtilization` | AWS/EC2 | Backend overload detection for latency/502 RCA |
+| `StatusCheckFailed` | AWS/EC2 | Aggregate instance-level health (system + application) |
+| `StatusCheckFailed_System` | AWS/EC2 | AWS infrastructure issue affecting LB target |
+| `StatusCheckFailed_Instance` | AWS/EC2 | OS/application issue — possible health check failure |
+| `NetworkIn` / `NetworkOut` | AWS/EC2 | Bandwidth saturation detection |
+| `DiskReadOps` / `DiskWriteOps` | AWS/EC2 | I/O bottleneck detection |
+| `MemoryUtilization` | CWAgent (custom) | Memory pressure causing slow responses |
+
+### AIOps Diagnostic Flows (Cross-Skill with ELB)
+
+```
+EC2 ↔ ELB Diagnostic Integration:
+  When ELB detects unhealthy targets:
+  1. [aws-elb-ops] Identifies unhealthy targets → instance IDs
+  2. [aws-ec2-ops] Diagnoses each instance:
+     a. Check StatusCheck: System + Instance health
+     b. Check CPUUtilization trend (last 30 min)
+     c. Check NetworkIn/Out for anomalies
+     d. Check CloudTrail for recent config changes (stop, modify, SG change)
+  3. [aws-ec2-ops] Determines root cause:
+     - StatusCheckFailed_System → AWS infrastructure issue (stop & start to migrate)
+     - StatusCheckFailed_Instance → OS crash/hang → reboot via AH-EC2-01
+     - CPU > 90% → Capacity saturation → resize via AH-EC2-02
+     - Network high → Bandwidth limit (check NetworkBurstLimit)
+  4. Returns diagnosis to aws-elb-ops for auto-remediation decision
+```
+
+### Self-Healing Actions
+
+#### AH-EC2-01: Reboot Unhealthy Instance [AUTO_HEAL]
+
+Trigger: StatusCheckFailed_Instance = true AND ELB reports unhealthy target.
+
+```
+Decision: [AUTO_HEAL] (reversible, low risk)
+```
+
+```bash
+# Auto-reboot command sequence
+aws ec2 reboot-instances --instance-ids "{{user.instance_id}}"
+
+# Verify status check recovery (max 2 min)
+for i in $(seq 1 24); do
+  STATUS=$(aws ec2 describe-instance-status \
+    --instance-ids "{{user.instance_id}}" \
+    --query "InstanceStatuses[0].{System: SystemStatus.Status, Instance: InstanceStatus.Status}" \
+    --output json)
+  SYS=$(echo "$STATUS" | jq -r '.System')
+  INS=$(echo "$STATUS" | jq -r '.Instance')
+  if [ "$SYS" = "ok" ] && [ "$INS" = "ok" ]; then
+    echo "[OK] Health check passed after $((i * 5))s"
+    break
+  fi
+  sleep 5
+done
+```
+**Fallback**: 2 failures → downgrade to `[AI_ASSIST]`.
+
+#### AH-EC2-02: Instance Resize for Capacity [AI_ASSIST]
+
+Trigger: CPU > 90% for 15+ min AND ELB latency high.
+
+```
+Decision: [AI_ASSIST] (cost impact — user must confirm)
+```
+
+```bash
+# Resize command sequence (after user confirms)
+aws ec2 stop-instances --instance-ids "{{user.instance_id}}"
+# Wait for stopped state, then:
+aws ec2 modify-instance-attribute \
+  --instance-id "{{user.instance_id}}" \
+  --instance-type "{\"Value\":\"{{user.new_instance_type}}\"}"
+aws ec2 start-instances --instance-ids "{{user.instance_id}}"
+```
+
+#### AH-EC2-03: SSM RunCommand Health Check [AI_ASSIST]
+
+Trigger: Instance routing to LB but application-level unhealthy (port not listening).
+
+```
+Decision: [AI_ASSIST] (diagnostic only)
+```
+
+```bash
+# Run SSM Diagnostic
+aws ssm send-command \
+  --instance-ids "{{user.instance_id}}" \
+  --document-name "AWS-RunShellScript" \
+  --parameters '{"commands":[
+    "echo '=== Disk ===", "df -h",
+    "echo '=== Memory ===", "free -m",
+    "echo '=== Port Listeners ===", "ss -tlnp",
+    "echo '=== Service Status ===", "systemctl list-units --type=service --state=running"
+  ]}'
+```
+
+#### AH-EC2-04: Capacity Pre-Warning [Predictive]
+
+```
+Trigger: CPUUtilization steadily increasing over 7 days
+  Current: 72% (average)
+  FORECAST 7-day: 88% → exceeds 80% safe threshold
+  Action: [AI_ASSIST] Recommend proactive resize before SLA impact
+```
+
+### Cross-Module Integration
+
+| Condition | Delegate To |
+|-----------|-------------|
+| LB-health check EC2 diagnosis | `aws-elb-ops` (RCA coordination) |
+| EC2 metrics for LB capacity | `aws-cloudwatch-ops` (FORECAST) |
+| EC2 config change audit | `aws-cloudtrail-ops` (CloudTrail) |
+| SSM RunCommand for diagnostics | `aws-ssm-ops` (SSM RunCommand) |

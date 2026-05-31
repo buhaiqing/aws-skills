@@ -1,8 +1,45 @@
 # KMS Troubleshooting
 
-Common KMS error codes, recovery procedures, and operational troubleshooting.
+Common KMS error codes, RCA decision matrix, recovery procedures, and operational monitoring.
+
+## Quick RCA Decision Matrix
+
+| Error | Key State | Decision | SLA | Action |
+|-------|-----------|----------|-----|--------|
+| DisabledException | Disabled | [AUTO_HEAL] | P0 | `enable-key` |
+| InvalidKeyState | PendingDeletion | [AUTO_HEAL] | P0 | `cancel-key-deletion` |
+| AccessDeniedException | Enabled | [MANUAL] | P2 | Review IAM/Key Policy |
+| ThrottlingException | Enabled | [AI_ASSIST] | P2 | Implement caching/backoff |
+| NotFoundException | N/A | HALT | - | Verify key ID/region |
+| InvalidKeyUsageException | Enabled | [MANUAL] | P2 | Check key spec matches operation |
+| UnusedKey (90d+) | Enabled | [AI_ASSIST] | P3 | Review/delete idle key |
+| MissingEnvTags | Enabled | [AI_ASSIST] | P3 | Apply standard tags |
+| OrphanedAlias | N/A | [AI_ASSIST] | P3 | Clean up stale alias |
+| GrantCountNearLimit | Enabled | [AI_ASSIST] | P3 | Audit retired grants |
+| EmptyDescription | Enabled | [AI_ASSIST] | P3 | Document key purpose |
 
 ## Error Code Reference
+
+### Compact Error Table
+
+| Error Code | Cause | Resolution |
+|------------|-------|------------|
+| **DisabledException** | Key disabled | [AUTO_HEAL] `enable-key` |
+| **InvalidKeyState** | Key in PendingDeletion/PendingImport | Check state → cancel deletion or import material |
+| **KMSInvalidStateException** | Operation invalid for state | `describe-key` → check state-specific actions |
+| **NotFoundException** | Wrong key ID/region/deleted | Verify with `list-keys`, check region |
+| **AccessDeniedException** | IAM/Key policy insufficient | [MANUAL] Simulate policy + review key policy |
+| **InvalidKeyUsageException** | Operation doesn't match key type | Check `KeyUsage`+`KeySpec` match operation |
+| **AlreadyExistsException** | Alias already exists | Use different alias or `update-alias` |
+| **LimitExceededException** | Quota exceeded | HALT; request increase |
+| **ThrottlingException** | Rate limit exceeded | [AI_ASSIST] Exponential backoff; cache data keys |
+| **MalformedPolicyDocumentException** | Invalid JSON policy | Validate JSON; check required root access |
+| **PolicyLockoutSafetyCheck** | Policy removes all admin | Must keep root access or use `--bypass-policy-lockout-safety-check` |
+| **DependencyTimeoutException** | CloudHSM timeout | RETRY max 3x; check cluster status |
+| **IncorrectKeyMaterialException** | Import format wrong | Verify 256-bit key, correct wrapping |
+| **ExpiredImportTokenException** | Import token expired (>24h) | Re-run `get-parameters-for-import` |
+
+## Detailed Recovery Procedures
 
 ### Key State Errors
 
@@ -611,56 +648,98 @@ aws kms get-key-policy --key-id {{key_id}} --query "Policy"
 
 ## Recovery Procedures
 
-### Key Recovery Flow
+### Recovery Flow
 ```
-1. Identify error type from exception/code
-2. Check key state with describe-key
-3. For Disabled: enable-key
-4. For PendingDeletion: cancel-key-deletion
-5. For PendingImport: import-key-material or delete key
-6. For AccessDenied: check IAM and key policies
-7. For InvalidKeyUsage: verify key type matches operation
-8. For throttling: implement backoff, cache data keys
-9. Max 3 retries for transient errors
-10. HALT for quota/permanent errors
+1. Identify error → Check state → Apply decision
+2. [AUTO_HEAL]: Disabled/PendingDeletion → Auto-fix
+3. [MANUAL]: Access/Policy issues → Human review
+4. [AI_ASSIST]: Throttling/Optimization → Recommend
+5. Max 3 retries for transient errors
+6. HALT for quota/permanent errors
 ```
 
-### Data Recovery (Key Deleted)
+### Prevention (Key Deletion)
 ```
-1. Key deletion is PERMANENT after pending window
-2. Encrypted data cannot be recovered
-3. Prevention is only solution
-
-Prevention:
-- Use minimum 30-day pending window
-- Monitor deletion schedules
-- Set up CloudTrail alarms
-- Require MFA for deletion
-- Maintain backup keys
+- Use 30-day pending window minimum
+- Monitor deletion schedules via CloudTrail
+- Require MFA for deletion operations
+- Maintain backup keys for critical data
 ```
 
-### Key Rotation Recovery
+## Monitoring Checklist (AIOps)
+
+| Metric | Source | Warning | Critical | Decision |
+|--------|--------|---------|----------|----------|
+| KeyState | `describe-key` | Disabled | PendingDeletion | [AUTO_HEAL] |
+| ThrottledRequests | CloudWatch | >100/hr | >1000/hr | [AI_ASSIST] |
+| PendingDeletionWindow | `describe-key` | <7 days | <1 day | [AUTO_HEAL] |
+| GrantsCount | `list-grants` | >400 | >490 | [AI_ASSIST] |
+| LastRotation | `get-key-rotation-status` | >400 days | Never | [AUTO_HEAL] |
+| KeyUsage | CloudTrail | No usage 90d | No usage 180d | [AI_ASSIST] |
+| PolicyChanges | CloudTrail | Any change | Deny all added | [MANUAL] |
+| MissingTags | `list-resource-tags` | No Env tag | No tags at all | [AI_ASSIST] P3 |
+| OrphanedAliases | `list-aliases` | Alias w/o key | - | [AI_ASSIST] P3 |
+| EmptyDescription | `describe-key` | No description | - | [AI_ASSIST] P3 |
+
+### CloudTrail/CloudWatch Integration
+
+```bash
+# Monitor key security events
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=DisableKey \
+  --start-time $(date -d '-24 hours' -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Check API throttling
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/KMS \
+  --metric-name ThrottledRequests \
+  --statistics Sum --period 3600 \
+  --start-time $(date -d '-7 days' -u +%Y-%m-%dT00:00:00Z) \
+  --end-time $(date -u +%Y-%m-%dT00:00:00Z)
+
+# Find unused keys (no decrypt in 90 days)
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  usage=$(aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue=$key_id \
+    --start-time $(date -d '-90 days' -u +%Y-%m-%dT00:00:00Z) \
+    --query "Events[?EventName=='Decrypt']" --output text)
+  [ -z "$usage" ] && echo "UNUSED: $key_id"
+done
 ```
-1. Automatic rotation is transparent
-2. Old key material kept indefinitely
-3. Existing ciphertext remains decryptable
-4. If rotation fails: manual retry or AWS support
 
-Manual rotation (if auto fails):
-1. Create new key
-2. Update alias
-3. Re-encrypt data
-4. Schedule old key deletion
+## P3 Maintenance Tasks (Low Priority)
+
+### Find Keys Missing Environment Tags
+```bash
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  tags=$(aws kms list-resource-tags --key-id "$key_id" --query "Tags[?TagKey=='Environment']" --output text)
+  [ -z "$tags" ] && echo "MISSING_ENV_TAG: $key_id"
+done
 ```
 
-## Monitoring Checklist
+### Find Orphaned Aliases (alias pointing to deleted key)
+```bash
+for alias in $(aws kms list-aliases --query "Aliases[].AliasName" --output text); do
+  target_key=$(aws kms list-aliases --query "Aliases[?AliasName=='$alias'].TargetKeyId" --output text)
+  if [ -n "$target_key" ]; then
+    key_exists=$(aws kms describe-key --key-id "$target_key" --query "KeyMetadata.KeyState" --output text 2>/dev/null || echo "NOT_FOUND")
+    [ "$key_exists" = "NOT_FOUND" ] && echo "ORPHANED_ALIAS: $alias -> $target_key"
+  fi
+done
+```
 
-| Check | Warning | Critical | Action |
-|-------|---------|----------|--------|
-| KeyState | Disabled | PendingDeletion | Enable or cancel |
-| ThrottledRequests | > 100/hour | > 1000/hour | Implement backoff |
-| KeyPendingDeletion | < 7 days | < 1 day | Cancel or accept |
-| GrantsCount | > 400 | > 490 | Clean up grants |
-| LastRotation | > 400 days | Never rotated | Enable rotation |
-| KeyPolicyChanges | Any | Deny all | Review policy |
-| UnauthorizedAccess | > 10 | > 100 | Audit and restrict |
+### Find Keys with Empty Description
+```bash
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  desc=$(aws kms describe-key --key-id "$key_id" --query "KeyMetadata.Description" --output text)
+  [ -z "$desc" ] && echo "NO_DESCRIPTION: $key_id"
+done
+```
+
+### Audit Grants Near Limit (500 per key)
+```bash
+for key_id in $(aws kms list-keys --query "Keys[].KeyId" --output text); do
+  grant_count=$(aws kms list-grants --key-id "$key_id" --query "Grants | length" --output text)
+  [ "$grant_count" -gt 400 ] && echo "HIGH_GRANT_COUNT: $key_id has $grant_count grants"
+done
+```
