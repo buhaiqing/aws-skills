@@ -16,10 +16,18 @@ compatibility: >-
   to RDS endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -163,3 +171,37 @@ See [references/prompt-examples.md](references/prompt-examples.md) for 10 concre
 - `references/core-concepts.md` — RDS architecture, concepts
 - `references/troubleshooting.md` — Error codes, recovery procedures
 - `assets/example-config.yaml` — Configuration examples
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-rds-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace
+(exact format `confirm=<OPERATION> <resource>`):
+
+- `delete-db-instance` / `delete-db-cluster` — default path requires
+  `--final-db-snapshot-identifier`; `--skip-final-snapshot` needs
+  literal `DELETE_NO_SNAPSHOT <db-id>` (rule A5)
+- `delete-db-snapshot` / `delete-db-cluster-snapshot`
+- `delete-db-parameter-group` / `delete-db-cluster-parameter-group` —
+  must not be in use
+- `delete-db-subnet-group` — must not be referenced
+- `delete-event-subscription`
+- `stop-db-instance` / `stop-db-cluster` (7-day window; reversible)
+- `promote-read-replica` (cross-region needs stronger confirm)
+- `modify-db-instance` with storage SHRINK
+
+Relevant AWS rules from `gcl-spec.md` §8: A5 (final-snapshot guard),
+A7 (region), A8 (resource echo-back), A9 (no passwords in trace),
+A10 (sts first command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.

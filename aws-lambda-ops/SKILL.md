@@ -16,10 +16,18 @@ compatibility: >-
   to Lambda endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -84,7 +92,7 @@ AWS Lambda serverless compute operations skill for AI Agent automation.
 
 **Never** ask for AWS credentials. **Never** hardcode secrets.
 
-## Flow Pattern
+## Execution Flow Pattern
 
 ```
 Pre-flight → Execute → Validate → Recover
@@ -180,3 +188,38 @@ aws lambda publish-layer-version \
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-lambda-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace
+(exact format `confirm=<OPERATION> <resource>`):
+
+- `delete-function` — **IRREVERSIBLE**; pre-flight: `get-function`
+  (state must be `Active`) + `list-event-source-mappings` (refuse if
+  non-empty without `confirm=DELETE_FUNCTION_WITH_TRIGGERS <name>`)
+- `delete-event-source-mapping`
+- `delete-layer-version`
+- `delete-function-url-config`
+- `delete-function-event-invoke-config`
+- `delete-function-code-signing-config`
+- `delete-function-concurrency` / `delete-provisioned-concurrency-config`
+- `put-function-concurrency=0` (effectively stops function)
+- `update-function-configuration` with runtime / VPC / role change
+- `remove-permission`
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource
+echo-back), A9 (no env-var values / no literal secrets / no Lambda code
+in trace; Secrets Manager / SSM ARN only), A10 (sts first command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.

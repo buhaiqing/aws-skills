@@ -1,20 +1,29 @@
 ---
 name: aws-dynamodb-ops
-description: >-
-  Use when managing DynamoDB tables, items, indexes, or capacity modes. Invoke when user mentions "DynamoDB", "NoSQL", or needs table/query operations, backups, or TTL configuration.
+description: Use when managing DynamoDB tables, items, indexes, or capacity modes.
+  Invoke when user mentions "DynamoDB", "NoSQL", or needs table/query operations,
+  backups, or TTL configuration.
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access to DynamoDB endpoints.
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network
+  access to DynamoDB endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: 1.1.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS DynamoDB Ops Skill
 
@@ -118,3 +127,36 @@ Confirm: Type DELETE GSI {{user.IndexName}} to proceed.
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-dynamodb-ops` MUST be wrapped by the Generator-Critic-Loop defined
+> in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-table` — **IRREVERSIBLE**; pre-flight: `describe-table`
+  (state must be `ACTIVE`) + `list-event-source-mappings` (Streams
+  consumers must be empty) + GSIs/LSIs must be removed first
+- `update-table` with `GlobalSecondaryIndexUpdates: REMOVE` —
+  `confirm=DELETE_GSI <table>:<index>`
+- `update-time-to-live` enable — `confirm=ENABLE_TTL <table>:<attr>`;
+  irreversible effect within 48 h
+- `delete-backup` / `delete-replication-group-member` (Global Tables)
+- `delete-item` on "core" entities
+- `transact-write-items` with `Delete` on "core" entities
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource
+echo-back), A9 (no item values in trace; no literal secrets in
+secret-named attributes; SSM / Secrets Manager ARN only), A10 (sts
+first command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.
