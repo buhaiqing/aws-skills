@@ -1,28 +1,35 @@
 ---
 name: aws-vpc-ops
-description: >-
-  Use when managing AWS VPC resources, creating/deleting VPCs, subnets, security
-  groups, route tables, IGWs, NAT Gateways, or peering connections; even if user
-  doesn't mention "VPC" but needs network infrastructure or troubleshooting.
+description: Use when managing AWS VPC resources, creating/deleting VPCs, subnets,
+  security groups, route tables, IGWs, NAT Gateways, or peering connections; even
+  if user doesn't mention "VPC" but needs network infrastructure or troubleshooting.
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with EC2/VPC permissions.
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with EC2/VPC
+  permissions.
 metadata:
   author: aws
-  version: "1.2.0"
-  last_updated: "2026-05-31"
+  version: 1.3.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
-    - AWS_SESSION_TOKEN
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
+  - AWS_SESSION_TOKEN
   cross_skill_deps:
-    - aws-elb-ops             # ELB subnet/SG integration
-    - aws-ec2-ops              # EC2 instance network checks
-    - aws-cloudwatch-ops      # NAT Gateway monitoring
-    - aws-cloudtrail-ops      # SG/NACL change audit
+  - aws-elb-ops
+  - aws-ec2-ops
+  - aws-cloudwatch-ops
+  - aws-cloudtrail-ops
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS VPC Ops Skill
 
@@ -254,3 +261,39 @@ aws ec2 start-network-insights-analysis \
 | EC2 instance-level network check | `aws-ec2-ops` (SSM diagnostics) |
 | CloudWatch metrics setup | `aws-cloudwatch-ops` (alarms) |
 | CloudTrail audit | `aws-cloudtrail-ops` (event analysis) |
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-vpc-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-vpc` — **HIGH BLAST RADIUS**; pre-flight MUST run **8
+  describe-\*** commands (subnets / IGWs / NATs / RTs / SGs / endpoints /
+  peering / NACLs) and refuse if any non-empty
+- `delete-security-group` — must not be referenced by ENI; default SG
+  cannot be deleted while VPC has any instance
+- `delete-subnet` — must have no ENI
+- `delete-route-table` — main route table is undeletable; custom RT
+  must have no associations
+- `delete-internet-gateway` — must be `detached` first
+- `delete-nat-gateway` — captures released EIP allocation id
+- `delete-vpc-endpoint` / `delete-vpc-peering-connection`
+- `authorize-security-group-ingress` adding `0.0.0.0/0` on sensitive
+  ports (22, 3389, 5432, 3306, 27017, 6379, 9200, 11211, 25) —
+  same family as IAM `*:*` policy guard
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource
+echo-back), A9 (no env-var values in trace; here the VPC equivalent is
+no UserData / metadata responses in trace), A10 (sts first command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.

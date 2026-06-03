@@ -1,41 +1,47 @@
 ---
 name: aws-elb-ops
-description: >-
-  Use when the user needs to set up, configure, or manage load balancers to
-  distribute traffic across multiple targets; create or modify target groups,
-  listeners, or health checks; configure ALB for HTTP/HTTPS web traffic, NLB
-  for high-performance TCP/UDP workloads, or CLB for legacy applications; even
-  if they don't say "ELB" and instead say "balance traffic", "set up a load
-  balancer", "configure health checks", or "route requests to my servers".
+description: 'Use when the user needs to set up, configure, or manage load balancers
+  to distribute traffic across multiple targets; create or modify target groups, listeners,
+  or health checks; configure ALB for HTTP/HTTPS web traffic, NLB for high-performance
+  TCP/UDP workloads, or CLB for legacy applications; even if they don''t say "ELB"
+  and instead say "balance traffic", "set up a load balancer", "configure health checks",
+  or "route requests to my servers".
 
   (AIOps) Use when detecting ELB anomalies (latency spikes, error rates, connection
-  exhaustion), performing root cause analysis across ELB/EC2/VPC, executing
-  self-healing actions for unhealthy targets, predicting capacity saturation,
-  or optimizing ELB cost and configuration.
+  exhaustion), performing root cause analysis across ELB/EC2/VPC, executing self-healing
+  actions for unhealthy targets, predicting capacity saturation, or optimizing ELB
+  cost and configuration.'
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
-  to AWS endpoints. CloudWatch, CloudTrail, AWS Config access required for
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network
+  access to AWS endpoints. CloudWatch, CloudTrail, AWS Config access required for
   AIOps scenarios.
 metadata:
   author: aws
-  version: "2.0.0"
-  last_updated: "2026-05-31"
+  version: 2.2.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   aiops_level: full-chain
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
   cross_skill_deps:
-    - aws-cloudwatch-ops      # Monitoring hub: anomalies, forecasts, logs
-    - aws-cloudtrail-ops      # API event tracing for change detection
-    - aws-ec2-ops             # Backend instance health & remediation
-    - aws-vpc-ops             # Network layer diagnostics (SG, Flow Logs)
-    - aws-route53-ops         # DNS routing & health check integration
-    - aws-acm-ops             # SSL certificate lifecycle management
-    - aws-s3-ops              # Access log storage & analysis
+  - aws-cloudwatch-ops
+  - aws-cloudtrail-ops
+  - aws-ec2-ops
+  - aws-vpc-ops
+  - aws-route53-ops
+  - aws-acm-ops
+  - aws-s3-ops
+  gcl:
+    enabled: true
+    class: recommended
+    max_iter: 3
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 
 # AWS ELB Operations Skill
@@ -660,3 +666,37 @@ After each AIOps action, record outcome:
 - [Integration Guide — CloudTrail & AWS Config](references/integration.md)
 - [Example Configurations](assets/example-config.yaml)
 - [Cross-Skill: Layered Inspection](../aws-cloudwatch-ops/references/layered-inspection-template.md)
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, **recommended**). Every execution of
+> `aws-elb-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `recommended` |
+| `max_iterations` | `3` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `deregister-targets` — pre-flight MUST compute `count/healthy` ratio
+  - ratio < 50%: `confirm=DEREGISTER <tg-arn> count=<n>`
+  - ratio ≥ 50%: `confirm=DEREGISTER_DRAIN <tg-arn> count=<n>/<total>`
+  - ratio == 100%: `confirm=DEREGISTER_ALL <tg-arn>` (total outage)
+- `delete-load-balancer` — must have no listeners
+- `delete-listener` — must have no rules
+- `delete-rule` (default rule is **undeletable**; refuse)
+- `delete-target-group` — must not be referenced
+- `delete-trust-store` (mTLS) — must not be referenced
+- `modify-load-balancer-attributes` disabling `deletion_protection` —
+  `confirm=DISABLE_DELETION_PROTECTION <lb-arn>`
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource
+echo-back), A9 (no literal secrets in LB Tags), A10 (sts first
+command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.

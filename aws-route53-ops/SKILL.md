@@ -1,35 +1,40 @@
 ---
 name: aws-route53-ops
-description: >-
-  Use when the user needs to create, manage, or delete DNS records and hosted
-  zones in AWS Route53; configure DNS routing policies including failover,
-  latency-based, geolocation, or weighted routing for Route53 hosted zones; set
-  up health checks for DNS failover; manage alias records pointing to AWS
-  resources like ELB, S3, or CloudFront; troubleshoot DNS resolution issues;
-  or delegate domain zones in Route53, even if they don't say "Route53" and
-  instead say "set up DNS records", "configure DNS failover", "manage hosted
-  zones", "set up health checks for my website", or "create alias records
-  for AWS resources".
+description: Use when the user needs to create, manage, or delete DNS records and
+  hosted zones in AWS Route53; configure DNS routing policies including failover,
+  latency-based, geolocation, or weighted routing for Route53 hosted zones; set up
+  health checks for DNS failover; manage alias records pointing to AWS resources like
+  ELB, S3, or CloudFront; troubleshoot DNS resolution issues; or delegate domain zones
+  in Route53, even if they don't say "Route53" and instead say "set up DNS records",
+  "configure DNS failover", "manage hosted zones", "set up health checks for my website",
+  or "create alias records for AWS resources".
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
-  to Route53 endpoints.
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network
+  access to Route53 endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-05-31"
+  version: 1.2.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
-    - AWS_SESSION_TOKEN
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
+  - AWS_SESSION_TOKEN
   cross_skill_deps:
-    - aws-elb-ops             # ELB health-based DNS failover
-    - aws-cloudwatch-ops      # Health check monitoring
-    - aws-acm-ops              # DNS validation for certificates
-    - aws-cloudfront-ops      # CloudFront alias records
+  - aws-elb-ops
+  - aws-cloudwatch-ops
+  - aws-acm-ops
+  - aws-cloudfront-ops
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS Route53 Ops Skill
 
@@ -229,3 +234,41 @@ aws route53 change-resource-record-sets \
 | DNS change monitoring | `aws-cloudwatch-ops` (alarms on DNS changes) |
 | Health check status | `aws-cloudwatch-ops` (HealthCheckStatus metric) |
 | SSL certificate for DNS | `aws-acm-ops` (cert validation) |
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-route53-ops` MUST be wrapped by the Generator-Critic-Loop defined
+> in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `change-resource-record-sets: DELETE` (single) —
+  `confirm=DELETE_RECORD <zone>:<name>:<type>`; pre-flight MUST list
+  the current record value
+- `change-resource-record-sets: DELETE` on prod-traffic record —
+  `confirm=DELETE_PROD_DNS_RECORD <name>` (verifies ALB
+  `RequestCount > 0` in last 5 min)
+- `change-resource-record-sets` batch (> 1 record) — trace MUST
+  include full record batch
+- `delete-hosted-zone` — **GLOBAL DNS CUT**; refuse if any
+  non-NS/SOA records exist; `confirm=DELETE_HOSTED_ZONE <zone-id>`
+- `delete-health-check` — pre-flight: must not be referenced by
+  any CloudWatch alarm; `confirm=DELETE_HEALTH_CHECK <id>`
+- `delete-reusable-delegation-set` — must not be referenced
+- `disassociate-vpc-with-hosted-zone` — affects private zone
+  resolution in the VPC
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region; canonical
+`us-east-1` since Route 53 is global), A8 (resource echo-back),
+A9 (no env-var values; record values are NOT secrets so full
+disclosure is OK by default), A10 (sts first command).
+
+See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.
