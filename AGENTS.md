@@ -140,3 +140,162 @@ files. The directory you create must mirror the layout above exactly,
 and the generated SKILL.md must pass the Charter and TE rules on the
 first round of self-reflection — if it does not, fix the generator
 output, not just the symptom in the new skill.
+
+## 11. Generator-Critic-Loop (GCL) — Adversarial Quality Gate
+
+> Inspired by GAN's Generator/Discriminator idea, but deliberately **not** a
+> real GAN. Naming: **GCL (Generator-Critic-Loop)** to avoid misleading
+> reviewers and LLM trainees.
+
+### 11.1 Purpose
+
+Apply an adversarial **Generator ↔ Critic** loop with a quantitative rubric
+to every skill execution. Most valuable in **high-side-effect AWS
+operations** (`terminate-instances`, `delete-bucket`, `delete-db-instance`,
+`iam delete-user`, `kms schedule-key-deletion`, etc.) where a single
+mistake is unrecoverable.
+
+The full specification lives in
+[`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md).
+This section is the **index, current rollout status, and Per-Skill
+Defaults table** — read it first, then load the spec for detail.
+
+| GAN (real) | GCL (this spec) |
+|---|---|
+| Discriminator learns sample distribution | Critic scores an **explicit rubric** |
+| No termination condition | Must terminate: **PASS / MAX_ITER / SAFETY_FAIL** |
+| G and D train in parallel | G and C run **sequentially** |
+| Goal: "fool the D" | Goal: "pass the rubric threshold" |
+
+### 11.2 Roles & isolation
+
+| Role | Job | Forbidden |
+|---|---|---|
+| **Generator (G)** | Execute the AWS op via `aws --output json` (primary) / boto3 (fallback) | modifying the rubric; self-scoring |
+| **Critic (C)** | Independently audit G's output against the rubric | calling `aws` / `boto3` / mutating anything |
+| **Orchestrator (O)** | Loop control, termination, final return | executing or scoring on its own |
+
+G and C MUST live in **isolated prompt contexts** (separate sessions or
+sub-agents). Shared context is a "pseudo-GCL" and is banned — see spec §9.
+
+### 11.3 Rubric (mandatory per skill)
+
+Each skill declares its 5-dimension rubric in `references/rubric.md`:
+**Correctness / Safety / Idempotency / Traceability / Spec Compliance** on
+a 0 / 0.5 / 1 scale. **Safety = 0 → ABORT immediately**, regardless of
+total score. Full rules in spec §3.
+
+### 11.4 Termination (first match wins)
+
+| Condition | Behavior |
+|---|---|
+| **PASS** | Every rubric dimension meets its threshold → return G's result |
+| **MAX_ITER** | Reached `max_iterations` → return **best-so-far** + unresolved rubric items |
+| **SAFETY_FAIL** | Safety = 0 → **ABORT**; never return partial output |
+
+### 11.5 Per-Skill Defaults
+
+| Skill | GCL | Default `max_iter` | Notes |
+|---|---|---|---|
+| `aws-ec2-ops` | **required (pilot)** | 2 | `terminate-instances`, `delete-key-pair`, `deregister-image`, `detach-volume` |
+| `aws-iam-ops` | **required (pilot)** | 2 | `delete-user`, `detach-user-policy`, `delete-access-key`; `*:*` policy guard |
+| `aws-kms-ops` | **required (pilot)** | 2 | `schedule-key-deletion` is irreversible; `--pending-window-in-days ≥ 7` |
+| `aws-s3-ops` | **required** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal) |
+| `aws-rds-ops` | **required** | 2 | `delete-db-instance` (final-snapshot guard for prod) |
+| `aws-lambda-ops` | **required** | 2 | `delete-function` (irreversible), `delete-function-concurrency` |
+| `aws-dynamodb-ops` | **required** | 2 | `delete-table` (data loss), `update-table` (throughput) |
+| `aws-elasticache-ops` | **required** | 2 | `delete-replication-group`, `delete-cache-cluster` |
+| `aws-route53-ops` | **required** | 2 | `delete-hosted-zone` (DNS cut) |
+| `aws-sqs-ops` | **required** | 2 | `delete-queue` (in-flight message loss) |
+| `aws-sns-ops` | **required** | 2 | `delete-topic`, `unsubscribe` |
+| `aws-cloudfront-ops` | **required** | 2 | `delete-distribution` (cache invalidation + DNS) |
+| `aws-waf-ops` | **required** | 2 | `delete-rule-group`, `delete-web-acl` |
+| `aws-secretsmanager-ops` | **required** | 2 | `delete-secret` (irrecoverable), `put-secret-value` |
+| `aws-ssm-ops` | **required** | 2 | `send-command` (remote exec), `delete-parameter` |
+| `aws-stepfunctions-ops` | **required** | 2 | `delete-state-machine`, `stop-execution` |
+| `aws-vpc-ops` | **required** | 2 | `delete-vpc` (cascade), `delete-security-group` (cross-ref) |
+| `aws-acm-ops` | required | 2 | `delete-certificate` (in-use guard) |
+| `aws-eks-ops` | required | 2 | `delete-cluster` (irreversible) |
+| `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% DRAIN |
+| `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |
+| `aws-cloudtrail-ops` | optional | 3 | read-mostly; `delete-trail` = severe |
+| `aws-skill-generator` | optional | 3 | meta operation; secret-leak guard |
+
+Each skill may override its own `max_iter` in its `SKILL.md` under
+`## Quality Gate (GCL)`. A skill not yet listed has GCL **disabled** by
+default — pilots are rolled out one at a time per the spec §10 roadmap.
+
+### 11.6 Trace & audit (mandatory)
+
+Every GCL run persists a JSON trace to
+`./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` per the schema in spec §6.
+`audit-results/` is git-ignored; traces retained 30 days; old traces pruned
+by the Phase 2 Orchestrator runner.
+
+### 11.7 Prompt templates (mandatory per skill)
+
+Each skill's `references/prompt-templates.md` MUST contain Generator,
+Critic, and Orchestrator decider skeletons (spec §7). Placeholders MUST
+follow the repository-wide `{{env.*}}` / `{{user.*}}` / `{{output.*}}`
+convention (see AGENTS.md §Variable Convention). Critic prompt MUST hide
+the raw user request to prevent "answer-aligned" rubber-stamping.
+
+### 11.8 Anti-patterns (banned)
+
+- ❌ **Shared context G+C** — defeats independence → banned
+- ❌ **Subjective scoring** — Critic must use the rubric, not "vibes" → banned
+- ❌ **Unbounded loop** — always hard-cap iterations → banned
+- ❌ **Critic sees the user request** — encourages rubber-stamping → banned
+- ❌ **Silently downgrade on Safety fail** — must ABORT visibly → banned
+- ❌ **Trace not persisted** — no post-mortem possible → banned
+- ❌ **Critic mutates resources** — Critic is read-only by definition → banned
+- ❌ **`aws --output json` placed before subcommand** — non-portable;
+  convention is `aws <svc> <op> --output json` (see CLAUDE.md) → banned
+  in GCL traces and examples
+
+### 11.9 AWS-specific rules (repo-wide)
+
+Codified in `gcl-spec.md` §8. Highlights:
+
+- **A1** `terminate-instances` requires user `--no-dry-run` opt-in
+- **A7** `--region` must match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+- **A8** Resource id must be echoed back from a `describe-*` lookup
+- **A9** Plaintext `KeyMaterial` / `PasswordData` / `UserData` credentials
+  in trace → Safety = 0; mask with `***` and length only
+- **A10** `aws sts get-caller-identity` MUST be the first command in trace
+
+### 11.10 Rollout roadmap
+
+- **Phase 1 (in progress)** — spec + this index shipped; pilots on
+  **`aws-ec2-ops`** (compute, destructive workload),
+  **`aws-iam-ops`** (identity, secret-handling + wildcard-policy guards),
+  and **`aws-kms-ops`** (encryption, irreversible deletion + plaintext
+  masking). Roll forward to remaining `required` skills one at a time
+  (see §11.5 table).
+- **Phase 2** — add `scripts/gcl_runner.py` as a reusable Orchestrator
+  (invokes G, then C in isolated context, persists trace, enforces
+  termination). Independent of any specific agent runtime.
+- **Phase 3** — feed `gcl-trace-*.json` into a CloudWatch dashboard /
+  Athena query for Quality Gate pass-rate and per-skill failure-mode
+  histograms.
+- **Phase 4** — wire rubric pass-rate to CloudWatch Alarms; production
+  incidents refine thresholds.
+
+### 11.11 Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-04 | Initial GCL specification added (`aws-skill-generator/references/gcl-spec.md`) and `AGENTS.md` §11 index; pilot scoped to **`aws-ec2-ops`** with `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); Per-Skill Defaults table covers all 22 existing skills |
+| 1.1.0 | 2026-06-04 | Second GCL pilot on **`aws-iam-ops`** (v1.1.0) — added `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); IAM-specific safety rules for `*:*` / `AdministratorAccess` attach, root-account `create-access-key` refusal, `Principal: *` trust policy guard, attached-policies pre-flight for `delete-user`, `SecretAccessKey` never logged |
+| 1.2.0 | 2026-06-04 | Third GCL pilot on **`aws-kms-ops`** (v2.1.0) — added `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); KMS-specific safety rules for irreversible `schedule-key-deletion` (`--pending-window-in-days ≥ 7`, literal `PERMANENTLY DELETE <key-id>` confirmation), outstanding-grants pre-flight, `Principal: *` widening `put-key-policy` guard, `delete-custom-key-store` requires no `Enabled` CMKs; **`Plaintext` and `CiphertextBlob` never logged** (masked to `***<len>` and first16+last4 respectively) |
+
+### 11.12 See also
+
+- [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md) — full GCL specification
+- [`aws-ec2-ops/references/rubric.md`](aws-ec2-ops/references/rubric.md) — pilot rubric instance
+- [`aws-ec2-ops/references/prompt-templates.md`](aws-ec2-ops/references/prompt-templates.md) — pilot G/C/O skeletons
+- [`aws-iam-ops/references/rubric.md`](aws-iam-ops/references/rubric.md) — second pilot rubric instance
+- [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md) — second pilot G/C/O skeletons
+- [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md) — third pilot rubric instance
+- [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md) — third pilot G/C/O skeletons
+- Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)

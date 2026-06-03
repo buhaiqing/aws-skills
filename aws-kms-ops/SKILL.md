@@ -16,10 +16,18 @@ compatibility: >-
   to KMS and CloudWatch endpoints.
 metadata:
   author: aws
-  version: "2.0.0"
-  last_updated: "2026-05-29"
+  version: "2.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: true
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -71,7 +79,7 @@ Operational runbook for AWS KMS — key lifecycle, encryption, grants, policies,
 - RDS ops → `aws-rds-ops` (database encryption)
 - CloudTrail ops → `aws-cloudtrail-ops` (trail encryption)
 
-## Placeholder Convention
+## Variable Convention
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
@@ -324,3 +332,72 @@ Auto-heal **downgrades** to AI_ASSIST or MANUAL when:
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+## Quality Gate (GCL)
+
+> This skill is the **Phase 1 GCL pilot** (2026-06-04, third rollout after
+> `aws-ec2-ops` and `aws-iam-ops`). Every execution of `aws-kms-ops` MUST
+> be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value | Source |
+|---|---|---|
+| Class | `required` | `gcl-spec.md` §10 (pilot) |
+| `max_iterations` | `2` | `gcl-spec.md` §10 (Phase 1 default) |
+| Rubric | `references/rubric.md` (v1) | this skill |
+| Prompts | `references/prompt-templates.md` (v1) | this skill |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
+
+### Per-operation gating
+
+The Orchestrator applies GCL on every execution. The following operations
+are **destructive** and require `{{user.safety_confirm}}` in the trace
+(exact format `confirm=<OPERATION> <resource-id>`):
+
+- `schedule-key-deletion` — **IRREVERSIBLE**; user must type
+  `PERMANENTLY DELETE <key-id-or-arn>` to proceed (per Safety Gate above)
+- `cancel-key-deletion` — recovers a key in `PendingDeletion` state; high
+  blast radius, confirm
+- `disable-key` — can be auto-healed later; still requires confirmation
+  when triggered by an explicit user request (not by [AUTO_HEAL])
+- `delete-imported-key-material` — for asymmetric CMKs with imported
+  material; cannot be recovered after delete
+- `delete-custom-key-store` — destroys the entire custom key store
+- `put-key-policy` — when the new policy widens permissions (added
+  `Allow` statements or removed `Deny`); treat as destructive
+- `revoke-grant` — when the grant is the only path for a dependent
+  service; pre-flight required
+- `retire-grant` — same as revoke for active grants
+
+Non-destructive operations (`create-key`, `create-alias`, `enable-key`,
+`enable-key-rotation`, `encrypt`, `decrypt`, `generate-data-key`,
+`describe-key`, `list-keys`, `list-grants`, `list-aliases`) still flow
+through GCL with `Safety` scored against routine guard rules only.
+
+### AWS-specific rules in force
+
+This skill's rubric instantiates the repo-wide AWS rules from
+`gcl-spec.md` §8. The ones most relevant to KMS:
+
+- **A4** — `schedule-key-deletion` with `--pending-window-in-days < 7`
+  → **Safety = 0 → ABORT**. AWS enforces the floor; rubric demands
+  user-confirmed intent before the call is even attempted.
+- **A9** — `Plaintext` (from `decrypt` / `generate-data-key`),
+  `CiphertextBlob` values, or any value of `{{env.AWS_SECRET_ACCESS_KEY}}`
+  MUST NOT appear in the trace. Mask to `***<len>` only.
+- **A10** — `aws sts get-caller-identity` MUST be the first command in
+  trace to capture identity provenance.
+- **A7** — `--region` must match `{{user.region}}` or
+  `{{env.AWS_DEFAULT_REGION}}`. KMS keys are regional; cross-region
+  alias is not allowed.
+- **A8** — `KeyId` / `Alias` / `GrantId` in the request MUST be echoed
+  from a `describe-key` / `list-aliases` / `list-grants` lookup.
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric + KMS safety
+  special cases (irreversible `schedule-key-deletion`, plaintext
+  never logged, custom key store destruction, widening `put-key-policy`)
+- `references/prompt-templates.md` — Generator / Critic / Orchestrator
+  skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults

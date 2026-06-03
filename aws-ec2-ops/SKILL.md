@@ -8,17 +8,24 @@ description: >-
   state and health, even if they don't explicitly say "EC2" and instead say
   "spin up a server", "create a VM", "launch an instance", "manage my cloud
   compute resources", or "provision reserved capacity".
----
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to EC2 endpoints.
 metadata:
   author: aws
-  version: "1.2.0"
-  last_updated: "2026-05-31"
+  version: "1.3.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: true
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -756,3 +763,50 @@ Trigger: CPUUtilization steadily increasing over 7 days
 | EC2 metrics for LB capacity | `aws-cloudwatch-ops` (FORECAST) |
 | EC2 config change audit | `aws-cloudtrail-ops` (CloudTrail) |
 | SSM RunCommand for diagnostics | `aws-ssm-ops` (SSM RunCommand) |
+## Quality Gate (GCL)
+
+> This skill is the **Phase 1 GCL pilot** (2026-06-04). Every execution of
+> `aws-ec2-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value | Source |
+|---|---|---|
+| Class | `required` | `gcl-spec.md` §10 (pilot) |
+| `max_iterations` | `2` | `gcl-spec.md` §10 (Phase 1 default) |
+| Rubric | `references/rubric.md` (v1) | this skill |
+| Prompts | `references/prompt-templates.md` (v1) | this skill |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
+
+### Per-operation gating
+
+The Orchestrator applies GCL on every execution. The following operations
+are **destructive** and require `{{user.safety_confirm}}` in the trace
+(exact format `confirm=<OPERATION> <resource-id>`):
+
+- `terminate-instances`
+- `delete-key-pair`
+- `deregister-image`
+- `detach-volume` (when `--force` is used)
+- `modify-instance-attribute` (when changing `InstanceType` or `DisableApiStop` on a running instance)
+
+Non-destructive operations (`describe-instances`, `start-instances`,
+`run-instances` with idempotency token) still flow through GCL but with
+`Safety` dim scored against routine guard rules only.
+
+### AWS-specific rules in force
+
+This skill's rubric instantiates the repo-wide AWS rules from
+`gcl-spec.md` §8. The ones most relevant to EC2:
+
+- **A1** — `terminate-instances` requires `--no-dry-run` confirmation in trace
+- **A7** — `--region` must match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+- **A8** — Resource id in request must be echoed from a `describe-instances` lookup
+- **A9** — `KeyMaterial` / `UserData` credentials MUST NOT appear in trace
+- **A10** — `aws sts get-caller-identity` MUST be the first command in trace
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric + safety special cases
+- `references/prompt-templates.md` — Generator / Critic / Orchestrator skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults

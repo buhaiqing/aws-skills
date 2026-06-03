@@ -14,10 +14,18 @@ compatibility: >-
   to IAM endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: true
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -234,3 +242,64 @@ aws iam list-users --output json
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+## Quality Gate (GCL)
+
+> This skill is the **Phase 1 GCL pilot** (2026-06-04, second rollout after
+> `aws-ec2-ops`). Every execution of `aws-iam-ops` MUST be wrapped by the
+> Generator-Critic-Loop defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value | Source |
+|---|---|---|
+| Class | `required` | `gcl-spec.md` §10 (pilot) |
+| `max_iterations` | `2` | `gcl-spec.md` §10 (Phase 1 default) |
+| Rubric | `references/rubric.md` (v1) | this skill |
+| Prompts | `references/prompt-templates.md` (v1) | this skill |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
+
+### Per-operation gating
+
+The Orchestrator applies GCL on every execution. The following operations
+are **destructive** and require `{{user.safety_confirm}}` in the trace
+(exact format `confirm=<OPERATION> <resource-name>`):
+
+- `delete-user` (after detach-policies + delete-keys + remove-from-groups pre-flight)
+- `delete-access-key`
+- `delete-login-profile`
+- `delete-signing-certificate`
+- `delete-ssh-public-key`
+- `delete-service-specific-credential`
+- `detach-user-policy` / `detach-role-policy` / `detach-group-policy`
+- `delete-role` (after detach-policies + delete-inline-policies pre-flight)
+- `delete-policy` (after detach from all entities pre-flight)
+- `delete-group` (after remove-users pre-flight)
+- `delete-instance-profile` (after remove-roles pre-flight)
+- `attach-user-policy` / `attach-role-policy` — when target policy contains
+  `*:*` or `AdministratorAccess` (see Safety special cases)
+
+Non-destructive operations (`list-*`, `get-*`, `create-user`, `create-role`
+without `*:*` policy) still flow through GCL with `Safety` scored against
+routine guard rules only.
+
+### AWS-specific rules in force
+
+This skill's rubric instantiates the repo-wide AWS rules from
+`gcl-spec.md` §8. The ones most relevant to IAM:
+
+- **A9** — `SecretAccessKey` MUST NOT appear anywhere in the trace
+  (mask with `***` and key id suffix only). This is a **Safety=0 auto-fail**.
+- **A10** — `aws sts get-caller-identity` MUST be the first command in trace
+  to capture identity provenance
+- **A8** — `UserName` / `RoleName` / `PolicyArn` in the request MUST be
+  echoed back from a `get-*` lookup
+- **A7** — `--region` must match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+  (IAM is global; `--region us-east-1` is the canonical choice)
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric + IAM safety
+  special cases (`*:*` policy guard, root-account key refusal, `Principal: *`
+  trust policy guard, attached-policies pre-flight for `delete-user`)
+- `references/prompt-templates.md` — Generator / Critic / Orchestrator
+  skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults

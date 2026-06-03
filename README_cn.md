@@ -341,10 +341,10 @@ aws sts get-caller-identity --output json
 | 技能 | 服务 | 状态 |
 |------|------|------|
 | aws-skill-generator | Meta Skill | ✅ 完成 |
-| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 |
+| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 · **GCL 试点 v1.3.0** |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 |
-| aws-iam-ops | IAM (身份管理) | ✅ 完成 |
+| aws-iam-ops | IAM (身份管理) | ✅ 完成 · **GCL 试点 v1.1.0** |
 | aws-elb-ops | ELB (负载均衡) | ✅ 完成 |
 | aws-eks-ops | EKS (Kubernetes) | ✅ 完成 |
 | aws-lambda-ops | Lambda (函数计算) | ✅ 完成 |
@@ -353,13 +353,31 @@ aws sts get-caller-identity --output json
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 |
-| aws-kms-ops | KMS (加密) | ✅ 完成 |
+| aws-kms-ops | KMS (加密) | ✅ 完成 · **GCL 试点 v2.1.0** |
 | aws-route53-ops | Route53 (DNS) | ✅ 完成 |
 | aws-secretsmanager-ops | Secrets Manager | ✅ 完成 |
 | aws-sqs-ops | SQS (消息队列) | ✅ 完成 |
 | aws-sns-ops | SNS (通知) | ✅ 完成 |
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 |
 | aws-stepfunctions-ops | Step Functions | ✅ 完成 |
+
+## 质量门 (GCL)
+
+本仓库在所有高副作用技能执行中采用 **Generator-Critic-Loop (GCL)** 对抗式质量门。完整规范位于
+[`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
+顶层索引位于 `AGENTS.md` §11。
+
+- **Phase 1 试点 (2026-06-04):** `aws-ec2-ops`、`aws-iam-ops` 与
+  `aws-kms-ops` — 见
+  [`aws-ec2-ops/references/rubric.md`](aws-ec2-ops/references/rubric.md)、
+  [`aws-ec2-ops/references/prompt-templates.md`](aws-ec2-ops/references/prompt-templates.md)、
+  [`aws-iam-ops/references/rubric.md`](aws-iam-ops/references/rubric.md)、
+  [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md)、
+  [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md)、
+  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md)。
+- **5 维度评分** (0 / 0.5 / 1): 正确性、安全性、幂等性、可追溯性、规范合规性。**Safety = 0 → 立即 ABORT。**
+- **跟踪路径:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored)。
+- **推广计划:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` 试点已交付；剩余 `required` 技能见 `AGENTS.md` §11.5 Per-Skill Defaults 表。
 
 ## 参考
 
