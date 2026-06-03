@@ -342,7 +342,7 @@ aws sts get-caller-identity --output json
 |------|------|------|
 | aws-skill-generator | Meta Skill | ✅ Complete |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete |
-| aws-s3-ops | S3 (Object Storage) | ✅ Complete |
+| aws-s3-ops | S3 (Object Storage) | ✅ Complete · **GCL pilot v1.1.0** |
 | aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete · **GCL pilot v1.1.0** |
 | aws-elb-ops | ELB (Load Balancing) | ✅ Complete |
@@ -467,20 +467,22 @@ gate on every high-side-effect skill execution. Full specification lives in
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md);
 top-level index in `AGENTS.md` §11.
 
-- **Phase 1 pilot (2026-06-04):** `aws-ec2-ops`, `aws-iam-ops`, and
-  `aws-kms-ops` — see
+- **Phase 1 pilot (2026-06-04):** `aws-ec2-ops`, `aws-iam-ops`,
+  `aws-kms-ops`, and `aws-s3-ops` — see
   [`aws-ec2-ops/references/rubric.md`](aws-ec2-ops/references/rubric.md),
   [`aws-ec2-ops/references/prompt-templates.md`](aws-ec2-ops/references/prompt-templates.md),
   [`aws-iam-ops/references/rubric.md`](aws-iam-ops/references/rubric.md),
   [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md),
   [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md),
-  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md).
+  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md),
+  [`aws-s3-ops/references/rubric.md`](aws-s3-ops/references/rubric.md),
+  [`aws-s3-ops/references/prompt-templates.md`](aws-s3-ops/references/prompt-templates.md).
 - **5-dimension rubric** (0 / 0.5 / 1): Correctness, Safety, Idempotency,
   Traceability, Spec Compliance. **Safety = 0 → ABORT.**
 - **Trace path:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored).
-- **Rollout plan:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` pilots
-  shipped; remaining `required` skills per `AGENTS.md` §11.5 Per-Skill
-  Defaults table.
+- **Rollout plan:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` +
+  `aws-s3-ops` pilots shipped; remaining `required` skills per
+  `AGENTS.md` §11.5 Per-Skill Defaults table.
 
 ## Still Needs Enhancement
 
@@ -494,7 +496,7 @@ top-level index in `AGENTS.md` §11.
 | 6 | ✅ Multi-region AIOps | Done | Cross-region health/latency/failover in aws-route53-ops/references/ |
 | 7 | ✅ Feedback loop persistence | Done | CloudWatch Logs feedback storage in aws-cloudwatch-ops/references/ |
 | 8 | ✅ SLA breach escalation | Done | PagerDuty/Jira integration in aws-elb-ops/references/ |
-| 9 | 🔄 GCL rollout Phase 1 | In progress | `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` pilots shipped; next: `aws-s3-ops` / `aws-rds-ops` |
+| 9 | 🔄 GCL rollout Phase 1 | In progress | `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` + `aws-s3-ops` pilots shipped; next: `aws-rds-ops` / `aws-secretsmanager-ops` |
 | 10 | 🔄 GCL runner script | Planned | `scripts/gcl_runner.py` Orchestrator (Phase 2) |
 
 ## License

@@ -342,7 +342,7 @@ aws sts get-caller-identity --output json
 |------|------|------|
 | aws-skill-generator | Meta Skill | ✅ 完成 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 · **GCL 试点 v1.3.0** |
-| aws-s3-ops | S3 (对象存储) | ✅ 完成 |
+| aws-s3-ops | S3 (对象存储) | ✅ 完成 · **GCL 试点 v1.1.0** |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 · **GCL 试点 v1.1.0** |
 | aws-elb-ops | ELB (负载均衡) | ✅ 完成 |
@@ -367,17 +367,21 @@ aws sts get-caller-identity --output json
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
 顶层索引位于 `AGENTS.md` §11。
 
-- **Phase 1 试点 (2026-06-04):** `aws-ec2-ops`、`aws-iam-ops` 与
-  `aws-kms-ops` — 见
+- **Phase 1 试点 (2026-06-04):** `aws-ec2-ops`、`aws-iam-ops`、
+  `aws-kms-ops` 与 `aws-s3-ops` — 见
   [`aws-ec2-ops/references/rubric.md`](aws-ec2-ops/references/rubric.md)、
   [`aws-ec2-ops/references/prompt-templates.md`](aws-ec2-ops/references/prompt-templates.md)、
   [`aws-iam-ops/references/rubric.md`](aws-iam-ops/references/rubric.md)、
   [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md)、
   [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md)、
-  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md)。
+  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md)、
+  [`aws-s3-ops/references/rubric.md`](aws-s3-ops/references/rubric.md)、
+  [`aws-s3-ops/references/prompt-templates.md`](aws-s3-ops/references/prompt-templates.md)。
 - **5 维度评分** (0 / 0.5 / 1): 正确性、安全性、幂等性、可追溯性、规范合规性。**Safety = 0 → 立即 ABORT。**
 - **跟踪路径:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored)。
-- **推广计划:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` 试点已交付；剩余 `required` 技能见 `AGENTS.md` §11.5 Per-Skill Defaults 表。
+- **推广计划:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` +
+  `aws-s3-ops` 试点已交付；剩余 `required` 技能见 `AGENTS.md` §11.5
+  Per-Skill Defaults 表。
 
 ## 参考
 

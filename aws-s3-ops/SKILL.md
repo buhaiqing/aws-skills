@@ -10,17 +10,24 @@ description: >-
   "S3" and instead say "store files in the cloud", "upload to object storage",
   "configure bucket access", "set up static website hosting", "manage file
   storage in AWS", or "configure cross-origin resource sharing for S3".
----
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
   to S3 endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-06-04"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: true
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -216,3 +223,80 @@ aws s3api list-objects-v2 \
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+## Quality Gate (GCL)
+
+> This skill is the **Phase 1 GCL pilot** (2026-06-04, fourth rollout
+> after `aws-ec2-ops`, `aws-iam-ops`, and `aws-kms-ops`). Every execution
+> of `aws-s3-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value | Source |
+|---|---|---|
+| Class | `required` | `gcl-spec.md` §10 (pilot) |
+| `max_iterations` | `2` | `gcl-spec.md` §10 (Phase 1 default) |
+| Rubric | `references/rubric.md` (v1) | this skill |
+| Prompts | `references/prompt-templates.md` (v1) | this skill |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
+
+### Per-operation gating
+
+The Orchestrator applies GCL on every execution. The following operations
+are **destructive** and require `{{user.safety_confirm}}` in the trace
+(exact format `confirm=<OPERATION> <bucket-or-arn>`):
+
+- `delete-bucket` — must be empty first; if Versioning=Enabled, must also
+  `delete-object-versions` (rule A2)
+- `delete-objects` (batch) — `Objects` array MUST be non-empty and bounded
+  (rule A6)
+- `delete-object` (single) — confirmation required
+- `aws s3 rm --recursive` — treated as destructive; pre-flight MUST print
+  the object count and total size for user confirmation
+- `put-bucket-lifecycle-configuration` with `Expiration.Days < 30` —
+  treated as destructive (premature data expiry)
+- `put-bucket-policy` that **widens public access** (adds
+  `Principal: "*"` with `Effect: Allow` on `s3:GetObject` / `s3:*`) —
+  treated as destructive, same family as IAM `Principal: *` trust policy
+- `put-bucket-acl` / `put-object-acl` to `public-read` or `public-read-write` —
+  treated as destructive
+- `delete-bucket-website` / `delete-bucket-cors` /
+  `delete-bucket-policy` / `delete-bucket-replication` /
+  `delete-bucket-encryption` — configuration removal is destructive when
+  the bucket serves production traffic
+- `abort-multipart-upload` — only destructive for very large uploads with
+  no resume; confirm
+
+Non-destructive operations (`list-buckets`, `list-objects`,
+`head-object`, `get-object`, `create-bucket`, `put-object` with
+single-key idempotency) still flow through GCL with `Safety` scored
+against routine guard rules only.
+
+### AWS-specific rules in force
+
+This skill's rubric instantiates the repo-wide AWS rules from
+`gcl-spec.md` §8. The ones most relevant to S3:
+
+- **A2** — `delete-bucket` on a `Versioning=Enabled` bucket without
+  prior `delete-object-versions` → **Safety = 0 → ABORT**
+- **A6** — `delete-objects` with empty `Objects` array or wildcard
+  patterns → **Correctness = 0 → ABORT**
+- **A7** — `--region` must match `{{user.region}}` or
+  `{{env.AWS_DEFAULT_REGION}}`. S3 bucket names are globally unique but
+  the API call is regional; mismatch is silently wrong.
+- **A8** — `Bucket` name in the request MUST be echoed from a
+  `head-bucket` or `list-buckets` lookup
+- **A9** — S3 does not return secrets, but `aws s3 cp` of a
+  `.env` / `credentials` / `*.pem` file would expose secrets in the
+  trace. Rubric refuses `--exclude` patterns that don't cover these.
+- **A10** — `aws sts get-caller-identity` MUST be the first command in
+  trace to capture identity provenance
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric + S3 safety
+  special cases (Versioned bucket guard, public-access widening
+  detection, `--recursive` count confirmation, `delete-objects` empty
+  array refusal)
+- `references/prompt-templates.md` — Generator / Critic / Orchestrator
+  skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults

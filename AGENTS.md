@@ -200,7 +200,7 @@ total score. Full rules in spec §3.
 | `aws-ec2-ops` | **required (pilot)** | 2 | `terminate-instances`, `delete-key-pair`, `deregister-image`, `detach-volume` |
 | `aws-iam-ops` | **required (pilot)** | 2 | `delete-user`, `detach-user-policy`, `delete-access-key`; `*:*` policy guard |
 | `aws-kms-ops` | **required (pilot)** | 2 | `schedule-key-deletion` is irreversible; `--pending-window-in-days ≥ 7` |
-| `aws-s3-ops` | **required** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal) |
+| `aws-s3-ops` | **required (pilot)** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal) |
 | `aws-rds-ops` | **required** | 2 | `delete-db-instance` (final-snapshot guard for prod) |
 | `aws-lambda-ops` | **required** | 2 | `delete-function` (irreversible), `delete-function-concurrency` |
 | `aws-dynamodb-ops` | **required** | 2 | `delete-table` (data loss), `update-table` (throughput) |
@@ -269,9 +269,10 @@ Codified in `gcl-spec.md` §8. Highlights:
 - **Phase 1 (in progress)** — spec + this index shipped; pilots on
   **`aws-ec2-ops`** (compute, destructive workload),
   **`aws-iam-ops`** (identity, secret-handling + wildcard-policy guards),
-  and **`aws-kms-ops`** (encryption, irreversible deletion + plaintext
-  masking). Roll forward to remaining `required` skills one at a time
-  (see §11.5 table).
+  **`aws-kms-ops`** (encryption, irreversible deletion + plaintext
+  masking), and **`aws-s3-ops`** (storage, Versioned-bucket guard +
+  public-access widening + `--recursive` rm count confirmation). Roll
+  forward to remaining `required` skills one at a time (see §11.5 table).
 - **Phase 2** — add `scripts/gcl_runner.py` as a reusable Orchestrator
   (invokes G, then C in isolated context, persists trace, enforces
   termination). Independent of any specific agent runtime.
@@ -288,6 +289,7 @@ Codified in `gcl-spec.md` §8. Highlights:
 | 1.0.0 | 2026-06-04 | Initial GCL specification added (`aws-skill-generator/references/gcl-spec.md`) and `AGENTS.md` §11 index; pilot scoped to **`aws-ec2-ops`** with `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); Per-Skill Defaults table covers all 22 existing skills |
 | 1.1.0 | 2026-06-04 | Second GCL pilot on **`aws-iam-ops`** (v1.1.0) — added `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); IAM-specific safety rules for `*:*` / `AdministratorAccess` attach, root-account `create-access-key` refusal, `Principal: *` trust policy guard, attached-policies pre-flight for `delete-user`, `SecretAccessKey` never logged |
 | 1.2.0 | 2026-06-04 | Third GCL pilot on **`aws-kms-ops`** (v2.1.0) — added `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); KMS-specific safety rules for irreversible `schedule-key-deletion` (`--pending-window-in-days ≥ 7`, literal `PERMANENTLY DELETE <key-id>` confirmation), outstanding-grants pre-flight, `Principal: *` widening `put-key-policy` guard, `delete-custom-key-store` requires no `Enabled` CMKs; **`Plaintext` and `CiphertextBlob` never logged** (masked to `***<len>` and first16+last4 respectively) |
+| 1.3.0 | 2026-06-04 | Fourth GCL pilot on **`aws-s3-ops`** (v1.1.0) — added `references/rubric.md` (v1) and `references/prompt-templates.md` (v1); S3-specific safety rules for Versioned `delete-bucket` (rule A2 — must `list-object-versions` + `delete-object-versions` first), `delete-objects` empty-array refusal (rule A6), `aws s3 rm --recursive` count-and-bytes confirmation, `Principal: *` widening `put-bucket-policy` guard, public canned ACL refusal, MFA-Delete bucket confirmation, sensitive-file upload (`.env`/`*.pem`/`*.key`) gated + content masked (rule A9) |
 
 ### 11.12 See also
 
@@ -298,4 +300,6 @@ Codified in `gcl-spec.md` §8. Highlights:
 - [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md) — second pilot G/C/O skeletons
 - [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md) — third pilot rubric instance
 - [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md) — third pilot G/C/O skeletons
+- [`aws-s3-ops/references/rubric.md`](aws-s3-ops/references/rubric.md) — fourth pilot rubric instance
+- [`aws-s3-ops/references/prompt-templates.md`](aws-s3-ops/references/prompt-templates.md) — fourth pilot G/C/O skeletons
 - Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)
