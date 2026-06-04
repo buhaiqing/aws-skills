@@ -226,6 +226,12 @@ These rules come up often enough to be standardised repo-wide. Each skill's
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL specification added (`aws-skill-generator/references/gcl-spec.md`) — pilot scoped to `aws-ec2-ops` |
+| 1.1.0 | 2026-06-04 | Second GCL pilot on `aws-iam-ops` (v1.1.0) |
+| 1.2.0 | 2026-06-04 | Third GCL pilot on `aws-kms-ops` (v2.1.0) |
+| 1.3.0 | 2026-06-04 | Fourth GCL pilot on `aws-s3-ops` (v1.1.0) |
+| 1.4.0 | 2026-06-04 | Group 1 GCL rollout: `aws-rds-ops`, `aws-lambda-ops`, `aws-dynamodb-ops` |
+| 1.5.0 | 2026-06-04 | Group 2 GCL rollout: `aws-vpc-ops`, `aws-route53-ops`, `aws-cloudfront-ops`, `aws-elb-ops` |
+| 1.6.0 | 2026-06-04 | Group 3 GCL rollout (complete): `aws-elasticache-ops`, `aws-waf-ops`, `aws-secretsmanager-ops`, `aws-ssm-ops`, `aws-acm-ops`, `aws-eks-ops`, `aws-sqs-ops`, `aws-sns-ops`, `aws-stepfunctions-ops`, `aws-cloudwatch-ops`, `aws-cloudtrail-ops` — all 22 skills now have complete GCL implementation |
 
 ## 12. See also
 

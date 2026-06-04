@@ -1,24 +1,30 @@
 ---
 name: aws-stepfunctions-ops
-description: >-
-  Use this skill when managing AWS Step Functions resources, creating/deleting
-  state machines, starting/stopping executions, describing execution history,
-  or configuring error handling; even if the user doesn't explicitly mention
-  "Step Functions" or "state machine" but needs workflow orchestration.
+description: Use this skill when managing AWS Step Functions resources, creating/deleting
+  state machines, starting/stopping executions, describing execution history, or configuring
+  error handling; even if the user doesn't explicitly mention "Step Functions" or
+  "state machine" but needs workflow orchestration.
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with Step
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with Step
   Functions permissions.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: 1.1.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 
 # AWS Step Functions Ops Skill
@@ -106,6 +112,35 @@ Before proceeding:
 - `aws-lambda-ops` - Lambda functions
 - `aws-iam-ops` - IAM roles
 - `aws-cloudwatch-ops` - Metrics
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-stepfunctions-ops` MUST be wrapped by the Generator-Critic-Loop
+> defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-state-machine` — IRREVERSIBLE; removes all executions and history; pre-flight `list-executions` for running executions; confirm `DELETE_SM <sm-name>`
+- `stop-execution` — terminates a running execution; confirm `STOP_EXECUTION <execution-arn>`
+- `update-state-machine` — changing definition could break running executions
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (stateMachineArn echoed from `describe-state-machine`), A9 (definition/input secrets masked), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

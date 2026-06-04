@@ -367,21 +367,19 @@ aws sts get-caller-identity --output json
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
 顶层索引位于 `AGENTS.md` §11。
 
-- **Phase 1 试点 (2026-06-04):** `aws-ec2-ops`、`aws-iam-ops`、
-  `aws-kms-ops` 与 `aws-s3-ops` — 见
-  [`aws-ec2-ops/references/rubric.md`](aws-ec2-ops/references/rubric.md)、
-  [`aws-ec2-ops/references/prompt-templates.md`](aws-ec2-ops/references/prompt-templates.md)、
-  [`aws-iam-ops/references/rubric.md`](aws-iam-ops/references/rubric.md)、
-  [`aws-iam-ops/references/prompt-templates.md`](aws-iam-ops/references/prompt-templates.md)、
-  [`aws-kms-ops/references/rubric.md`](aws-kms-ops/references/rubric.md)、
-  [`aws-kms-ops/references/prompt-templates.md`](aws-kms-ops/references/prompt-templates.md)、
-  [`aws-s3-ops/references/rubric.md`](aws-s3-ops/references/rubric.md)、
-  [`aws-s3-ops/references/prompt-templates.md`](aws-s3-ops/references/prompt-templates.md)。
+全部 **22 个技能** 现已完成 GCL 实现：
+
+| 阶段 | 技能 | 类别 | 日期 |
+|---|---|---|---|
+| **试点** | `aws-ec2-ops`、`aws-iam-ops`、`aws-kms-ops`、`aws-s3-ops` | required | 2026-06-04 |
+| **Group 1** | `aws-rds-ops`、`aws-lambda-ops`、`aws-dynamodb-ops` | required | 2026-06-04 |
+| **Group 2** | `aws-vpc-ops`、`aws-route53-ops`、`aws-cloudfront-ops`、`aws-elb-ops` | required/recommended | 2026-06-04 |
+| **Group 3** | `aws-elasticache-ops`、`aws-waf-ops`、`aws-secretsmanager-ops`、`aws-ssm-ops`、`aws-acm-ops`、`aws-eks-ops`、`aws-sqs-ops`、`aws-sns-ops`、`aws-stepfunctions-ops`、`aws-cloudwatch-ops`、`aws-cloudtrail-ops` | required/recommended/optional | 2026-06-04 |
+
 - **5 维度评分** (0 / 0.5 / 1): 正确性、安全性、幂等性、可追溯性、规范合规性。**Safety = 0 → 立即 ABORT。**
 - **跟踪路径:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored)。
-- **推广计划:** `aws-ec2-ops` + `aws-iam-ops` + `aws-kms-ops` +
-  `aws-s3-ops` 试点已交付；剩余 `required` 技能见 `AGENTS.md` §11.5
-  Per-Skill Defaults 表。
+- **推广完成:** 所有 `required`、`recommended`、`optional` 类别技能（见 `AGENTS.md` §11.5 Per-Skill Defaults 表）均已配备 rubric.md、prompt-templates.md 及 SKILL.md 中的 `## Quality Gate (GCL)` 章节。
+- **下步计划:** Phase 2 — 可复用 `scripts/gcl_runner.py` Orchestrator（计划中）。
 
 ## 参考
 

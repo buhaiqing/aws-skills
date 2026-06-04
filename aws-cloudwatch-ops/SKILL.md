@@ -20,6 +20,14 @@ metadata:
     - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
     - AWS_PROFILE
+  gcl:
+    enabled: true
+    class: recommended
+    max_iter: 3
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
   cross_skill_deps:
     - aws-elb-ops             # ELB metrics, alarm templates
     - aws-ec2-ops              # EC2 metric correlation
@@ -487,6 +495,35 @@ aws cloudwatch put-metric-alarm \
   }
 }
 ```
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, recommended). Every execution of
+> `aws-cloudwatch-ops` MUST be wrapped by the Generator-Critic-Loop
+> defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `recommended` |
+| `max_iterations` | `3` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-alarms` — IRREVERSIBLE; silent-failure guard (warn if alarm has no actions); confirm `DELETE_ALARMS <names>`
+- `delete-insight-rules` — removes collected contributor data permanently
+- `put-retention-policy` — logs older than retention period permanently deleted; confirm with user
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (alarm/metric name echoed from `describe-alarms` / `list-metrics`), A9 (metric data / log content secrets masked), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

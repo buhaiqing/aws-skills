@@ -225,3 +225,6 @@ __marimo__/
 # Holds sanitized execution traces for the GCL quality gate pilot.
 # Retention is 30 days per aws-skill-generator/references/gcl-spec.md §6.
 audit-results/
+
+# Agent runtime state
+.omo/

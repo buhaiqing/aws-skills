@@ -21,6 +21,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS ElastiCache Operations Skill
 
@@ -155,6 +163,36 @@ aws elasticache delete-cache-cluster \
 | Clustering | Yes (Sharding) | No |
 | Multi-thread | No | Yes |
 | Transactions/Pub/Sub | Yes | No |
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-elasticache-ops` MUST be wrapped by the Generator-Critic-Loop
+> defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-replication-group` — data loss; recommend `--final-snapshot-identifier`; confirm `DELETE_RG <group-id>`
+- `delete-cache-cluster` — data loss; recommend `--final-snapshot-identifier`; confirm `DELETE_CLUSTER <cluster-id>`
+- `delete-snapshot` — snapshot data permanently lost; confirm with user
+- `modify-replication-group` with `--apply-immediately` — can cause failover; confirm
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource ID echoed from `describe-*`), A9 (no secrets in trace), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

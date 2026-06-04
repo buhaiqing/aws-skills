@@ -1,24 +1,30 @@
 ---
 name: aws-sqs-ops
-description: >-
-  Use this skill when managing AWS SQS resources, creating/deleting queues,
-  sending/receiving messages, configuring DLQs, setting queue attributes, or
-  integrating with Lambda triggers; even if the user doesn't explicitly mention
-  "SQS" or "queue" but needs message queuing functionality.
+description: Use this skill when managing AWS SQS resources, creating/deleting queues,
+  sending/receiving messages, configuring DLQs, setting queue attributes, or integrating
+  with Lambda triggers; even if the user doesn't explicitly mention "SQS" or "queue"
+  but needs message queuing functionality.
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with SQS
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with SQS
   permissions.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-15"
+  version: 1.1.0
+  last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 
 # AWS SQS Ops Skill
@@ -101,6 +107,34 @@ Confirm: Type DELETE {{user.QueueName}} to proceed.
 ⚠️ Purging {{user.QueueName}} will delete all messages immediately. No recovery possible.
 Confirm: Type PURGE {{user.QueueName}} to proceed.
 ```
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-sqs-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-queue` — IRREVERSIBLE; all messages lost; confirm `DELETE_QUEUE <queue-name>`
+- `purge-queue` — all messages deleted immediately; confirm `PURGE_QUEUE <queue-name>`
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (QueueUrl echoed from `get-queue-url`), A9 (MessageBody secrets masked), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

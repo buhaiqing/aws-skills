@@ -23,6 +23,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS Secrets Manager Ops Skill
 
@@ -102,6 +110,34 @@ Confirm: Type DELETE {{user.SecretName}} to proceed.
 - `aws-kms-ops` — Encryption key management
 - `aws-lambda-ops` — Rotation function
 - `aws-iam-ops` — Access policies
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-secretsmanager-ops` MUST be wrapped by the Generator-Critic-Loop
+> defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-secret` — IRREVERSIBLE after recovery window (30 days default). `--force-delete-without-recovery` is immediate — requires `confirm=FORCE_DELETE_SECRET <name>`
+- `put-secret-value` — overwrites version; confirm with user
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (SecretId echoed from `describe-secret` / `list-secrets`), **A9 (SecretString/Binary NEVER in trace — masked to `***<len>` only — this is the most critical rule for this skill)**, A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

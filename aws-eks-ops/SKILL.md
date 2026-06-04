@@ -22,6 +22,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS EKS Operations Skill
 
@@ -115,6 +123,35 @@ Confirm: Type DELETE {{user.nodegroup_name}} to proceed.
 | 1.30 | Stable (recommended) |
 | 1.29 | Supported |
 | 1.28 | Supported |
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-eks-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-cluster` — IRREVERSIBLE; requires sequenced pre-cleanup: list & delete all Fargate profiles → addons → node groups → cluster; confirm `DELETE_CLUSTER <name>`
+- `delete-nodegroup` — terminates all EC2 instances in the nodegroup; confirm `DELETE_NODEGROUP <name>`
+- `update-cluster-version` — version upgrade; confirm with user; only one minor version jump at a time
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (cluster name echoed from `describe-cluster`), A9 (kubeconfig/certificate data masked), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

@@ -25,6 +25,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
   cross_skill_deps:
     - aws-route53-ops       # DNS validation record creation
     - aws-elb-ops            # Certificate binding to HTTPS listeners
@@ -391,6 +399,33 @@ Steps:
 - **Savings**: Using ACM (free) vs purchasing from third-party CA ($50-400/year)
 
 ---
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-acm-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-certificate` — IRREVERSIBLE; MUST pre-flight `describe-certificate` to check `InUseBy` array; warn user about HTTPS breakage; confirm `DELETE_CERT <arn>`
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (CertificateArn echoed from `describe-certificate` / `list-certificates`), A9 (no secrets in domain names or cert data), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

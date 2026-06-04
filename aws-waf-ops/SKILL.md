@@ -29,6 +29,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: required
+    max_iter: 2
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
   cross_skill_deps:
     - aws-elb-ops             # WAF ACL association with ALB
     - aws-cloudfront-ops      # WAF ACL association with CloudFront
@@ -435,6 +443,36 @@ aws cloudwatch get-metric-statistics --namespace AWS/WAFV2 \
 | DDoS Mitigation (AH-08) | `aws-elb-ops` FD-06 → `aws-waf-ops` AH-08 → `aws-cloudwatch-ops` verify |
 | ALB Security Hardening | `aws-elb-ops` create ALB → `aws-waf-ops` create+associate Web ACL |
 | WAF Effectiveness Report | `aws-waf-ops` list rules → `aws-cloudwatch-ops` metrics → `aws-cloudtrail-ops` changes |
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, required). Every execution of
+> `aws-waf-ops` MUST be wrapped by the Generator-Critic-Loop defined in
+> `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `required` |
+| `max_iterations` | `2` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-web-acl` — IRREVERSIBLE; MUST disassociate from all resources first (pre-flight `get-web-acl`); confirm `DELETE_WEB_ACL <name>`
+- `delete-rule-group` — removes custom rule group; check Web ACLs using it
+- `delete-ip-set` / `delete-regex-pattern-set` — removes IP/pattern set; confirm
+- `update-web-acl` when adding blocking rules — treat as destructive; confirm with user
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region; CLOUDFRONT scope requires `us-east-1`), A8 (resource echoed from `get-*`/`list-*`), A9 (no secrets in rules / logging), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 

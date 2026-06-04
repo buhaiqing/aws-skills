@@ -15,6 +15,14 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  gcl:
+    enabled: true
+    class: optional
+    max_iter: 3
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+    pilot: false
 ---
 # AWS CloudTrail Ops Skill
 
@@ -108,6 +116,35 @@ Continue? (yes/no)
 - `aws-kms-ops` — KMS key for trail encryption
 - `aws-iam-ops` — IAM roles for CloudTrail access
 - `aws-cloudwatch-ops` — CloudWatch Logs integration
+
+## Quality Gate (GCL)
+
+> Phase 1 GCL rollout (2026-06-04, optional). Every execution of
+> `aws-cloudtrail-ops` MUST be wrapped by the Generator-Critic-Loop
+> defined in `aws-skill-generator/references/gcl-spec.md`.
+
+| Setting | Value |
+|---|---|
+| Class | `optional` |
+| `max_iterations` | `3` |
+| Rubric | `references/rubric.md` (v1) |
+| Prompts | `references/prompt-templates.md` (v1) |
+| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+
+Destructive ops requiring `{{user.safety_confirm}}` in trace:
+
+- `delete-trail` — SEVERE; stops ALL audit logging; all event history lost; confirm `DELETE_TRAIL <name>`
+- `stop-logging` — audit gap from stop to restart; confirm with user
+- `update-trail` — changing S3 bucket or KMS key could affect log delivery; confirm
+
+Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (TrailName echoed from `describe-trails`), A9 (event data secrets masked), A10 (sts first command).
+
+### See also
+
+- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
+- `references/rubric.md` — this skill's 5-dimension rubric
+- `references/prompt-templates.md` — G/C/O skeletons
+- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
 
 ## Reference Files
 
