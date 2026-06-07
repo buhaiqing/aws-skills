@@ -101,6 +101,92 @@ aws rds failover-db-cluster --db-cluster-identifier {{cluster}} --target-db-inst
 | IOPS saturation (ReadLatency↑) | gp2/gp3 hitting limits | Increase storage (more baseline), switch to io1/io2, scale class |
 | Slow queries | Slow query log / Performance Insights | Add indexes, tune params |
 
+### SQL Slow Query Diagnosis Table
+
+| Pattern | PI Wait Event | CW Log Signal | Root Cause | Recommendation |
+|---------|---------------|---------------|------------|----------------|
+| Full table scan | CPU high | `rows_examined >> rows_sent` | Missing index | `CREATE INDEX idx_<table>_<col> ON <table>(<col>)` |
+| Lock contention | `Lock:RowLockWait` | High `Lock_time` | Long transaction scope | Reduce transaction size; use `NOWAIT`; index FK columns |
+| Disk read storm | `IO:DataFileRead` | High IOPS, no index | Buffer pool insufficient | Increase `innodb_buffer_pool_size`; add covering index |
+| Temp table on disk | CPU + IO | `Created_tmp_disk_tables` > 0 | Sort exceeds `tmp_table_size` | Increase `tmp_table_size` / `max_heap_table_size` |
+| Bad join plan | CPU/IO | Inefficient JOIN | Wrong join order or missing FK index | Add composite index; use STRAIGHT_JOIN; update stats |
+| Sync commit latency | `IO:XactSync` | High commit time | Sync log every transaction | `sync_binlog=0` (risk); batch commits; use SSD |
+| Connection flood | `tcp:connection` | `max_connections` reached | Connection pool leak | Increase `max_connections`; fix app pool; use ProxySQL |
+| Deadlock | `Lock:RowLockWait` | `Deadlock found` | Concurrent conflicting transactions | Retry logic; index order; reduce transaction time |
+| Replica lag | N/A (on replica) | `Seconds_Behind_Master` > 0 | Write-heavy on source; slow replica | Scale replica; parallel replication; optimize source writes |
+| Query timeout | CPU/IO mix | Queries > `long_query_time` | Insufficient instance size or IOPS | Scale class; add IOPS; optimize top SQL |
+
+### Quick Reference: Key Diagnostic Commands
+
+```bash
+# 1. Check if PI enabled
+aws rds describe-db-instances --db-instance-identifier {{id}} --query 'DBInstances[0].{PI:PerformanceInsightsEnabled,Retention:PerformanceInsightsRetentionPeriod,DbiResourceId}'
+
+# 2. Check slow log publish
+aws rds describe-db-instances --db-instance-identifier {{id}} --query 'DBInstances[0].EnabledCloudwatchLogsExports'
+
+# 3. Get DbiResourceId (for PI API)
+aws rds describe-db-instances --db-instance-identifier {{id}} --query 'DBInstances[0].DbiResourceId' --output text
+
+# 4. PI: Top SQL by DB load (last 1h)
+aws pi get-resource-metrics --service-type RDS --identifier <DbiResourceId> \
+  --start-time $(date -u -d '-1 hour' +%s) --end-time $(date -u +%s) \
+  --period-in-seconds 60 \
+  --metric-queries '[{"Metric":"db.sproc_execution_time","GroupBy":{"Group":"db.sql_tokenized","Limit":10}}]'
+
+# 5. PI: Wait event breakdown
+aws pi get-resource-metrics --service-type RDS --identifier <DbiResourceId> \
+  --start-time $(date -u -d '-1 hour' +%s) --end-time $(date -u +%s) \
+  --period-in-seconds 60 \
+  --metric-queries '[{"Metric":"db.sproc_execution_time","GroupBy":{"Group":"db.wait_event","Limit":10}}]'
+
+# 6. CW: Top slow queries from slow log
+aws logs start-query --log-group-name "/aws/rds/instance/{{id}}/slowquery" \
+  --start-time $(date -u -d '-1 hour' +%s) --end-time $(date -u +%s) \
+  --query-string 'fields @timestamp, @message | parse @message /Query_time: (?<qt>\\S+).*Rows_examined: (?<re>\\d+)/ | sort qt desc | limit 20'
+
+# 7. MySQL: Current active queries
+# Connect via mysql client:
+# SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep' ORDER BY TIME DESC;
+
+# 8. PG: Current active queries
+# Connect via psql:
+# SELECT pid, now() - pg_stat_activity.query_start AS duration, query, state
+# FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;
+```
+
+### MySQL Performance Schema Queries (connect to DB)
+```sql
+-- Top queries by total execution time
+SELECT digest_text, count_star, sum_timer_wait / 1000000000000 AS total_sec,
+       avg_timer_wait / 1000000000 AS avg_ms, sum_rows_examined, sum_rows_sent
+FROM performance_schema.events_statements_summary_by_digest
+ORDER BY sum_timer_wait DESC LIMIT 10;
+
+-- Full table scans
+SELECT * FROM sys.schema_unused_indexes;
+SELECT * FROM sys.statements_with_full_table_scans;
+
+-- Index suggestions
+SELECT * FROM sys.schema_index_statistics WHERE rows_selected > 0 ORDER BY rows_selected DESC;
+```
+
+### PostgreSQL Query Diagnostics (connect to DB)
+```sql
+-- Slow queries by total time
+SELECT query, calls, total_exec_time / 1000 AS total_sec,
+       mean_exec_time AS avg_ms, rows, shared_blks_hit, shared_blks_read
+FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 10;
+
+-- Sequential scans (missing indexes)
+SELECT schemaname, relname, seq_scan, seq_tup_read, idx_scan
+FROM pg_stat_user_tables WHERE seq_scan > 1000 ORDER BY seq_scan DESC;
+
+-- Index usage
+SELECT schemaname, relname, indexrelname, idx_scan, idx_tup_read
+FROM pg_stat_user_indexes ORDER BY idx_scan ASC LIMIT 20;
+```
+
 ## Backup/Snapshot Issues
 **Snapshot hanging in `creating`**: Large DB takes time (hours). Check instance IOPS during snapshot. Multi-AZ = faster snapshots.
 **Restore slow**: Large snapshot / small instance class. Use larger class for faster restore.

@@ -1,0 +1,41 @@
+# EventBridge — Example Configuration
+
+x-common-rule: &common-rule
+  state: ENABLED
+  bus: "default"
+
+rules:
+  ec2_state_change:
+    <<: *common-rule
+    rule_name: "ec2-state-change"
+    event_pattern: '{"source": ["aws.ec2"], "detail-type": ["EC2 Instance State-change Notification"]}'
+    target_arn: "arn:aws:lambda:{{env.AWS_ACCOUNT_ID}}:function:ec2-event-handler"
+
+  schedule_backup:
+    <<: *common-rule
+    rule_name: "nightly-backup"
+    schedule_expression: "cron(0 2 * * ? *)"
+    target_arn: "arn:aws:lambda:{{env.AWS_ACCOUNT_ID}}:function:nightly-backup"
+
+schedules:
+  health_check:
+    schedule_name: "health-check"
+    expression: "rate(5 minutes)"
+    target_arn: "arn:aws:lambda:{{env.AWS_ACCOUNT_ID}}:function:health-check"
+    flexible_time_window: {"Mode": "OFF"}
+
+buses:
+  custom_app:
+    bus_name: "{{user.custom_bus_name}}"
+    event_source_name: "my-application"
+
+pipes:
+  sqs_to_lambda:
+    pipe_name: "sqs-to-lambda"
+    source: "arn:aws:sqs:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:my-queue"
+    target: "arn:aws:lambda:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:function:my-handler"
+
+archives:
+  default_bus_archive:
+    archive_name: "default-bus-archive"
+    retention_days: 30

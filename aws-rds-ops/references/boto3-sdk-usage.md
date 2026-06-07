@@ -155,6 +155,116 @@ def handle_rds_error(error):
     raise Exception(f"RDS Error [{code}]: {msg}\nRecovery: {recovery}")
 ```
 
+## Performance Insights (Slow Query Analysis)
+
+```python
+import boto3
+from datetime import datetime, timedelta
+
+rds = boto3.client('rds')
+pi = boto3.client('pi')
+logs = boto3.client('logs')
+
+def get_dbi_resource_id(identifier):
+    """Get the DbiResourceId needed for PI API calls"""
+    resp = rds.describe_db_instances(DBInstanceIdentifier=identifier)
+    return resp['DBInstances'][0]['DbiResourceId']
+
+def enable_performance_insights(identifier, retention=7):
+    rds.modify_db_instance(
+        DBInstanceIdentifier=identifier,
+        EnablePerformanceInsights=True,
+        PerformanceInsightsRetentionPeriod=retention,
+        ApplyImmediately=True
+    )
+
+def enable_slow_query_log(identifier, engine='mysql'):
+    log_type = 'slowquery' if engine.startswith('mysql') or engine.startswith('aurora-mysql') else 'postgresql'
+    rds.modify_db_instance(
+        DBInstanceIdentifier=identifier,
+        CloudwatchLogsExportConfiguration={
+            'EnableLogTypes': [log_type]
+        },
+        ApplyImmediately=True
+    )
+
+def get_top_sql_by_load(dbi_resource_id, hours=1, limit=10, region='us-east-1'):
+    end = datetime.utcnow()
+    start = end - timedelta(hours=hours)
+    return pi.get_resource_metrics(
+        ServiceType='RDS',
+        Identifier=dbi_resource_id,
+        StartTime=int(start.timestamp()),
+        EndTime=int(end.timestamp()),
+        PeriodInSeconds=60,
+        MetricQueries=[{
+            'Metric': 'db.sproc_execution_time',
+            'GroupBy': {'Group': 'db.sql_tokenized', 'Limit': limit}
+        }],
+        PeriodAligned=True
+    )
+
+def get_wait_event_breakdown(dbi_resource_id, hours=1, limit=10, region='us-east-1'):
+    end = datetime.utcnow()
+    start = end - timedelta(hours=hours)
+    return pi.get_resource_metrics(
+        ServiceType='RDS',
+        Identifier=dbi_resource_id,
+        StartTime=int(start.timestamp()),
+        EndTime=int(end.timestamp()),
+        PeriodInSeconds=60,
+        MetricQueries=[{
+            'Metric': 'db.sproc_execution_time',
+            'GroupBy': {'Group': 'db.wait_event', 'Limit': limit}
+        }]
+    )
+
+def get_slow_query_logs_cw(identifier, hours=1, engine='mysql', region='us-east-1'):
+    log_type = 'slowquery' if engine.startswith('mysql') or engine.startswith('aurora-mysql') else 'postgresql'
+    log_group = f"/aws/rds/instance/{identifier}/{log_type}"
+    end = datetime.utcnow()
+    start = end - timedelta(hours=hours)
+
+    query_string = ('fields @timestamp, @message | filter @message like /(?i)(Query_time|# User@Host)/ '
+        '| parse @message /Query_time: (?<query_time>\\S+).*Lock_time: (?<lock_time>\\S+).*'
+        'Rows_sent: (?<rows_sent>\\d+).*Rows_examined: (?<rows_examined>\\d+)/ '
+        '| sort query_time desc | limit 50')
+
+    response = logs.start_query(
+        logGroupNames=[log_group],
+        startTime=int(start.timestamp()),
+        endTime=int(end.timestamp()),
+        queryString=query_string,
+        limit=50
+    )
+    query_id = response['queryId']
+
+    import time
+    for _ in range(10):
+        result = logs.get_query_results(queryId=query_id)
+        if result['status'] == 'Complete':
+            return result['results']
+        time.sleep(2)
+    return None
+
+def get_pi_dimension_breakdown(dbi_resource_id, metric='db.sproc_execution_time',
+                                group='db.user', limit=10):
+    """Get metric breakdown by dimension (user, host, database, etc.)"""
+    end = datetime.utcnow()
+    start = end - timedelta(hours=1)
+    return pi.get_resource_metrics(
+        ServiceType='RDS',
+        Identifier=dbi_resource_id,
+        StartTime=int(start.timestamp()),
+        EndTime=int(end.timestamp()),
+        PeriodInSeconds=60,
+        MetricQueries=[{
+            'Metric': metric,
+            'GroupBy': {'Group': group, 'Limit': limit}
+        }]
+    )
+```
+
 ## Engine Version Discovery
 ```python
 def get_available_engine_versions(engine):

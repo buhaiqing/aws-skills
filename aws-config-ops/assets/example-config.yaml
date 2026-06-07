@@ -1,0 +1,43 @@
+# AWS Config — Example Configuration
+
+x-common: &common
+  recorder_name: "default"
+  recording_group:
+    allSupported: true
+    includeGlobalResourceTypes: true
+
+x-delivery: &delivery
+  delivery_frequency: "TwentyFourHours"  # OneHour | ThreeHours | SixHours | TwelveHours | TwentyFourHours
+
+setup_dev:
+  <<: *common
+  <<: *delivery
+  s3_bucket: "{{user.s3_bucket}}"
+  s3_prefix: "config/dev"
+  region: "{{user.region}}"
+
+setup_prod:
+  <<: *common
+  <<: *delivery
+  s3_bucket: "{{user.s3_bucket}}"
+  s3_prefix: "config/prod"
+  region: "{{user.region}}"
+
+rules:
+  s3_public_read_prohibited:
+    rule_name: "s3-public-read-prohibited"
+    identifier: "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+    resource_types: ["AWS::S3::Bucket"]
+
+  ec2_encryption:
+    rule_name: "ec2-ebs-encryption"
+    identifier: "EC2_EBS_ENCRYPTION_BY_DEFAULT"
+
+  iam_mfa:
+    rule_name: "iam-user-mfa-enabled"
+    identifier: "IAM_USER_MFA_ENABLED"
+
+  restricted_ssh:
+    rule_name: "restricted-ssh"
+    identifier: "INCOMING_SSH_DISABLED"
+    resource_types: ["AWS::EC2::SecurityGroup"]

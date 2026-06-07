@@ -86,6 +86,146 @@ aws rds wait db-instance-deleted --db-instance-identifier {{id}}
 aws rds wait db-snapshot-available --db-snapshot-identifier {{snap}}  # For restore operations
 ```
 
+## SQL Slow Query Analysis
+
+### Enable Performance Insights (on existing instance)
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier {{id}} \
+  --enable-performance-insights \
+  --performance-insights-retention-period 7 \
+  --apply-immediately
+```
+
+### Enable Slow Query Log Publish to CloudWatch
+```bash
+# MySQL / Aurora MySQL
+aws rds modify-db-instance \
+  --db-instance-identifier {{id}} \
+  --cloudwatch-logs-export-configuration '{"EnableLogTypes":["slowquery"]}' \
+  --apply-immediately
+
+# PostgreSQL / Aurora PostgreSQL
+aws rds modify-db-instance \
+  --db-instance-identifier {{id}} \
+  --cloudwatch-logs-export-configuration '{"EnableLogTypes":["postgresql"]}' \
+  --apply-immediately
+```
+
+### Get DbiResourceId (required for Performance Insights API)
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier {{id}} \
+  --query 'DBInstances[0].DbiResourceId' \
+  --output json
+```
+
+### Performance Insights — Top SQL by DB Load
+```bash
+aws pi get-resource-metrics \
+  --service-type RDS \
+  --identifier {{dbi_resource_id}} \
+  --start-time $(date -u -d '-1 hour' +%s) \
+  --end-time $(date -u +%s) \
+  --period-in-seconds 60 \
+  --metric-queries '[{"Metric": "db.sproc_execution_time", "GroupBy": {"Group": "db.sql_tokenized", "Limit": 10}}]' \
+  --region {{region}} \
+  --output json
+```
+
+### Performance Insights — Wait Event Breakdown
+```bash
+aws pi get-resource-metrics \
+  --service-type RDS \
+  --identifier {{dbi_resource_id}} \
+  --start-time $(date -u -d '-1 hour' +%s) \
+  --end-time $(date -u +%s) \
+  --period-in-seconds 60 \
+  --metric-queries '[{"Metric": "db.sproc_execution_time", "GroupBy": {"Group": "db.wait_event", "Limit": 10}}]' \
+  --region {{region}} \
+  --output json
+```
+
+### Performance Insights — Multi-Metric Over Time
+```bash
+aws pi get-resource-metrics \
+  --service-type RDS \
+  --identifier {{dbi_resource_id}} \
+  --start-time $(date -u -d '-6 hours' +%s) \
+  --end-time $(date -u +%s) \
+  --period-in-seconds 300 \
+  --metric-queries '[
+    {"Metric": "db.sproc_execution_time"},
+    {"Metric": "db.cpu"},
+    {"Metric": "db.io"},
+    {"Metric": "db.dbload"}
+  ]' \
+  --region {{region}} \
+  --output json
+```
+
+### List Available PI Dimensions
+```bash
+aws pi list-available-resource-dimensions \
+  --service-type RDS \
+  --identifier {{dbi_resource_id}} \
+  --region {{region}} \
+  --output json
+```
+
+### Query Slow Query Log from CloudWatch (MySQL)
+```bash
+LOG_GROUP="/aws/rds/instance/{{id}}/slowquery"
+aws logs start-query \
+  --log-group-name "$LOG_GROUP" \
+  --start-time $(date -u -d '-1 hour' +%s) \
+  --end-time $(date -u +%s) \
+  --query-string 'fields @timestamp, @message
+    | filter @message like /(?i)(Query_time|# User@Host)/
+    | parse @message /Query_time: (?<query_time>\S+).*Lock_time: (?<lock_time>\S+).*Rows_sent: (?<rows_sent>\d+).*Rows_examined: (?<rows_examined>\d+)/
+    | sort query_time desc
+    | limit 50' \
+  --region {{region}} \
+  --output json
+```
+
+### Query Slow Query Log from CloudWatch (PostgreSQL)
+```bash
+LOG_GROUP="/aws/rds/instance/{{id}}/postgresql"
+aws logs start-query \
+  --log-group-name "$LOG_GROUP" \
+  --start-time $(date -u -d '-1 hour' +%s) \
+  --end-time $(date -u +%s) \
+  --query-string 'fields @timestamp, @message
+    | filter @message like /duration:/
+    | parse @message /duration: (?<duration_ms>[\d.]+) ms/
+    | sort duration_ms desc
+    | limit 50' \
+  --region {{region}} \
+  --output json
+```
+
+### Slow Query Log Parameter Configuration (MySQL)
+```bash
+aws rds modify-db-parameter-group \
+  --db-parameter-group-name {{param_group}} \
+  --parameters '[
+    {"ParameterName":"slow_query_log","ParameterValue":"1","ApplyMethod":"immediate"},
+    {"ParameterName":"long_query_time","ParameterValue":"5","ApplyMethod":"immediate"},
+    {"ParameterName":"log_queries_not_using_indexes","ParameterValue":"1","ApplyMethod":"immediate"}
+  ]'
+```
+
+### Slow Query Log Parameter Configuration (PostgreSQL)
+```bash
+aws rds modify-db-parameter-group \
+  --db-parameter-group-name {{param_group}} \
+  --parameters '[
+    {"ParameterName":"log_min_duration_statement","ParameterValue":"5000","ApplyMethod":"immediate"},
+    {"ParameterName":"log_connections","ParameterValue":"1","ApplyMethod":"immediate"}
+  ]'
+```
+
 ## Common Option Flags
 ```
 --backup-retention-period 7 | --multi-az | --storage-encrypted | --kms-key-id {{key}}

@@ -1,0 +1,151 @@
+# EC2 Auto Scaling — Example Configuration
+#
+# YAML Anchors: &dev and &prod are shared config anchors (TE-5).
+# Placeholders: {{env.*}} resolved from .env, {{user.*}} from user input.
+
+# ── Shared anchors ──────────────────────────────────────────────────────
+
+x-dev: &dev
+  env: dev
+  min_size: 1
+  max_size: 3
+  desired_capacity: 1
+  subnet_ids: "subnet-dev-a,subnet-dev-b"
+  health_check_type: "EC2"
+  health_check_grace_period: 120
+  default_cooldown: 300
+  tags:
+    - Key: "Environment"
+      Value: "dev"
+      PropagateAtLaunch: true
+    - Key: "ManagedBy"
+      Value: "autoscaling-skill"
+      PropagateAtLaunch: true
+
+x-prod: &prod
+  env: prod
+  min_size: 2
+  max_size: 20
+  desired_capacity: 4
+  subnet_ids: "subnet-prod-a,subnet-prod-b,subnet-prod-c"
+  health_check_type: "ELB"
+  health_check_grace_period: 300
+  default_cooldown: 300
+  tags:
+    - Key: "Environment"
+      Value: "production"
+      PropagateAtLaunch: true
+    - Key: "ManagedBy"
+      Value: "autoscaling-skill"
+      PropagateAtLaunch: true
+    - Key: "CostCenter"
+      Value: "platform"
+      PropagateAtLaunch: true
+
+# ── ASGs ────────────────────────────────────────────────────────────────
+
+asg_dev:
+  # Dev environment ASG with Launch Template
+  auto_scaling_group_name: "{{user.asg_name}}-dev"
+  launch_template:
+    LaunchTemplateName: "{{user.lt_name}}"
+    Version: "$Default"
+  <<: *dev
+
+asg_prod:
+  # Production ASG with ELB health check and Target Tracking policy
+  auto_scaling_group_name: "{{user.asg_name}}-prod"
+  launch_template:
+    LaunchTemplateName: "{{user.lt_name}}"
+    Version: "$Default"
+  target_group_arns:
+    - "{{user.target_group_arns}}"
+  <<: *prod
+
+# ── Scaling Policies ────────────────────────────────────────────────────
+
+scaling_policies:
+  cpu_target_tracking_prod:
+    policy_name: "cpu-target-50-prod"
+    policy_type: "TargetTrackingScaling"
+    target_tracking_configuration:
+      TargetValue: 50.0
+      PredefinedMetricSpecification:
+        PredefinedMetricType: "ASGAverageCPUUtilization"
+
+  scale_out_step:
+    policy_name: "scale-out-step"
+    policy_type: "StepScaling"
+    adjustment_type: "ChangeInCapacity"
+    step_adjustments:
+      - MetricIntervalLowerBound: 0.0
+        ScalingAdjustment: 1
+      - MetricIntervalLowerBound: 20.0
+        ScalingAdjustment: 2
+      - MetricIntervalLowerBound: 40.0
+        ScalingAdjustment: 4
+    cooldown: 300
+
+  scale_in_step:
+    policy_name: "scale-in-step"
+    policy_type: "StepScaling"
+    adjustment_type: "ChangeInCapacity"
+    step_adjustments:
+      - MetricIntervalUpperBound: 0.0
+        ScalingAdjustment: -1
+      - MetricIntervalUpperBound: -20.0
+        ScalingAdjustment: -2
+    cooldown: 600
+
+# ── Scheduled Actions ───────────────────────────────────────────────────
+
+scheduled_actions:
+  scale_up_morning:
+    scheduled_action_name: "scale-up-morning"
+    recurrence: "0 9 * * 1-5"       # Mon-Fri 09:00 UTC
+    min_size: 3
+    max_size: 20
+    desired_capacity: 6
+
+  scale_down_evening:
+    scheduled_action_name: "scale-down-evening"
+    recurrence: "0 22 * * 1-5"      # Mon-Fri 22:00 UTC
+    min_size: 1
+    max_size: 3
+    desired_capacity: 1
+
+  scale_up_weekend:
+    scheduled_action_name: "scale-up-weekend"
+    recurrence: "0 10 * * 6,0"      # Sat-Sun 10:00 UTC
+    min_size: 1
+    max_size: 5
+    desired_capacity: 2
+
+# ── Lifecycle Hooks ─────────────────────────────────────────────────────
+
+lifecycle_hooks:
+  instance_launching:
+    lifecycle_hook_name: "instance-launching-hook"
+    lifecycle_transition: "autoscaling:EC2_INSTANCE_LAUNCHING"
+    heartbeat_timeout: 300
+    default_result: "CONTINUE"
+
+  instance_terminating:
+    lifecycle_hook_name: "instance-terminating-hook"
+    lifecycle_transition: "autoscaling:EC2_INSTANCE_TERMINATING"
+    heartbeat_timeout: 300
+    default_result: "CONTINUE"
+
+# ── Instance Refresh ────────────────────────────────────────────────────
+
+instance_refresh:
+  rolling_update:
+    min_healthy_percentage: 90
+    instance_warmup: 300
+
+# ── Warm Pool ───────────────────────────────────────────────────────────
+
+warm_pool:
+  min_size: 0
+  max_group_prepared_capacity: 2
+  pool_state: "Stopped"

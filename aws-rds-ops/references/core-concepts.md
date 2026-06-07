@@ -93,3 +93,79 @@ aws rds describe-db-engine-versions --engine mysql --query "DBEngineVersions[*].
 **Dev/Test**: Single AZ + smaller class + shorter retention + stop/start for savings.
 
 **Security**: No public access (prod) + IAM auth + Secrets Manager for passwords + regular rotation.
+
+## Performance Insights & Slow Query Analysis
+
+### Performance Insights (PI)
+- **Purpose**: Database performance monitoring with 7-dimension analysis
+- **Data**: DB load, wait events, top SQL, users, hosts, databases
+- **Retention**: 7 days free → 2 years paid
+- **Dimensions**: `db.sql_tokenized` (top SQL), `db.wait_event` (wait events), `db.user` (user), `db.host` (host), `db.database` (DB)
+- **Key Metrics**: `db.sproc_execution_time` (SQL exec), `db.cpu` (CPU), `db.io` (IO), `db.dbload` (total load), `db.dbload_non_cpu` (non-CPU load)
+- **Access**: `aws pi` CLI or PI API via boto3
+
+### Common Wait Events & Their Meaning
+
+| Wait Event | Meaning | Common Fix |
+|---|---|---|
+| `CPU` | Query consuming CPU cycles | Add index, optimize query, scale instance |
+| `IO:XactSync` | Transaction commit waiting for storage | Tune sync_binlog, use Multi-AZ with SSD |
+| `IO:DataFileRead` | Reading data from disk (buffer miss) | Increase buffer pool, check index |
+| `IO:LogWrite` | Writing WAL/redo log | Use gp3 with provisioned IOPS |
+| `tcp:connection` | Client connection handling | Increase max_connections, use connection pool |
+| `Lock:RowLockWait` | Row lock contention | Optimize transaction scope, use NOWAIT |
+| `Lock:TableLock` | Table-level lock | Use InnoDB, check DDL locking |
+| `wait/synch/mutex` | Internal contention | Tune innodb_thread_concurrency |
+
+### Key Parameters for Query Performance (MySQL)
+
+| Parameter | Default | Recommendation | Effect |
+|---|---|---|---|
+| `slow_query_log` | OFF | 1 | Enable slow query logging |
+| `long_query_time` | 10 | 2-5 | Log queries slower than N seconds |
+| `log_queries_not_using_indexes` | OFF | 1 | Flag full table scans |
+| `innodb_buffer_pool_size` | 25% of RAM | 70-80% of RAM | Reduce disk reads |
+| `innodb_log_file_size` | 128MB | 1-4GB | Reduce log contention |
+| `max_connections` | ~80-200 | (RAM/thread_mem) | Avoid connection throttling |
+| `tmp_table_size` / `max_heap_table_size` | 16MB | 64-256MB | Reduce disk temp tables |
+| `sort_buffer_size` | 256KB | 1-4MB | Speed up sort operations |
+| `join_buffer_size` | 256KB | 1-4MB | Speed up JOIN (no index) |
+
+### Key Parameters for Query Performance (PostgreSQL)
+
+| Parameter | Default | Recommendation | Effect |
+|---|---|---|---|
+| `log_min_duration_statement` | -1 (off) | 5000ms | Log slow queries |
+| `shared_buffers` | 128MB | 25% of RAM | Cache data in memory |
+| `work_mem` | 4MB | 16-64MB | Per-operation sort memory |
+| `maintenance_work_mem` | 64MB | 1GB | Speed up VACUUM, CREATE INDEX |
+| `effective_cache_size` | 4GB | 75% of RAM | Planner memory estimation |
+| `random_page_cost` | 4 | 1.1 (SSD) | Query planner SSD tuning |
+| `effective_io_concurrency` | 1 | 200 (SSD) | Parallel IO on SSD |
+| `max_parallel_workers_per_gather` | 2 | 4-8 | Parallel query execution |
+
+### Slow Query Diagnosis Flow
+
+```
+1. Is PI enabled? → If not, enable (`modify-db-instance --enable-performance-insights`)
+2. Is slow log published to CW? → If not, enable (`modify-db-instance --cloudwatch-logs-export-configuration`)
+3. Get DbiResourceId → `describe-db-instances[0].DbiResourceId`
+4. Query PI for top SQL by load → `pi get-resource-metrics` with `db.sql_tokenized` group
+5. Query PI for wait events → Same API with `db.wait_event` group
+6. Query CloudWatch slow query log → `logs start-query` on slowquery log group
+7. Cross-reference: top SQL from PI ↔ slow queries from CloudWatch
+8. Pattern match (see troubleshooting.md) → recommend index / parameter / scale
+9. Apply recommendation → validate improvement via PI
+```
+
+### Performance Insights API Dimensions
+
+| Dimension Group | Description | Use Case |
+|---|---|---|
+| `db.sql_tokenized` | Top SQL by DB load (normalized) | Find slow queries |
+| `db.wait_event` | Wait events by % of total DB load | Find bottleneck type |
+| `db.user` | DB users by load | Find heavy user |
+| `db.host` | Client hosts by load | Find heavy client |
+| `db.database` | Databases by load | Find heavy database |
+| `db.application` | Application by load | Find heavy app (PG only) |
+| `db.session_type` | Session type breakdown | (Aurora only) |

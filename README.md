@@ -30,6 +30,42 @@ aws-skills/
 │   │   └── troubleshooting.md    # EC2 troubleshooting
 │   └── assets/
 
+├── aws-autoscaling-ops/           # Auto Scaling Operations Skill
+│   ├── SKILL.md                   # Concise - ASG/Policy/Refresh ops
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Auto Scaling CLI commands
+│   │   ├── boto3-sdk-usage.md     # Auto Scaling SDK code examples
+│   │   ├── core-concepts.md       # ASG architecture/quota
+│   │   ├── troubleshooting.md     # Auto Scaling troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # ASG/Policy/Schedule config
+│
+├── aws-config-ops/               # Config Operations Skill
+│   ├── SKILL.md                   # Concise - Recorder/Rule/Compliance ops
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Config CLI commands
+│   │   ├── boto3-sdk-usage.md     # Config SDK code examples
+│   │   ├── core-concepts.md       # Config architecture/quota
+│   │   ├── troubleshooting.md     # Config troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Recorder/Rule config
+│
+├── aws-eventbridge-ops/          # EventBridge Operations Skill
+│   ├── SKILL.md                   # Concise - EventBus/Rule/Schedule ops
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # EventBridge CLI commands
+│   │   ├── boto3-sdk-usage.md     # EventBridge SDK code examples
+│   │   ├── core-concepts.md       # EventBridge architecture/quota
+│   │   ├── troubleshooting.md     # EventBridge troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Rule/Schedule/Pipe config
+│
 ├── aws-s3-ops/                    # S3 Operations Skill
 │   ├── SKILL.md                   # Concise - Bucket/Object operations
 │   ├── references/
@@ -342,6 +378,9 @@ aws sts get-caller-identity --output json
 |------|------|------|
 | aws-skill-generator | Meta Skill | ✅ Complete |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete |
+| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.0.0 |
+| aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
+| aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.0.0 |
 | aws-s3-ops | S3 (Object Storage) | ✅ Complete · **GCL pilot v1.1.0** |
 | aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete · **GCL pilot v1.1.0** |
@@ -443,6 +482,9 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 | `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA |
 | `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration |
 | `aws-acm-ops` | — | **v1.0.0 (new)** | Certificate lifecycle, expiry monitoring, auto-renewal |
+| `aws-autoscaling-ops` | — | **v1.0.0 (new)** | ASG management, scaling policies, instance refresh, lifecycle hooks, capacity governance; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
+| `aws-config-ops` | — | **v1.0.0 (new)** | Configuration recorder, delivery channel, managed/custom rules, conformance packs, aggregator, compliance evaluation; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
+| `aws-eventbridge-ops` | — | **v1.0.0 (new)** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
 
 ## References
 
@@ -467,7 +509,7 @@ gate on every high-side-effect skill execution. Full specification lives in
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md);
 top-level index in `AGENTS.md` §11.
 
-All **22 skills** now have complete GCL implementation:
+All **25 skills** now have complete GCL implementation:
 
 | Phase | Skills | Class | Date |
 |---|---|---|---|
@@ -475,6 +517,8 @@ All **22 skills** now have complete GCL implementation:
 | **Group 1** | `aws-rds-ops`, `aws-lambda-ops`, `aws-dynamodb-ops` | required | 2026-06-04 |
 | **Group 2** | `aws-vpc-ops`, `aws-route53-ops`, `aws-cloudfront-ops`, `aws-elb-ops` | required/recommended | 2026-06-04 |
 | **Group 3** | `aws-elasticache-ops`, `aws-waf-ops`, `aws-secretsmanager-ops`, `aws-ssm-ops`, `aws-acm-ops`, `aws-eks-ops`, `aws-sqs-ops`, `aws-sns-ops`, `aws-stepfunctions-ops`, `aws-cloudwatch-ops`, `aws-cloudtrail-ops` | required/recommended/optional | 2026-06-04 |
+| **Group 4** | `aws-autoscaling-ops` | required | 2026-06-07 |
+| **Group 5** | `aws-config-ops`, `aws-eventbridge-ops` | recommended | 2026-06-07 |
 
 - **5-dimension rubric** (0 / 0.5 / 1): Correctness, Safety, Idempotency,
   Traceability, Spec Compliance. **Safety = 0 → ABORT.**
@@ -496,7 +540,7 @@ All **22 skills** now have complete GCL implementation:
 | 6 | ✅ Multi-region AIOps | Done | Cross-region health/latency/failover in aws-route53-ops/references/ |
 | 7 | ✅ Feedback loop persistence | Done | CloudWatch Logs feedback storage in aws-cloudwatch-ops/references/ |
 | 8 | ✅ SLA breach escalation | Done | PagerDuty/Jira integration in aws-elb-ops/references/ |
-| 9 | ✅ GCL full rollout | Done | All 22 skills (4 pilots + 18 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
+| 9 | ✅ GCL full rollout | Done | All 25 skills (4 pilots + 21 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
 | 10 | 🔄 GCL runner script | Planned | `scripts/gcl_runner.py` reusable Orchestrator (Phase 2) |
 
 ## License

@@ -30,6 +30,42 @@ aws-skills/
 │   │   └── troubleshooting.md    # EC2 故障排查
 │   └── assets/
 
+├── aws-autoscaling-ops/           # Auto Scaling 操作技能
+│   ├── SKILL.md                   # 精简版 - ASG/策略/实例刷新操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Auto Scaling CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # Auto Scaling SDK 代码示例
+│   │   ├── core-concepts.md       # ASG 架构/配额/流程
+│   │   ├── troubleshooting.md     # Auto Scaling 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # ASG/策略/调度配置示例
+│
+├── aws-config-ops/                 # Config 操作技能
+│   ├── SKILL.md                   # 精简版 - 配置记录器/规则/合规操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Config CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # Config SDK 代码示例
+│   │   ├── core-concepts.md       # Config 架构/配额/规则
+│   │   ├── troubleshooting.md     # Config 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 记录器/规则配置示例
+│
+├── aws-eventbridge-ops/            # EventBridge 操作技能
+│   ├── SKILL.md                   # 精简版 - 事件总线/规则/调度器操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # EventBridge CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # EventBridge SDK 代码示例
+│   │   ├── core-concepts.md       # 事件总线/规则/管道架构
+│   │   ├── troubleshooting.md     # EventBridge 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 规则/调度器/管道配置示例
+│
 ├── aws-s3-ops/                    # S3 操作技能
 │   ├── SKILL.md                   # 精简版 - Bucket/Object 操作
 │   ├── references/
@@ -342,6 +378,9 @@ aws sts get-caller-identity --output json
 |------|------|------|
 | aws-skill-generator | Meta Skill | ✅ 完成 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 · **GCL 试点 v1.3.0** |
+| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.0.0 |
+| aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
+| aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.0.0 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 · **GCL 试点 v1.1.0** |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 · **GCL 试点 v1.1.0** |
@@ -367,7 +406,7 @@ aws sts get-caller-identity --output json
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
 顶层索引位于 `AGENTS.md` §11。
 
-全部 **22 个技能** 现已完成 GCL 实现：
+全部 **25 个技能** 现已完成 GCL 实现：
 
 | 阶段 | 技能 | 类别 | 日期 |
 |---|---|---|---|
@@ -375,6 +414,8 @@ aws sts get-caller-identity --output json
 | **Group 1** | `aws-rds-ops`、`aws-lambda-ops`、`aws-dynamodb-ops` | required | 2026-06-04 |
 | **Group 2** | `aws-vpc-ops`、`aws-route53-ops`、`aws-cloudfront-ops`、`aws-elb-ops` | required/recommended | 2026-06-04 |
 | **Group 3** | `aws-elasticache-ops`、`aws-waf-ops`、`aws-secretsmanager-ops`、`aws-ssm-ops`、`aws-acm-ops`、`aws-eks-ops`、`aws-sqs-ops`、`aws-sns-ops`、`aws-stepfunctions-ops`、`aws-cloudwatch-ops`、`aws-cloudtrail-ops` | required/recommended/optional | 2026-06-04 |
+| **Group 4** | `aws-autoscaling-ops` | required | 2026-06-07 |
+| **Group 5** | `aws-config-ops`、`aws-eventbridge-ops` | recommended | 2026-06-07 |
 
 - **5 维度评分** (0 / 0.5 / 1): 正确性、安全性、幂等性、可追溯性、规范合规性。**Safety = 0 → 立即 ABORT。**
 - **跟踪路径:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored)。
