@@ -1,0 +1,99 @@
+# GuardDuty Example Configurations
+
+YAML anchors used for shared defaults:
+```yaml
+x-common: &common
+  enable: true
+  finding_publishing_frequency: "FIFTEEN_MINUTES"
+  tags: [{Key: ManagedBy, Value: ai-agent}]
+
+x-trusted-ips: &trusted
+  format: "TXT"
+  activate: true
+
+x-threats: &threats
+  format: "TXT"
+  activate: true
+```
+
+## Detector — Standard
+```yaml
+detector:
+  <<: *common
+  region: "{{env.AWS_DEFAULT_REGION}}"
+```
+
+## IP Sets
+```yaml
+ip_sets:
+  - <<: *trusted
+    name: "trusted-office-ips"
+    location: "https://s3.amazonaws.com/{{user.bucket}}/trusted_ips.txt"
+  - <<: *trusted
+    name: "trusted-vpn-ips"
+    location: "https://s3.amazonaws.com/{{user.bucket}}/vpn_ips.txt"
+```
+
+## Threat Intel Sets
+```yaml
+threat_intel_sets:
+  - <<: *threats
+    name: "custom-threat-list"
+    location: "https://s3.amazonaws.com/{{user.bucket}}/threats.txt"
+```
+
+## Filters
+```yaml
+filters:
+  - name: "archive-low-severity"
+    action: "ARCHIVE"
+    rank: 1
+    criteria:
+      Criterion:
+        severity:
+          LessThan: 4.0
+  - name: "archive-known-good-ssh"
+    action: "ARCHIVE"
+    rank: 2
+    criteria:
+      Criterion:
+        type:
+          Equals: ["Reconnaissance:EC2/PortProbeUnprotectedPort"]
+        resource.instanceDetails.tags.Name:
+          Equals: ["bastion"]
+```
+
+## Member Accounts
+```yaml
+members:
+  master_detector_id: "{{user.detector_id}}"
+  accounts:
+    - account_id: "123456789012"
+      email: "security@example.com"
+    - account_id: "123456789013"
+      email: "devops@example.com"
+```
+
+## Publishing Destination
+```yaml
+publishing_destination:
+  detector_id: "{{user.detector_id}}"
+  destination_type: "S3"
+  destination_properties:
+    DestinationArn: "arn:aws:s3:::{{user.bucket}}"
+    KmsKeyArn: "arn:aws:kms:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:key/{{user.kms_key_id}}"
+```
+
+## Deletion Configurations
+```yaml
+deletion:
+  - operation: "delete-detector"
+    detector_id: "{{user.detector_id}}"
+    confirmation_required: true
+    confirmation_string: "DELETE_DETECTOR {{user.detector_id}}"
+  - operation: "archive-findings"
+    detector_id: "{{user.detector_id}}"
+    finding_ids: ["{{user.finding_ids}}"]
+    confirmation_required: true
+    confirmation_string: "ARCHIVE_FINDINGS {{user.finding_ids}}"
+```

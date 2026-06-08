@@ -73,7 +73,6 @@ Covers EventBus, Rules, Targets, API Destinations, Connections, Archives/Replay,
 - Keywords: eventbridge, event-bus, event-rule, event-pattern, scheduler, pipe, api-destination, archive, replay, target
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
 - IAM execution roles → delegate to: `aws-iam-ops`
 - Lambda function code → delegate to: `aws-lambda-ops`
 - SQS queue config → delegate to: `aws-sqs-ops`

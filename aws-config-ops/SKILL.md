@@ -70,7 +70,6 @@ Operational runbook with pre-flight → execute → validate → recover.
 - Keywords: config, compliance, configuration-recorder, delivery-channel, conformance-pack, aggregator, resource-compliance, drift
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
 - IAM only → delegate to: `aws-iam-ops`
 - Lambda function for custom rule → delegate to: `aws-lambda-ops`
 - S3 bucket for delivery → delegate to: `aws-s3-ops`

@@ -246,6 +246,18 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml      # 工作流配置示例
 │
+├── aws-securityhub-ops/           # Security Hub 操作技能
+│   ├── SKILL.md                   # 精简版 - Security Hub/安全发现/合规标准操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Security Hub CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # Security Hub SDK 代码示例
+│   │   ├── core-concepts.md       # Security Hub 架构/标准/控制项
+│   │   ├── troubleshooting.md     # Security Hub 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 洞察/操作目标/自动化规则配置示例
+│
 └── aws-[service]-ops/               # 后续服务技能...
 ```
 
@@ -399,6 +411,9 @@ aws sts get-caller-identity --output json
 | aws-sns-ops | SNS (通知) | ✅ 完成 |
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 |
 | aws-stepfunctions-ops | Step Functions | ✅ 完成 |
+| aws-opensearch-ops | OpenSearch Service (托管 Elasticsearch) | ✅ 完成 v1.0.0 |
+| aws-guardduty-ops | GuardDuty (威胁检测) | ✅ 完成 v1.0.0 |
+| aws-securityhub-ops | Security Hub (安全发现/合规) | ✅ 完成 v1.0.0 |
 
 ## 质量门 (GCL)
 
@@ -406,7 +421,7 @@ aws sts get-caller-identity --output json
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
 顶层索引位于 `AGENTS.md` §11。
 
-全部 **25 个技能** 现已完成 GCL 实现：
+全部 **28 个技能** 现已完成 GCL 实现：
 
 | 阶段 | 技能 | 类别 | 日期 |
 |---|---|---|---|

@@ -1,0 +1,228 @@
+# OpenSearch Service Example Configurations
+
+YAML anchors used for shared defaults:
+```yaml
+# Shared defaults
+x-dev: &dev
+  engine_version: "OpenSearch_2.11"
+  instance_type: "t3.medium.search"
+  instance_count: 1
+  ebs_enabled: true
+  volume_type: "gp3"
+  volume_size: 10
+  zone_awareness: false
+  dedicated_master: false
+  encryption_at_rest: true
+  node_to_node_encryption: true
+  enforce_https: true
+  publicly_accessible: true
+
+x-prod: &prod
+  engine_version: "OpenSearch_2.11"
+  instance_type: "r6g.large.search"
+  instance_count: 3
+  ebs_enabled: true
+  volume_type: "gp3"
+  volume_size: 100
+  iops: 3000
+  zone_awareness: true
+  az_count: 3
+  dedicated_master: true
+  dedicated_master_type: "r6g.large.search"
+  dedicated_master_count: 3
+  encryption_at_rest: true
+  node_to_node_encryption: true
+  enforce_https: true
+  tls_policy: "Policy-Min-TLS-1-2-2019-07"
+  publicly_accessible: false
+  fine_grained_access_control: true
+  internal_user_database: true
+  automated_snapshot_start_hour: 3
+```
+
+## OpenSearch Domain — Dev & Prod
+
+```yaml
+# Dev
+opensearch_domain:
+  <<: *dev
+  domain_name: "dev-search-api"
+  vpc_options:
+    subnet_ids: ["subnet-dev-1a"]
+    security_group_ids: ["sg-dev-opensearch"]
+  access_policies: '{{user.DevAccessPolicy}}'
+  master_user_name: "admin"
+  master_user_password: "{{user.DevMasterPassword}}"
+  tags:
+    - {Key: Environment, Value: development}
+    - {Key: Application, Value: search-api}
+
+# Prod
+opensearch_domain:
+  <<: *prod
+  domain_name: "prod-search-orders"
+  vpc_options:
+    subnet_ids: ["subnet-prod-1a", "subnet-prod-1b", "subnet-prod-1c"]
+    security_group_ids: ["sg-prod-opensearch"]
+  access_policies: '{{user.ProdAccessPolicy}}'
+  master_user_name: "admin"
+  master_user_password: "{{user.ProdMasterPassword}}"
+  kms_key_id: "{{user.KmsKeyId}}"
+  tags:
+    - {Key: Environment, Value: production}
+    - {Key: Application, Value: orders-service}
+```
+
+## OpenSearch Domain — Public Access (Dev/Test)
+
+```yaml
+opensearch_domain:
+  <<: *dev
+  domain_name: "public-test-search"
+  publicly_accessible: true
+  access_policies: |
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {"AWS": "*"},
+          "Action": "es:*",
+          "Resource": "arn:aws:es:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:domain/public-test-search/*",
+          "Condition": {
+            "IpAddress": {"aws:SourceIp": ["{{user.AllowedIp}}"]}
+          }
+        }
+      ]
+    }
+```
+
+## Snapshot Operations
+
+```yaml
+# Create manual snapshot
+snapshot:
+  operation: "create"
+  domain_name: "prod-search-orders"
+  snapshot_name: "prod-search-pre-upgrade-20260608"
+  repository_name: "cs-automated"
+
+# Restore from snapshot
+restore:
+  operation: "restore"
+  domain_name: "prod-search-orders"
+  snapshot_name: "prod-search-pre-upgrade-20260608"
+  repository_name: "cs-automated"
+```
+
+## VPC Endpoint
+
+```yaml
+vpc_endpoint:
+  domain_arn: "arn:aws:es:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:domain/prod-search-orders"
+  subnet_ids: ["subnet-prod-1a", "subnet-prod-1b"]
+  security_group_ids: ["sg-prod-opensearch-vpce"]
+```
+
+## Data Ingestion Pipeline
+
+```yaml
+# Dev pipeline
+ingestion_pipeline:
+  pipeline_name: "dev-logs-pipeline"
+  pipeline_configuration_body: |
+    version: "2"
+    log-pipeline:
+      source:
+        http:
+          path: "/log/ingest"
+      sink:
+        - opensearch:
+            hosts: ["https://{{output.Endpoint}}"]
+            index: "dev-logs"
+            aws:
+              region: "{{env.AWS_DEFAULT_REGION}}"
+              sts_role_arn: "{{user.PipelineRoleArn}}"
+  vpc_options:
+    subnet_ids: ["subnet-dev-1a"]
+    security_group_ids: ["sg-dev-pipeline"]
+
+# Prod pipeline
+ingestion_pipeline:
+  pipeline_name: "prod-metrics-pipeline"
+  pipeline_configuration_body: |
+    version: "2"
+    metrics-pipeline:
+      source:
+        otel_metrics_source:
+          port: 21891
+      sink:
+        - opensearch:
+            hosts: ["https://{{output.Endpoint}}"]
+            index: "prod-metrics"
+            aws:
+              region: "{{env.AWS_DEFAULT_REGION}}"
+              sts_role_arn: "{{user.PipelineRoleArn}}"
+  buffer_options:
+    persistent_buffer_enabled: true
+  vpc_options:
+    subnet_ids: ["subnet-prod-1a", "subnet-prod-1b"]
+    security_group_ids: ["sg-prod-pipeline"]
+```
+
+## Domain Access Policy Examples
+
+```yaml
+# IAM role-based access
+access_policy_iam:
+  Version: "2012-10-17"
+  Statement:
+    - Effect: "Allow"
+      Principal:
+        AWS: "arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:role/{{user.AppRoleName}}"
+      Action: "es:*"
+      Resource: "arn:aws:es:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:domain/{{user.DomainName}}/*"
+
+# VPC endpoint-based access
+access_policy_vpce:
+  Version: "2012-10-17"
+  Statement:
+    - Effect: "Allow"
+      Principal: "*"
+      Action: "es:*"
+      Resource: "arn:aws:es:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:domain/{{user.DomainName}}/*"
+      Condition:
+        StringEquals:
+          aws:SourceVpce: "{{user.VpcEndpointId}}"
+```
+
+## Domain Upgrade
+
+```yaml
+upgrade:
+  domain_name: "prod-search-orders"
+  target_version: "OpenSearch_2.11"
+  perform_check_only: false
+  confirmation_required: true
+  confirmation_string: "UPGRADE_DOMAIN prod-search-orders to OpenSearch_2.11"
+```
+
+## Deletion
+
+```yaml
+# Domain deletion
+ deletion:
+  operation: "delete"
+  domain_name: "old-test-domain"
+  confirmation_required: true
+  confirmation_string: "DELETE_DOMAIN old-test-domain"
+
+# Snapshot deletion
+ deletion:
+  operation: "delete-snapshot"
+  domain_name: "prod-search-orders"
+  snapshot_name: "old-snapshot-20260101"
+  repository_name: "cs-automated"
+  confirmation_required: true
+  confirmation_string: "DELETE_SNAPSHOT old-snapshot-20260101 from prod-search-orders"
+```

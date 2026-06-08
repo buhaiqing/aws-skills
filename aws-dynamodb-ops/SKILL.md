@@ -8,7 +8,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, netw
   access to DynamoDB endpoints.
 metadata:
   author: aws
-  version: 1.1.0
+  version: "1.1.0"
   last_updated: '2026-06-04'
   runtime: Harness AI Agent
   cli_applicability: dual-path

@@ -75,7 +75,6 @@ checks, dual-path execution (AWS CLI + boto3 SDK), validation, and recovery.
 - Keywords: auto-scaling, asg, scale-out, scale-in, scaling-policy, instance-refresh, lifecycle-hook, warm-pool, suspend-process, resume-process
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
 - IAM only → delegate to: `aws-iam-ops`
 - EC2 instance lifecycle (launch/stop/terminate) → delegate to: `aws-ec2-ops`
 - Load Balancer / Target Group management → delegate to: `aws-elb-ops`

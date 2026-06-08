@@ -1,0 +1,189 @@
+# Security Hub Example Configurations
+
+YAML anchors used for shared defaults:
+```yaml
+# Shared defaults
+x-hub-defaults: &hub_defaults
+  auto_enable_controls: true
+  enable_default_standards: true
+
+x-finding-defaults: &finding_defaults
+  schema_version: "2018-10-08"
+  severity: {Label: "HIGH"}
+  types: ["Software and Configuration Checks/Vulnerabilities/CVE"]
+
+x-automation-rule-defaults: &automation_rule_defaults
+  rule_status: "ENABLED"
+  actions:
+    - Type: "FINDING_FIELDS_UPDATE"
+      FindingFieldsUpdate:
+        Workflow: {Status: "NEW"}
+        Note: {Text: "Auto-triaged by automation rule", UpdatedBy: "aws-agent"}
+```
+
+## Hub — Enable
+```yaml
+hub:
+  <<: *hub_defaults
+  region: "{{user.region}}"
+```
+
+## Insights
+```yaml
+# Critical findings by resource
+insight:
+  name: "Critical Findings by Resource"
+  filters:
+    SeverityLabel:
+      - {Comparison: "EQUALS", Value: "CRITICAL"}
+  group_by_attribute: "ResourceId"
+  region: "{{user.region}}"
+
+# Failed compliance controls
+insight:
+  name: "Failed Compliance Controls"
+  filters:
+    ComplianceStatus:
+      - {Comparison: "EQUALS", Value: "FAILED"}
+  group_by_attribute: "Type"
+  region: "{{user.region}}"
+
+# Unresolved high-severity findings
+insight:
+  name: "Unresolved High Severity"
+  filters:
+    SeverityLabel:
+      - {Comparison: "EQUALS", Value: "HIGH"}
+    WorkflowStatus:
+      - {Comparison: "EQUALS", Value: "NEW"}
+  group_by_attribute: "AwsAccountId"
+  region: "{{user.region}}"
+```
+
+## Action Targets
+```yaml
+# SNS notification target
+action_target:
+  name: "Security Team SNS"
+  description: "Send critical findings to security team SNS topic"
+  id: "security-team-sns"
+  region: "{{user.region}}"
+
+# Lambda remediation target
+action_target:
+  name: "Auto-Remediation Lambda"
+  description: "Trigger auto-remediation Lambda for specific findings"
+  id: "auto-remediation-lambda"
+  region: "{{user.region}}"
+```
+
+## Findings — Batch Import Example
+```yaml
+finding:
+  <<: *finding_defaults
+  id: "finding-example-001"
+  product_arn: "arn:aws:securityhub:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:product/{{env.AWS_ACCOUNT_ID}}/default"
+  generator_id: "custom-generator-001"
+  aws_account_id: "{{env.AWS_ACCOUNT_ID}}"
+  created_at: "2026-06-08T10:00:00Z"
+  updated_at: "2026-06-08T10:00:00Z"
+  title: "Example Custom Finding"
+  description: "This is an example custom finding for demonstration"
+  resources:
+    - type: "AwsEc2Instance"
+      id: "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:instance/i-1234567890abcdef0"
+  region: "{{user.region}}"
+```
+
+## Standards
+```yaml
+# Enable CIS and AWS Foundational standards
+standards:
+  enabled:
+    - arn: "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0"
+    - arn: "arn:aws:securityhub:::ruleset/aws-foundational-security-best-practices/v/1.0.0"
+  region: "{{user.region}}"
+```
+
+## Automation Rules
+```yaml
+# Auto-suppress informational findings
+automation_rule:
+  <<: *automation_rule_defaults
+  name: "Suppress Informational Findings"
+  rule_order: 1
+  criteria:
+    SeverityLabel:
+      - {Comparison: "EQUALS", Value: "INFORMATIONAL"}
+  actions:
+    - Type: "FINDING_FIELDS_UPDATE"
+      FindingFieldsUpdate:
+        Workflow: {Status: "RESOLVED"}
+        Note: {Text: "Auto-suppressed: informational severity", UpdatedBy: "automation-rule"}
+  region: "{{user.region}}"
+
+# Auto-triage critical S3 findings
+automation_rule:
+  <<: *automation_rule_defaults
+  name: "Triage Critical S3 Findings"
+  rule_order: 2
+  criteria:
+    SeverityLabel:
+      - {Comparison: "EQUALS", Value: "CRITICAL"}
+    ProductName:
+      - {Comparison: "EQUALS", Value: "Security Hub"}
+    Type:
+      - {Comparison: "PREFIX", Value: "Software and Configuration Checks/AWS Security Best Practices/S3"}
+  actions:
+    - Type: "FINDING_FIELDS_UPDATE"
+      FindingFieldsUpdate:
+        Severity: {Label: "CRITICAL"}
+        Workflow: {Status: "NOTIFIED"}
+        Note: {Text: "Critical S3 finding - immediate attention required", UpdatedBy: "automation-rule"}
+  region: "{{user.region}}"
+```
+
+## Configuration Policy (Organizations)
+```yaml
+# Organization-wide Security Hub policy
+configuration_policy:
+  name: "Org Security Hub Policy"
+  description: "Standard Security Hub configuration for all accounts"
+  configuration_policy:
+    SecurityHub:
+      ServiceEnabled: true
+      EnabledStandardIdentifiers:
+        - "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0"
+        - "arn:aws:securityhub:::ruleset/aws-foundational-security-best-practices/v/1.0.0"
+      SecurityControlsConfiguration:
+        EnabledSecurityControlIdentifiers:
+          - "IAM.1"
+          - "S3.1"
+          - "EC2.1"
+          - "VPC.1"
+        DisabledSecurityControlIdentifiers: []
+  region: "{{user.region}}"
+```
+
+## Deletion Examples
+```yaml
+# Delete insight (requires confirmation)
+deletion:
+  operation: "delete-insight"
+  insight_arn: "arn:aws:securityhub:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:insight/{{env.AWS_ACCOUNT_ID}}/custom/1234567890"
+  confirmation_required: true
+  confirmation_string: "DELETE_INSIGHT {{user.insight_arn}}"
+
+# Disable Security Hub (requires confirmation)
+deletion:
+  operation: "disable-security-hub"
+  confirmation_required: true
+  confirmation_string: "DISABLE_SECURITY_HUB"
+
+# Disable product import (requires confirmation)
+deletion:
+  operation: "disable-import-findings-for-product"
+  product_subscription_arn: "arn:aws:securityhub:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:product-subscription/guardduty"
+  confirmation_required: true
+  confirmation_string: "DISABLE_PRODUCT {{user.product_subscription_arn}}"
+```

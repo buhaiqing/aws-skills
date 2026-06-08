@@ -246,6 +246,18 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml      # Workflow examples
 │
+├── aws-securityhub-ops/           # Security Hub Operations Skill
+│   ├── SKILL.md                   # Concise - Security Hub/Findings/Standards operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # Security Hub CLI commands
+│   │   ├── boto3-sdk-usage.md     # Security Hub SDK code examples
+│   │   ├── core-concepts.md       # Security Hub architecture, standards, controls
+│   │   ├── troubleshooting.md     # Security Hub troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Insight/ActionTarget/AutomationRule examples
+│
 └── aws-[service]-ops/               # More service skills...
 ```
 
@@ -401,6 +413,9 @@ aws sts get-caller-identity --output json
 | aws-stepfunctions-ops | Step Functions | ✅ Complete |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
+| aws-opensearch-ops | OpenSearch Service (managed Elasticsearch) | ✅ Complete v1.0.0 |
+| aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
+| aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
 
 ## AIOps Architecture
 
@@ -476,8 +491,8 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 
 | Module | Original Version | Current Version | Enhancement |
 |--------|-----------------|----------------|-------------|
-| `aws-elb-ops` | v1.0.0 | **v2.0.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management |
-| `aws-cloudwatch-ops` | v2.1.0 | **v2.1.0+** | ELB-specific alarms, metrics mapping, layered inspection |
+| `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management |
+| `aws-cloudwatch-ops` | v2.1.0 | **v2.2.0** | ELB-specific alarms, metrics mapping, layered inspection |
 | `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** (`references/rubric.md` + `references/prompt-templates.md`) |
 | `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA |
 | `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration |
@@ -509,7 +524,7 @@ gate on every high-side-effect skill execution. Full specification lives in
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md);
 top-level index in `AGENTS.md` §11.
 
-All **25 skills** now have complete GCL implementation:
+All **28 skills** now have complete GCL implementation:
 
 | Phase | Skills | Class | Date |
 |---|---|---|---|
@@ -540,7 +555,7 @@ All **25 skills** now have complete GCL implementation:
 | 6 | ✅ Multi-region AIOps | Done | Cross-region health/latency/failover in aws-route53-ops/references/ |
 | 7 | ✅ Feedback loop persistence | Done | CloudWatch Logs feedback storage in aws-cloudwatch-ops/references/ |
 | 8 | ✅ SLA breach escalation | Done | PagerDuty/Jira integration in aws-elb-ops/references/ |
-| 9 | ✅ GCL full rollout | Done | All 25 skills (4 pilots + 21 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
+| 9 | ✅ GCL full rollout | Done | All 28 skills (4 pilots + 24 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
 | 10 | 🔄 GCL runner script | Planned | `scripts/gcl_runner.py` reusable Orchestrator (Phase 2) |
 
 ## License

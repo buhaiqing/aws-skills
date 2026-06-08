@@ -1,0 +1,415 @@
+# AWS Systems Manager (SSM) Configuration Examples (YAML Anchors)
+# ================================================================
+# Template: Replace {{user.*}} placeholders at runtime.
+# Use YAML anchors to avoid repeating common settings.
+# Reference: aws-ssm-ops/SKILL.md for variable conventions
+
+# --- Shared Anchors ---
+x-common-tags: &common-tags
+  Tags:
+    - Key: "Environment"; Value: "{{user.environment:dev}}"
+    - Key: "ManagedBy"; Value: "AI-Agent"
+    - Key: "Project"; Value: "{{user.project_name}}"
+
+x-parameter-tier: &parameter-tier
+  Tier: "Standard"
+  DataType: "text"
+
+x-document-common: &document-common
+  DocumentType: "Command"
+  DocumentFormat: "YAML"
+  VersionName: "v1"
+
+x-target-linux: &target-linux
+  Targets:
+    - Key: "InstanceIds"
+      Values: ["{{user.instance_ids}}"]
+
+x-target-tag: &target-tag
+  Targets:
+    - Key: "tag:Environment"
+      Values: ["{{user.environment:dev}}"]
+
+x-maintenance-window-schedule: &maintenance-window-schedule
+  Schedule: "cron(0 2 ? * SUN *)"
+  ScheduleTimezone: "UTC"
+  Duration: 2
+  Cutoff: 1
+
+# --- SSM Parameter Store ---
+parameter_store:
+  # String type parameter (plain text)
+  app_config_string:
+    Name: "/{{user.environment:dev}}/app/config"
+    Value: "{{user.config_value}}"
+    Type: "String"
+    Description: "Application configuration string"
+    <<: *parameter-tier
+    <<: *common-tags
+
+  # StringList type parameter (comma-separated values)
+  app_config_list:
+    Name: "/{{user.environment:dev}}/app/allowed-ips"
+    Value: "10.0.1.0/24,10.0.2.0/24,10.0.3.0/24"
+    Type: "StringList"
+    Description: "Comma-separated list of allowed CIDR blocks"
+    <<: *parameter-tier
+    <<: *common-tags
+
+  # SecureString type parameter (encrypted with KMS)
+  app_config_secure:
+    Name: "/{{user.environment:dev}}/app/database-password"
+    Value: "{{user.db_password}}"
+    Type: "SecureString"
+    KeyId: "alias/aws/ssm"  # or {{user.kms_key_id}}
+    Description: "Encrypted database password"
+    <<: *parameter-tier
+    <<: *common-tags
+
+  # Advanced tier parameter (larger size, policies)
+  app_config_advanced:
+    Name: "/{{user.environment:dev}}/app/large-config"
+    Value: "{{user.large_config_value}}"
+    Type: "SecureString"
+    Tier: "Advanced"
+    Policies: >
+      [{
+        "Type": "Expiration",
+        "Version": "1.0",
+        "Attributes": {"Timestamp": "2026-12-31T00:00:00Z"}
+      }]
+    <<: *common-tags
+
+# --- SSM Documents ---
+ssm_documents:
+  # AWS-RunShellScript equivalent - custom Linux command document
+  linux_shell_script:
+    Name: "Custom-Linux-Commands"
+    <<: *document-common
+    Content: |
+      schemaVersion: "2.2"
+      description: "Run shell commands on Linux instances"
+      parameters:
+        commands:
+          type: "StringList"
+          description: "Commands to run"
+          default:
+            - "echo 'Hello from SSM'"
+            - "uname -a"
+        workingDirectory:
+          type: "String"
+          default: "/tmp"
+          description: "Working directory"
+        executionTimeout:
+          type: "String"
+          default: "3600"
+          description: "Timeout in seconds"
+      mainSteps:
+        - action: "aws:runShellScript"
+          name: "runShellScript"
+          inputs:
+            runCommand: "{{commands}}"
+            workingDirectory: "{{workingDirectory}}"
+            timeoutSeconds: "{{executionTimeout}}"
+    <<: *common-tags
+
+  # AWS-RunPowerShellScript equivalent - custom Windows command document
+  windows_powershell_script:
+    Name: "Custom-Windows-Commands"
+    <<: *document-common
+    Content: |
+      schemaVersion: "2.2"
+      description: "Run PowerShell commands on Windows instances"
+      parameters:
+        commands:
+          type: "StringList"
+          description: "PowerShell commands to run"
+          default:
+            - "Write-Host 'Hello from SSM'"
+            - "Get-ComputerInfo | Select OsName, OsVersion"
+        workingDirectory:
+          type: "String"
+          default: "C:\\Windows\\Temp"
+          description: "Working directory"
+        executionTimeout:
+          type: "String"
+          default: "3600"
+          description: "Timeout in seconds"
+      mainSteps:
+        - action: "aws:runPowerShellScript"
+          name: "runPowerShellScript"
+          inputs:
+            runCommand: "{{commands}}"
+            workingDirectory: "{{workingDirectory}}"
+            timeoutSeconds: "{{executionTimeout}}"
+    <<: *common-tags
+
+  # Automation document for AMI creation
+  automation_create_ami:
+    Name: "Create-AMI-Backup"
+    DocumentType: "Automation"
+    DocumentFormat: "YAML"
+    Content: |
+      schemaVersion: "0.3"
+      description: "Create AMI backup of EC2 instance"
+      parameters:
+        InstanceId:
+          type: "String"
+          description: "EC2 Instance ID"
+        ImageName:
+          type: "String"
+          default: "Backup-{{global:DATE_TIME}}"
+          description: "Name for the AMI"
+      mainSteps:
+        - name: "createImage"
+          action: "aws:createImage"
+          inputs:
+            InstanceId: "{{InstanceId}}"
+            ImageName: "{{ImageName}}"
+            NoReboot: true
+    <<: *common-tags
+
+# --- SSM Associations ---
+ssm_associations:
+  # Association for running commands on schedule
+  scheduled_command:
+    Name: "AWS-RunShellScript"
+    AssociationName: "Weekly-Update-{{user.environment:dev}}"
+    <<: *target-linux
+    Parameters:
+      commands:
+        - "sudo yum update -y"
+        - "sudo yum upgrade -y"
+    ScheduleExpression: "cron(0 3 ? * SUN *)"
+    ApplyOnlyAtCronInterval: false
+    ComplianceSeverity: "MEDIUM"
+    <<: *common-tags
+
+  # Association with parameter-based document
+  patch_scan_association:
+    Name: "AWS-RunPatchBaseline"
+    AssociationName: "Daily-Patch-Scan-{{user.environment:dev}}"
+    <<: *target-tag
+    Parameters:
+      Operation: "Scan"
+    ScheduleExpression: "rate(1 day)"
+    ApplyOnlyAtCronInterval: true
+    <<: *common-tags
+
+  # Association with output S3 bucket
+  command_with_logging:
+    Name: "AWS-RunShellScript"
+    AssociationName: "Backup-Script-{{user.environment:dev}}"
+    <<: *target-linux
+    Parameters:
+      commands:
+        - "/opt/scripts/backup.sh"
+    OutputLocation:
+      S3Location:
+        OutputS3Region: "{{env.AWS_DEFAULT_REGION}}"
+        OutputS3BucketName: "{{user.s3_bucket}}"
+        OutputS3KeyPrefix: "ssm-outputs"
+    <<: *common-tags
+
+# --- SSM Maintenance Windows ---
+maintenance_windows:
+  # Weekly maintenance window for patching
+  weekly_patch_window:
+    Name: "Weekly-Patch-Window-{{user.environment:dev}}"
+    Description: "Weekly maintenance window for security patching"
+    <<: *maintenance-window-schedule
+    AllowUnassociatedTargets: false
+    Enabled: true
+    <<: *common-tags
+
+  # Emergency maintenance window (manual trigger)
+  emergency_window:
+    Name: "Emergency-Maintenance-{{user.environment:dev}}"
+    Description: "Emergency maintenance window (manual approval required)"
+    Schedule: "at(2026-06-15T10:00:00)"
+    Duration: 4
+    Cutoff: 1
+    AllowUnassociatedTargets: true
+    Enabled: true
+    <<: *common-tags
+
+# --- Maintenance Window Tasks ---
+maintenance_window_tasks:
+  # Run Command task
+  run_command_task:
+    WindowId: "{{output.window_id}}"
+    TaskArn: "AWS-RunPatchBaseline"
+    TaskType: "RUN_COMMAND"
+    TaskInvocationParameters:
+      RunCommand:
+        Comment: "Install security patches"
+        Parameters:
+          Operation: "Install"
+          RebootOption: "RebootIfNeeded"
+        TimeoutSeconds: 600
+    MaxConcurrency: "50%"
+    MaxErrors: "10%"
+    Priority: 1
+    Targets:
+      - Key: "WindowTargetIds"
+        Values: ["{{output.target_id}}"]
+    <<: *common-tags
+
+  # Automation task
+  automation_task:
+    WindowId: "{{output.window_id}}"
+    TaskArn: "AWS-CreateImage"
+    TaskType: "AUTOMATION"
+    TaskInvocationParameters:
+      Automation:
+        DocumentVersion: "$LATEST"
+        Parameters:
+          InstanceId: ["{{user.instance_id}}"]
+          NoReboot: ["true"]
+    MaxConcurrency: 1
+    MaxErrors: 0
+    Priority: 2
+    Targets:
+      - Key: "WindowTargetIds"
+        Values: ["{{output.target_id}}"]
+    <<: *common-tags
+
+# --- Maintenance Window Targets ---
+maintenance_window_targets:
+  # Target by instance IDs
+  instance_targets:
+    WindowId: "{{output.window_id}}"
+    ResourceType: "INSTANCE"
+    Targets:
+      - Key: "InstanceIds"
+        Values: ["{{user.instance_ids}}"]
+    <<: *common-tags
+
+  # Target by tags
+  tag_targets:
+    WindowId: "{{output.window_id}}"
+    ResourceType: "INSTANCE"
+    Targets:
+      - Key: "tag:PatchGroup"
+        Values: ["critical", "standard"]
+    <<: *common-tags
+
+# --- SSM Patch Baselines ---
+patch_baselines:
+  # Production patch baseline - critical updates only
+  production_baseline:
+    Name: "Production-Patch-Baseline-{{user.environment:dev}}"
+    OperatingSystem: "AMAZON_LINUX_2"
+    Description: "Production patch baseline - critical and important security updates"
+    ApprovedPatchesComplianceLevel: "CRITICAL"
+    ApprovedPatchesEnableNonSecurity: false
+    RejectedPatches: []
+    GlobalFilters:
+      PatchFilters:
+        - Key: "CLASSIFICATION"
+          Values: ["Security"]
+    ApprovalRules:
+      PatchRules:
+        - PatchFilterGroup:
+            PatchFilters:
+              - Key: "SEVERITY"
+                Values: ["Critical", "Important"]
+              - Key: "CLASSIFICATION"
+                Values: ["SecurityUpdates", "Bugfixes"]
+          ComplianceLevel: "CRITICAL"
+          ApproveAfterDays: 7
+          EnableNonSecurity: false
+    Sources:
+      - Name: "AL2Repositories"
+        Configuration: |
+          [amzn2-core]
+          name=Amazon Linux 2 Core Repository
+          enabled=1
+    <<: *common-tags
+
+  # Development patch baseline - all updates
+  development_baseline:
+    Name: "Development-Patch-Baseline-{{user.environment:dev}}"
+    OperatingSystem: "AMAZON_LINUX_2"
+    Description: "Development patch baseline - all updates approved quickly"
+    ApprovedPatchesComplianceLevel: "INFORMATIONAL"
+    ApprovedPatchesEnableNonSecurity: true
+    ApprovalRules:
+      PatchRules:
+        - PatchFilterGroup:
+            PatchFilters:
+              - Key: "CLASSIFICATION"
+                Values: ["SecurityUpdates", "Bugfixes", "Enhancements"]
+          ComplianceLevel: "INFORMATIONAL"
+          ApproveAfterDays: 1
+          EnableNonSecurity: true
+    <<: *common-tags
+
+  # Windows Server baseline
+  windows_baseline:
+    Name: "Windows-Server-Baseline-{{user.environment:dev}}"
+    OperatingSystem: "WINDOWS"
+    Description: "Windows Server critical and security updates"
+    ApprovedPatchesComplianceLevel: "CRITICAL"
+    ApprovedPatchesEnableNonSecurity: false
+    ApprovalRules:
+      PatchRules:
+        - PatchFilterGroup:
+            PatchFilters:
+              - Key: "MSRC_SEVERITY"
+                Values: ["Critical", "Important"]
+              - Key: "CLASSIFICATION"
+                Values: ["SecurityUpdates", "CriticalUpdates"]
+          ComplianceLevel: "CRITICAL"
+          ApproveAfterDays: 7
+          EnableNonSecurity: false
+    <<: *common-tags
+
+# --- Patch Groups ---
+patch_groups:
+  critical_patch_group:
+    BaselineId: "{{output.critical_baseline_id}}"
+    PatchGroup: "critical-{{user.environment:dev}}"
+
+  standard_patch_group:
+    BaselineId: "{{output.standard_baseline_id}}"
+    PatchGroup: "standard-{{user.environment:dev}}"
+
+# --- SSM Session Preferences ---
+session_preferences:
+  # CloudWatch logging for Session Manager
+  cloudwatch_logging:
+    S3BucketName: ""
+    S3KeyPrefix: ""
+    S3Region: "{{env.AWS_DEFAULT_REGION}}"
+    CloudWatchLogGroupName: "/aws/ssm/sessions"
+    CloudWatchEncryptionEnabled: true
+    CloudWatchStreamingEnabled: true
+
+  # KMS encryption for session data
+  kms_encryption:
+    KmsKeyId: "alias/aws/ssm"
+    RunAsEnabled: false
+    RunAsDefaultUser: ""
+    IdleSessionTimeout: "20"
+    MaxSessionDuration: "60"
+    ShellProfile:
+      Linux: "/bin/bash"
+      Windows: "powershell.exe"
+
+# --- SSM Inventory ---
+inventory_configuration:
+  # Collect inventory data
+  inventory_collection:
+    ScheduleExpression: "rate(1 day)"
+    <<: *target-linux
+    Filters:
+      - Key: "AWS:Application"
+        Values: ["Enabled"]
+    Parameters:
+      applications:
+        - "AWS:Application"
+        - "AWS:AWSComponent"
+        - "AWS:Network"
+        - "AWS:WindowsUpdate"
+    <<: *common-tags
