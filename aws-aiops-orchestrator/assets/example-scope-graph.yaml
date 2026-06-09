@@ -1,0 +1,111 @@
+# Example scope graph for the AIOps Orchestrator.
+# Covers the canonical production path:
+#   VPC → Subnets → ALB → Listener → Target Group → ASG → EC2 → RDS
+#
+# This file is the canonical schema reference. Real graphs are built
+# dynamically from describe-* calls (see references/correlation-graph.md),
+# not authored by hand.
+
+graph:
+  metadata:
+    name: "payments-prod-us-east-1"
+    account_id: "123456789012"
+    region: "us-east-1"
+    scope_tags: { Env: prod, Team: payments }
+    generated_at: "2026-06-10T00:00:00Z"
+    builder_version: "0.1.0"
+
+  # YAML anchors reused below to keep the file DRY (TE-5).
+  _anchors:
+    prod_label: &prod { Env: prod }
+    payments_owner: &owner_payments { Owner: payments-team }
+
+  vertices:
+    - { id: "vpc-payments",         type: ec2.vpc,             tags: { *prod, *owner_payments } }
+    - { id: "subnet-pub-a",         type: ec2.subnet,          tags: { *prod, *owner_payments, AZ: a } }
+    - { id: "subnet-pub-b",         type: ec2.subnet,          tags: { *prod, *owner_payments, AZ: b } }
+    - { id: "subnet-priv-a",        type: ec2.subnet,          tags: { *prod, *owner_payments, AZ: a } }
+    - { id: "subnet-priv-b",        type: ec2.subnet,          tags: { *prod, *owner_payments, AZ: b } }
+    - { id: "rt-payments-pub",      type: ec2.route-table,     tags: { *prod, *owner_payments } }
+    - { id: "rt-payments-priv",     type: ec2.route-table,     tags: { *prod, *owner_payments } }
+    - { id: "igw-payments",         type: ec2.internet-gateway, tags: { *prod, *owner_payments } }
+    - { id: "natgw-payments-a",     type: ec2.nat-gateway,     tags: { *prod, *owner_payments, AZ: a } }
+    - { id: "natgw-payments-b",     type: ec2.nat-gateway,     tags: { *prod, *owner_payments, AZ: b } }
+    - { id: "sg-alb-payments",      type: ec2.security-group,  tags: { *prod, *owner_payments } }
+    - { id: "sg-app-payments",      type: ec2.security-group,  tags: { *prod, *owner_payments } }
+    - { id: "sg-db-payments",       type: ec2.security-group,  tags: { *prod, *owner_payments } }
+    - { id: "alb-payments-api",     type: elbv2.load-balancer, tags: { *prod, *owner_payments } }
+    - { id: "listener-payments-443",type: elbv2.listener,      tags: { *prod, *owner_payments } }
+    - { id: "tg-payments-api",      type: elbv2.target-group,  tags: { *prod, *owner_payments } }
+    - { id: "cert-payments-api",    type: acm.certificate,     tags: { *prod, *owner_payments } }
+    - { id: "asg-payments-api",     type: autoscaling.group,   tags: { *prod, *owner_payments } }
+    - { id: "i-aaaa1111",           type: ec2.instance,        tags: { *prod, *owner_payments, Name: payments-api-1 } }
+    - { id: "i-bbbb2222",           type: ec2.instance,        tags: { *prod, *owner_payments, Name: payments-api-2 } }
+    - { id: "i-cccc3333",           type: ec2.instance,        tags: { *prod, *owner_payments, Name: payments-api-3 } }
+    - { id: "rds-payments",         type: rds.db-instance,     tags: { *prod, *owner_payments, Role: writer } }
+    - { id: "rds-payments-ro",      type: rds.db-instance,     tags: { *prod, *owner_payments, Role: reader } }
+    - { id: "kms-payments",         type: kms.key,             tags: { *prod, *owner_payments } }
+    - { id: "role-payments-api",    type: iam.role,            tags: { *prod, *owner_payments } }
+    - { id: "s3-payments-logs",     type: s3.bucket,           tags: { *prod, *owner_payments } }
+    - { id: "route53-payments",     type: route53.hosted-zone, tags: { *prod, *owner_payments } }
+
+  edges:
+    # Network
+    - { from: "subnet-pub-a",  to: "vpc-payments",         kind: parent-child }
+    - { from: "subnet-pub-b",  to: "vpc-payments",         kind: parent-child }
+    - { from: "subnet-priv-a", to: "vpc-payments",         kind: parent-child }
+    - { from: "subnet-priv-b", to: "vpc-payments",         kind: parent-child }
+    - { from: "igw-payments",  to: "vpc-payments",         kind: parent-child }
+    - { from: "rt-payments-pub",  to: "igw-payments",      kind: route-target }
+    - { from: "rt-payments-priv", to: "natgw-payments-a",  kind: route-target, weight: 0.6 }
+    - { from: "rt-payments-priv", to: "natgw-payments-b",  kind: route-target, weight: 0.4 }
+    - { from: "natgw-payments-a", to: "subnet-pub-a",      kind: network-attachment }
+    - { from: "natgw-payments-b", to: "subnet-pub-b",      kind: network-attachment }
+
+    # ALB path
+    - { from: "alb-payments-api",      to: "subnet-pub-a",     kind: network-attachment }
+    - { from: "alb-payments-api",      to: "subnet-pub-b",     kind: network-attachment }
+    - { from: "alb-payments-api",      to: "sg-alb-payments",  kind: security-group-binding }
+    - { from: "listener-payments-443", to: "alb-payments-api", kind: listener-target }
+    - { from: "listener-payments-443", to: "tg-payments-api",  kind: listener-target }
+    - { from: "listener-payments-443", to: "cert-payments-api", kind: kms-grant }  # cert binding; kind slot reused for "depends on"
+
+    # Target group
+    - { from: "tg-payments-api", to: "i-aaaa1111", kind: target-registered, weight: 0.34 }
+    - { from: "tg-payments-api", to: "i-bbbb2222", kind: target-registered, weight: 0.33 }
+    - { from: "tg-payments-api", to: "i-cccc3333", kind: target-registered, weight: 0.33 }
+
+    # ASG
+    - { from: "asg-payments-api", to: "i-aaaa1111", kind: autoscaling-attached }
+    - { from: "asg-payments-api", to: "i-bbbb2222", kind: autoscaling-attached }
+    - { from: "asg-payments-api", to: "i-cccc3333", kind: autoscaling-attached }
+    - { from: "asg-payments-api", to: "subnet-priv-a", kind: network-attachment }
+    - { from: "asg-payments-api", to: "subnet-priv-b", kind: network-attachment }
+    - { from: "asg-payments-api", to: "sg-app-payments", kind: security-group-binding }
+
+    # Instances
+    - { from: "i-aaaa1111", to: "subnet-priv-a",    kind: network-attachment }
+    - { from: "i-bbbb2222", to: "subnet-priv-b",    kind: network-attachment }
+    - { from: "i-cccc3333", to: "subnet-priv-a",    kind: network-attachment }
+    - { from: "i-aaaa1111", to: "sg-app-payments",  kind: security-group-binding }
+    - { from: "i-bbbb2222", to: "sg-app-payments",  kind: security-group-binding }
+    - { from: "i-cccc3333", to: "sg-app-payments",  kind: security-group-binding }
+    - { from: "i-aaaa1111", to: "role-payments-api", kind: iam-trust }
+    - { from: "i-bbbb2222", to: "role-payments-api", kind: iam-trust }
+    - { from: "i-cccc3333", to: "role-payments-api", kind: iam-trust }
+
+    # DB path
+    - { from: "rds-payments",    to: "subnet-priv-a",  kind: network-attachment }
+    - { from: "rds-payments",    to: "subnet-priv-b",  kind: network-attachment }
+    - { from: "rds-payments",    to: "sg-db-payments", kind: security-group-binding }
+    - { from: "rds-payments",    to: "kms-payments",   kind: kms-grant }
+    - { from: "rds-payments-ro", to: "rds-payments",   kind: parent-child }
+
+    # SG ingress (read-only reference for blast-radius analysis)
+    - { from: "sg-app-payments", to: "sg-db-payments",  kind: security-group-binding, weight: 0.7 }  # app SG allows DB port
+
+    # DNS
+    - { from: "route53-payments", to: "alb-payments-api", kind: dns-alias, weight: 1.0 }
+
+    # S3 (logs destination)
+    - { from: "alb-payments-api", to: "s3-payments-logs", kind: subscription, weight: 0.3 }

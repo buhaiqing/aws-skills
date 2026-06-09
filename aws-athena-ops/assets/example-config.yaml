@@ -1,0 +1,48 @@
+# Amazon Athena — Example Configuration
+
+x-workgroup_defaults: &workgroup_defaults
+  output_location: "s3://{{user.athena_results_bucket}}/athena/"
+  encryption: "SSE_S3"  # SSE_S3 | SSE_KMS | CSE_KMS | NONE
+
+x-query_defaults: &query_defaults
+  database: "{{user.database_name}}"
+  work_group: "primary"
+
+workgroups:
+  analytics:
+    <<: *workgroup_defaults
+    name: "analytics-wg"
+    description: "Analytics workgroup"
+
+  adhoc:
+    <<: *workgroup_defaults
+    name: "adhoc-wg"
+    description: "Ad-hoc queries"
+
+named_queries:
+  daily_count:
+    <<: *query_defaults
+    name: "daily-event-count"
+    query_string: "SELECT date, count(*) as cnt FROM events GROUP BY date ORDER BY date DESC LIMIT 30"
+    description: "Daily event count"
+
+  top_users:
+    <<: *query_defaults
+    name: "top-users"
+    query_string: "SELECT user_id, count(*) as cnt FROM events GROUP BY user_id ORDER BY cnt DESC LIMIT 10"
+    description: "Top users by activity"
+
+data_catalogs:
+  my_catalog:
+    name: "mydatacatalog"
+    type: "LAMBDA"
+    connection_type: "LAMBDA"
+    parameters:
+      function: "arn:aws:lambda:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:function:my-catalog-handler"
+
+prepared_statements:
+  parameterized_report:
+    <<: *query_defaults
+    name: "parameterized-report"
+    query_string: "SELECT * FROM orders WHERE order_date > ? AND status = ? LIMIT 100"
+    description: "Parameterized report template"

@@ -258,6 +258,90 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml    # Insight/ActionTarget/AutomationRule examples
 │
+├── aws-acm-ops/                   # ACM Operations Skill
+│   ├── SKILL.md                   # Concise - Certificate operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # ACM CLI commands
+│   │   ├── boto3-sdk-usage.md     # ACM SDK code examples
+│   │   ├── core-concepts.md       # Certificate lifecycle, validation
+│   │   ├── troubleshooting.md     # ACM troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Certificate config examples
+│
+├── aws-guardduty-ops/             # GuardDuty Operations Skill
+│   ├── SKILL.md                   # Concise - Threat detection operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # GuardDuty CLI commands
+│   │   ├── boto3-sdk-usage.md     # GuardDuty SDK code examples
+│   │   ├── core-concepts.md       # Threat detection, findings, detectors
+│   │   ├── troubleshooting.md     # GuardDuty troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Detector/Filter config examples
+│
+├── aws-opensearch-ops/            # OpenSearch Operations Skill
+│   ├── SKILL.md                   # Concise - OpenSearch domain operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # OpenSearch CLI commands
+│   │   ├── boto3-sdk-usage.md     # OpenSearch SDK code examples
+│   │   ├── core-concepts.md       # OpenSearch architecture, versions
+│   │   ├── troubleshooting.md     # OpenSearch troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # Domain/Policy config examples
+│
+├── aws-ssm-ops/                   # SSM Operations Skill
+│   ├── SKILL.md                   # Concise - Systems Manager operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SSM CLI commands
+│   │   ├── boto3-sdk-usage.md     # SSM SDK code examples
+│   │   ├── core-concepts.md       # SSM architecture, documents, parameters
+│   │   ├── troubleshooting.md     # SSM troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # SSM config examples
+│
+├── aws-waf-ops/                   # WAF Operations Skill
+│   ├── SKILL.md                   # Concise - WAF rule/WebACL operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # WAF CLI commands
+│   │   ├── boto3-sdk-usage.md     # WAF SDK code examples
+│   │   ├── core-concepts.md       # WAF rules, WebACL, rate limiting
+│   │   ├── troubleshooting.md     # WAF troubleshooting
+│   │   ├── rubric.md              # GCL scoring rubric
+│   │   └── prompt-templates.md    # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml    # WAF rule config examples
+│
+├── aws-athena-ops/              # Athena Operations Skill
+│   ├── SKILL.md                  # Concise - Query/WorkGroup/Catalog operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md      # Athena CLI commands
+│   │   ├── boto3-sdk-usage.md    # Athena SDK code examples
+│   │   ├── core-concepts.md      # Query engine, data catalog
+│   │   ├── troubleshooting.md    # Athena troubleshooting
+│   │   ├── rubric.md             # GCL scoring rubric
+│   │   └── prompt-templates.md   # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml   # WorkGroup/Query/Catalog examples
+│
+├── aws-ram-ops/                 # RAM Operations Skill
+│   ├── SKILL.md                  # Concise - Resource Share/Permission operations
+│   ├── references/
+│   │   ├── aws-cli-usage.md      # RAM CLI commands
+│   │   ├── boto3-sdk-usage.md    # RAM SDK code examples
+│   │   ├── core-concepts.md      # Cross-account sharing, permissions
+│   │   ├── troubleshooting.md    # RAM troubleshooting
+│   │   ├── rubric.md             # GCL scoring rubric
+│   │   └── prompt-templates.md   # GCL prompt templates
+│   └── assets/
+│       └── example-config.yaml   # ResourceShare/Permission examples
+│
 └── aws-[service]-ops/               # More service skills...
 ```
 
@@ -387,7 +471,8 @@ aws sts get-caller-identity --output json
 ## Existing Skills
 
 | Skill | Service | Status |
-|------|------|------|
+|-------|---------|--------|
+| aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
 | aws-skill-generator | Meta Skill | ✅ Complete |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.0.0 |
@@ -410,12 +495,102 @@ aws sts get-caller-identity --output json
 | aws-sqs-ops | SQS (Message Queue) | ✅ Complete |
 | aws-sns-ops | SNS (Notification) | ✅ Complete |
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete |
+| aws-ssm-ops | SSM (Systems Manager) | ✅ Complete v1.0.0 |
 | aws-stepfunctions-ops | Step Functions | ✅ Complete |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
 | aws-opensearch-ops | OpenSearch Service (managed Elasticsearch) | ✅ Complete v1.0.0 |
 | aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
 | aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
+| aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.0.0 |
+| aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.0.0 |
+
+## AIOps Orchestrator
+
+**`aws-aiops-orchestrator`** is the **cross-service brain** that sits on top
+of all 30 `aws-*-ops` skills. It does not execute AWS operations directly;
+instead it:
+
+1. **Routes** user intents (health-check, RCA, self-heal, cost/capacity
+   forecast, change-impact) to the appropriate `aws-*-ops` skill via a
+   standardized `aiops_delegate` envelope.
+2. **Correlates** signals (metrics, logs, events, config, cost) across
+   services — a single symptom often spans 3+ services.
+3. **Drives multi-skill remediation workflows** through 22 standard
+   runbooks (RB-001 … RB-022).
+4. **Provides global capacity & cost forecasting** via CloudWatch FORECAST,
+   Cost Explorer, and Compute Optimizer.
+5. **Implements the unified AIOps closed-loop** (Data Collection →
+   Detection → RCA → Decision → Action → Feedback) reusing the blueprint
+   in [`aws-elb-ops/references/aiops-automation-engine.md`](aws-elb-ops/references/aiops-automation-engine.md).
+
+### When to load the orchestrator
+
+| Use the orchestrator when… | Delegate to a specific skill when… |
+|---------------------------|------------------------------------|
+| Cross-service health ("is prod OK?", "site is slow") | Single-service create / modify / delete |
+| Cross-service RCA ("why 502", "why latency") | Specific CloudWatch / IAM / S3 setup |
+| Cost forecast across services | Single-resource lookup |
+| Coordinated self-heal across multiple skills | Single-skill self-healing (e.g., ELB target re-register) |
+| Change-impact / blast-radius analysis | Direct console-like interaction |
+
+### Orchestrator skill files
+
+```
+aws-aiops-orchestrator/
+├── SKILL.md                          # main entry — 440 lines
+├── references/
+│   ├── delegate-routing.md           # delegate contract + routing matrix
+│   ├── delegate-adapter-patch.md     # canonical patch for downstream skills
+│   ├── correlation-graph.md          # resource dependency graph model
+│   ├── detection-rules.md            # 47 detection rules (FD/PD/CO/SD/CD)
+│   └── runbook-recipes.md            # 22 runbooks (RB-001…RB-022)
+└── assets/
+    ├── example-scope-graph.yaml      # sample dependency graph
+    └── cost-forecast-template.json   # cost forecast output schema
+```
+
+### Detection Rule Coverage (47 rules)
+
+| Domain | Count | Sample Rules | Primary Skills |
+|--------|-------|--------------|----------------|
+| **FD — Fault Detection** | 14 | FD-01 target flapping, FD-03 5xx surge, FD-06 status check fail, FD-10 ALL targets unhealthy, FD-11 Lambda throttle | `aws-elb-ops`, `aws-ec2-ops`, `aws-rds-ops`, `aws-lambda-ops` |
+| **PD — Predictive** | 7 | PD-01 cert expiry, PD-03 RDS storage, PD-05 LCU forecast, PD-07 cost overrun | `aws-acm-ops`, `aws-rds-ops`, `aws-cloudwatch-ops`, Cost Explorer |
+| **CO — Cost Optimization** | 9 | CO-01 idle ALB, CO-03 idle NAT GW, CO-09 cost anomaly, CO-08 Compute Optimizer | `aws-elb-ops`, `aws-vpc-ops`, `aws-ec2-ops`, Compute Optimizer |
+| **SD — Security Detection** | 7 | SD-01 GuardDuty CRITICAL, SD-02 S3 public, SD-03 SG 0.0.0.0/0, SD-04 IAM cred leak | `aws-guardduty-ops`, `aws-s3-ops`, `aws-iam-ops` |
+| **CD — Change Detection** | 5 | CD-01 SG drift, CD-02 IAM attach, CD-04 RDS delete, CD-05 pre-change baseline | `aws-cloudtrail-ops`, `aws-config-ops`, `aws-iam-ops` |
+
+### Runbook Library (22 runbooks)
+
+| ID Range | Coverage |
+|----------|----------|
+| RB-001…RB-010 | Core LB/EC2/RDS/Cert/Cost incidents (target flapping, 5xx surge, cert expiry, idle LB, RDS connections) |
+| RB-011…RB-014 | Lambda + VPC + SG (throttling, iterator age, flow log anomaly, SG drift) |
+| RB-015…RB-017 | Storage + Security (EBS saturation, KMS compliance, IAM credential leak) |
+| RB-018…RB-022 | Cache + Search + Cost + DNS (ElastiCache, OpenSearch, S3 lifecycle, multi-region failover, cost spike) |
+
+### Delegate Adapter Patch (v0.1)
+
+To make a downstream skill orchestrator-aware, apply the canonical patch
+in [`aws-aiops-orchestrator/references/delegate-adapter-patch.md`](aws-aiops-orchestrator/references/delegate-adapter-patch.md).
+The patch:
+
+1. Adds `metadata.orchestrator_aware`, `orchestrator_compat`, and
+   `delegate:` keys to the skill's YAML frontmatter.
+2. Appends a `## AIOps Delegate Contract` section to `SKILL.md`.
+
+**Adoption status** (see `delegate-adapter-patch.md` §5 for migration order):
+
+| Priority | Skills | Status |
+|----------|--------|--------|
+| **P0** (core) | `aws-cloudwatch-ops`, `aws-elb-ops`, `aws-ec2-ops`, `aws-rds-ops`, `aws-vpc-ops`, `aws-acm-ops`, `aws-route53-ops`, `aws-waf-ops` | ✅ Patched |
+| **P1** (data + executor) | `aws-cloudtrail-ops`, `aws-config-ops`, `aws-autoscaling-ops`, `aws-kms-ops`, `aws-iam-ops`, `aws-guardduty-ops`, `aws-securityhub-ops`, `aws-s3-ops` | ✅ Patched |
+| **P2** (optional) | `aws-lambda-ops`, `aws-stepfunctions-ops`, `aws-eventbridge-ops`, `aws-sns-ops`, `aws-sqs-ops`, `aws-ssm-ops`, `aws-secretsmanager-ops`, `aws-elasticache-ops`, `aws-opensearch-ops`, `aws-dynamodb-ops`, `aws-cloudfront-ops`, `aws-eks-ops`, `aws-athena-ops`, `aws-ram-ops` | ⏳ Pending (on demand) |
+
+Apply the patch in priority order; the canonical text is in
+`aws-aiops-orchestrator/references/delegate-adapter-patch.md`. Use
+`scripts/apply_aiops_adapter_patch.py` to batch-apply across multiple
+skills at once (idempotent).
 
 ## AIOps Architecture
 
@@ -456,16 +631,30 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 | `[AI_ASSIST]` | AI recommends, user confirms | 1-4 h | Health check tuning, EC2 resize, capacity scaling, SSM diagnostics |
 | `[MANUAL]` | AI identifies, human decides | > 4 h | SG changes, resource deletion, cost > $100/month changes |
 
-### AIOps Scenario Coverage (31 Scenarios)
+### AIOps Scenario Coverage
 
-| Domain | Scenarios | Key Modules |
-|--------|-----------|-------------|
-| **Fault Detection** (6) | Health flapping, latency spikes, error surges, connection exhaustion, cross-AZ imbalance, traffic anomalies | `aws-elb-ops` + `aws-cloudwatch-ops` |
-| **Predictive Analysis** (5) | Capacity saturation, quota exhaustion, cert expiry, cost overrun, traffic peaks | `aws-cloudwatch-ops` + `aws-elb-ops` + `aws-acm-ops` |
-| **Auto-Healing** (12) | Target re-registration, EC2 reboot/restart, DNS failover, cross-AZ rebalance, compliance fix, health check tuning | `aws-elb-ops` + `aws-ec2-ops` + `aws-route53-ops` + `aws-vpc-ops` |
-| **Root Cause Analysis** (7) | 502 error, high latency, unhealthy target, connection timeout, TLS handshake, cost anomaly, cert expiry | All 6 AIOps modules |
-| **Change Management** (4) | Pre-change impact, post-change validation, auto-rollback, compliance scanning | `aws-elb-ops` + `aws-vpc-ops` + `aws-cloudtrail-ops` |
-| **Cost Optimization** (3) | Idle LB detection, overspec recommendation, cross-AZ cost analysis | `aws-elb-ops` + `aws-cloudwatch-ops` |
+The legacy 31-scenario model in `aws-elb-ops/references/aiops-automation-engine.md`
+remains the canonical blueprint. As of v0.1.0, the AIOps Orchestrator
+generalizes this across the entire `aws-*-ops` fleet with the following
+expanded coverage:
+
+#### Detection Rules (47 total — see `aws-aiops-orchestrator/references/detection-rules.md`)
+
+| Domain | Count | Examples | Key Modules |
+|--------|-------|----------|-------------|
+| **FD — Fault Detection** | 14 | FD-01 target flapping, FD-03 5xx surge, FD-06 status check, FD-10 ALL unhealthy, FD-11 Lambda throttle | `aws-elb-ops`, `aws-cloudwatch-ops`, `aws-ec2-ops`, `aws-rds-ops`, `aws-lambda-ops`, `aws-vpc-ops`, `aws-opensearch-ops` |
+| **PD — Predictive** | 7 | PD-01 cert expiry, PD-03 RDS storage, PD-05 LCU forecast, PD-07 cost overrun | `aws-cloudwatch-ops` (FORECAST), `aws-acm-ops`, `aws-rds-ops`, Cost Explorer |
+| **CO — Cost Optimization** | 9 | CO-01 idle ALB, CO-03 idle NAT GW, CO-04 unattached EBS, CO-07 RDS over-prov, CO-09 cost anomaly | `aws-elb-ops`, `aws-vpc-ops`, `aws-ec2-ops`, Compute Optimizer |
+| **SD — Security Detection** | 7 | SD-01 GuardDuty CRITICAL, SD-02 S3 public, SD-03 SG 0.0.0.0/0, SD-04 IAM leak | `aws-guardduty-ops`, `aws-securityhub-ops`, `aws-s3-ops`, `aws-iam-ops`, `aws-kms-ops` |
+| **CD — Change Detection** | 5 | CD-01 SG drift, CD-02 IAM attach, CD-04 RDS delete, CD-05 pre-change baseline | `aws-cloudtrail-ops`, `aws-config-ops`, `aws-iam-ops` |
+
+#### Runbooks (22 total — see `aws-aiops-orchestrator/references/runbook-recipes.md`)
+
+| Tier | Count | Example Runbooks |
+|------|-------|------------------|
+| **`[AUTO_HEAL]`** (execute without prompt) | 4 | RB-001 target flapping, RB-002 target unhealthy, RB-004 cert expiry, RB-005 WAF DDoS, RB-007 prod 5xx surge |
+| **`[AI_ASSIST]`** (recommend + confirm) | 12 | RB-003 latency spike, RB-008 S3 BPA, RB-010 RDS conn, RB-011 Lambda throttle, RB-013 VPC flow anomaly, RB-015 EBS sat, RB-019 OpenSearch yellow/red, RB-021 multi-region failover |
+| **`[MANUAL]`** (identify only) | 6 | RB-006 cost investigation, RB-009 idle LB, RB-014 SG open ingress, RB-017 IAM leak, RB-020 S3 lifecycle, RB-022 cost spike containment |
 
 ### Auto-Heal Boundary Conditions
 
@@ -477,6 +666,9 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 | First-seen anomaly type | `[AI_ASSIST]` | No historical pattern |
 | Auto-heal fails 2x | `[MANUAL]` | Prevent crash cascade |
 | ALL targets unhealthy | `[AI_ASSIST]` | May indicate app outage |
+| Orchestrator-level: blast radius > 5 prod resources | `[MANUAL]` | Mass change requires human review |
+| Orchestrator-level: missing `confirmation_token` on destructive op | `[AI_ASSIST]` | Per delegate contract §6 |
+| Orchestrator-level: orchestrator_aware flag false on target skill | `[AI_ASSIST]` | Fall back to recommendation until patched |
 
 ### Cross-Module RCA Chains
 
@@ -491,15 +683,24 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 
 | Module | Original Version | Current Version | Enhancement |
 |--------|-----------------|----------------|-------------|
-| `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management |
-| `aws-cloudwatch-ops` | v2.1.0 | **v2.2.0** | ELB-specific alarms, metrics mapping, layered inspection |
-| `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** (`references/rubric.md` + `references/prompt-templates.md`) |
-| `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA |
-| `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration |
-| `aws-acm-ops` | — | **v1.0.0 (new)** | Certificate lifecycle, expiry monitoring, auto-renewal |
-| `aws-autoscaling-ops` | — | **v1.0.0 (new)** | ASG management, scaling policies, instance refresh, lifecycle hooks, capacity governance; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
-| `aws-config-ops` | — | **v1.0.0 (new)** | Configuration recorder, delivery channel, managed/custom rules, conformance packs, aggregator, compliance evaluation; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
-| `aws-eventbridge-ops` | — | **v1.0.0 (new)** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL** (`references/rubric.md` + `references/prompt-templates.md`) |
+| `aws-aiops-orchestrator` | — | **v0.1.0 (new)** | **Cross-service orchestrator**: 47 detection rules, 22 runbooks, 16 downstream skills patched with delegate contract; bridges single-service AIOps into end-to-end RCA + coordinated remediation |
+| `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management; **orchestrator-aware (P0 patched)** |
+| `aws-cloudwatch-ops` | v2.1.0 | **v2.2.0** | ELB-specific alarms, metrics mapping, layered inspection; **orchestrator-aware (P0 patched)** |
+| `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** + **orchestrator-aware (P0 patched)** |
+| `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA; **orchestrator-aware (P0 patched)** |
+| `aws-rds-ops` | v1.1.0 | **v1.1.0+** | DB diagnostics, RDS connections; **orchestrator-aware (P0 patched)** |
+| `aws-acm-ops` | — | **v1.0.0 (new)** | Certificate lifecycle, expiry monitoring, auto-renewal; **orchestrator-aware (P0 patched)** |
+| `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration; **orchestrator-aware (P0 patched)** |
+| `aws-waf-ops` | — | **v1.0.0 (new)** | WAF AIOps: traffic anomaly, rate limiting, Managed Rules, rule audit; **orchestrator-aware (P0 patched)** |
+| `aws-autoscaling-ops` | — | **v1.0.0 (new)** | ASG management, scaling policies, instance refresh, lifecycle hooks, capacity governance; **GCL** + **orchestrator-aware (P1 patched)** |
+| `aws-config-ops` | — | **v1.0.0 (new)** | Configuration recorder, delivery channel, managed/custom rules, conformance packs, aggregator, compliance evaluation; **GCL** + **orchestrator-aware (P1 patched)** |
+| `aws-eventbridge-ops` | — | **v1.0.0 (new)** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL** + **orchestrator-aware (P2 pending)** |
+| `aws-cloudtrail-ops` | v1.0.0 | **v1.0.0+** | API event correlation, change timeline; **orchestrator-aware (P1 patched)** |
+| `aws-s3-ops` | v1.0.0 | **v1.1.0** | Lifecycle gap detection, public-access audit, cost optimization; **GCL pilot** + **orchestrator-aware (P1 patched)** |
+| `aws-iam-ops` | v1.0.0 | **v1.1.0** | Credential leak response, IAM attach tracking; **GCL pilot** + **orchestrator-aware (P1 patched)** |
+| `aws-kms-ops` | v1.0.0 | **v2.1.0** | Key compliance, rotation, deletion guard; **GCL pilot** + **orchestrator-aware (P1 patched)** |
+| `aws-guardduty-ops` | — | **v1.0.0 (new)** | Threat detection, finding correlation; **orchestrator-aware (P1 patched)** |
+| `aws-securityhub-ops` | — | **v1.0.0 (new)** | Security score, compliance standards aggregation; **orchestrator-aware (P1 patched)** |
 
 ## References
 
@@ -514,6 +715,7 @@ Layer 6: 反馈学习层 (Feedback & Learning)
 | **Level 1** — ELB API + CloudWatch | 18 scenarios | Nothing (default ON) | Free |
 | **Level 2** — + CloudTrail Management Events | 5 scenarios | CloudTrail (default ON) | Free |
 | **Level 3** — + Access Logs / Flow Logs | 5 scenarios (optional depth) | S3 / Logs | Minimal |
+| **Orchestrator** — All of the above + Cost Explorer + Compute Optimizer | 47 detection rules + 22 runbooks across 16 patched skills | All P0/P1 downstream skills | Free – Minimal |
 
 See `aws-elb-ops/references/integration.md` for detailed CloudTrail and AWS Config integration.
 
@@ -534,6 +736,8 @@ All **28 skills** now have complete GCL implementation:
 | **Group 3** | `aws-elasticache-ops`, `aws-waf-ops`, `aws-secretsmanager-ops`, `aws-ssm-ops`, `aws-acm-ops`, `aws-eks-ops`, `aws-sqs-ops`, `aws-sns-ops`, `aws-stepfunctions-ops`, `aws-cloudwatch-ops`, `aws-cloudtrail-ops` | required/recommended/optional | 2026-06-04 |
 | **Group 4** | `aws-autoscaling-ops` | required | 2026-06-07 |
 | **Group 5** | `aws-config-ops`, `aws-eventbridge-ops` | recommended | 2026-06-07 |
+| **Group 6** | `aws-guardduty-ops`, `aws-opensearch-ops`, `aws-securityhub-ops` | required | 2026-06-08 |
+| **Group 7** | `aws-athena-ops`, `aws-ram-ops` | required | 2026-06-10 |
 
 - **5-dimension rubric** (0 / 0.5 / 1): Correctness, Safety, Idempotency,
   Traceability, Spec Compliance. **Safety = 0 → ABORT.**
@@ -555,7 +759,7 @@ All **28 skills** now have complete GCL implementation:
 | 6 | ✅ Multi-region AIOps | Done | Cross-region health/latency/failover in aws-route53-ops/references/ |
 | 7 | ✅ Feedback loop persistence | Done | CloudWatch Logs feedback storage in aws-cloudwatch-ops/references/ |
 | 8 | ✅ SLA breach escalation | Done | PagerDuty/Jira integration in aws-elb-ops/references/ |
-| 9 | ✅ GCL full rollout | Done | All 28 skills (4 pilots + 24 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
+| 9 | ✅ GCL full rollout | Done | All 30 skills (4 pilots + 26 rollout) have complete GCL implementation — rubric.md, prompt-templates.md, GCL section, gcl frontmatter |
 | 10 | 🔄 GCL runner script | Planned | `scripts/gcl_runner.py` reusable Orchestrator (Phase 2) |
 
 ## License

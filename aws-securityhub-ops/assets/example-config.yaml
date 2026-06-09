@@ -1,7 +1,6 @@
 # Security Hub Example Configurations
 
-YAML anchors used for shared defaults:
-```yaml
+# YAML anchors used for shared defaults:
 # Shared defaults
 x-hub-defaults: &hub_defaults
   auto_enable_controls: true
@@ -19,17 +18,13 @@ x-automation-rule-defaults: &automation_rule_defaults
       FindingFieldsUpdate:
         Workflow: {Status: "NEW"}
         Note: {Text: "Auto-triaged by automation rule", UpdatedBy: "aws-agent"}
-```
 
 ## Hub — Enable
-```yaml
 hub:
   <<: *hub_defaults
   region: "{{user.region}}"
-```
 
 ## Insights
-```yaml
 # Critical findings by resource
 insight:
   name: "Critical Findings by Resource"
@@ -58,10 +53,8 @@ insight:
       - {Comparison: "EQUALS", Value: "NEW"}
   group_by_attribute: "AwsAccountId"
   region: "{{user.region}}"
-```
 
 ## Action Targets
-```yaml
 # SNS notification target
 action_target:
   name: "Security Team SNS"
@@ -75,10 +68,8 @@ action_target:
   description: "Trigger auto-remediation Lambda for specific findings"
   id: "auto-remediation-lambda"
   region: "{{user.region}}"
-```
 
 ## Findings — Batch Import Example
-```yaml
 finding:
   <<: *finding_defaults
   id: "finding-example-001"
@@ -93,20 +84,16 @@ finding:
     - type: "AwsEc2Instance"
       id: "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:instance/i-1234567890abcdef0"
   region: "{{user.region}}"
-```
 
 ## Standards
-```yaml
 # Enable CIS and AWS Foundational standards
 standards:
   enabled:
     - arn: "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0"
     - arn: "arn:aws:securityhub:::ruleset/aws-foundational-security-best-practices/v/1.0.0"
   region: "{{user.region}}"
-```
 
 ## Automation Rules
-```yaml
 # Auto-suppress informational findings
 automation_rule:
   <<: *automation_rule_defaults
@@ -141,10 +128,8 @@ automation_rule:
         Workflow: {Status: "NOTIFIED"}
         Note: {Text: "Critical S3 finding - immediate attention required", UpdatedBy: "automation-rule"}
   region: "{{user.region}}"
-```
 
 ## Configuration Policy (Organizations)
-```yaml
 # Organization-wide Security Hub policy
 configuration_policy:
   name: "Org Security Hub Policy"
@@ -163,10 +148,8 @@ configuration_policy:
           - "VPC.1"
         DisabledSecurityControlIdentifiers: []
   region: "{{user.region}}"
-```
 
 ## Deletion Examples
-```yaml
 # Delete insight (requires confirmation)
 deletion:
   operation: "delete-insight"
@@ -186,4 +169,3 @@ deletion:
   product_subscription_arn: "arn:aws:securityhub:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:product-subscription/guardduty"
   confirmation_required: true
   confirmation_string: "DISABLE_PRODUCT {{user.product_subscription_arn}}"
-```

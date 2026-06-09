@@ -1,7 +1,6 @@
 # OpenSearch Service Example Configurations
 
-YAML anchors used for shared defaults:
-```yaml
+# YAML anchors used for shared defaults:
 # Shared defaults
 x-dev: &dev
   engine_version: "OpenSearch_2.11"
@@ -38,11 +37,9 @@ x-prod: &prod
   fine_grained_access_control: true
   internal_user_database: true
   automated_snapshot_start_hour: 3
-```
 
 ## OpenSearch Domain — Dev & Prod
 
-```yaml
 # Dev
 opensearch_domain:
   <<: *dev
@@ -71,11 +68,9 @@ opensearch_domain:
   tags:
     - {Key: Environment, Value: production}
     - {Key: Application, Value: orders-service}
-```
 
 ## OpenSearch Domain — Public Access (Dev/Test)
 
-```yaml
 opensearch_domain:
   <<: *dev
   domain_name: "public-test-search"
@@ -95,11 +90,9 @@ opensearch_domain:
         }
       ]
     }
-```
 
 ## Snapshot Operations
 
-```yaml
 # Create manual snapshot
 snapshot:
   operation: "create"
@@ -113,20 +106,16 @@ restore:
   domain_name: "prod-search-orders"
   snapshot_name: "prod-search-pre-upgrade-20260608"
   repository_name: "cs-automated"
-```
 
 ## VPC Endpoint
 
-```yaml
 vpc_endpoint:
   domain_arn: "arn:aws:es:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:domain/prod-search-orders"
   subnet_ids: ["subnet-prod-1a", "subnet-prod-1b"]
   security_group_ids: ["sg-prod-opensearch-vpce"]
-```
 
 ## Data Ingestion Pipeline
 
-```yaml
 # Dev pipeline
 ingestion_pipeline:
   pipeline_name: "dev-logs-pipeline"
@@ -168,11 +157,9 @@ ingestion_pipeline:
   vpc_options:
     subnet_ids: ["subnet-prod-1a", "subnet-prod-1b"]
     security_group_ids: ["sg-prod-pipeline"]
-```
 
 ## Domain Access Policy Examples
 
-```yaml
 # IAM role-based access
 access_policy_iam:
   Version: "2012-10-17"
@@ -194,35 +181,30 @@ access_policy_vpce:
       Condition:
         StringEquals:
           aws:SourceVpce: "{{user.VpcEndpointId}}"
-```
 
 ## Domain Upgrade
 
-```yaml
 upgrade:
   domain_name: "prod-search-orders"
   target_version: "OpenSearch_2.11"
   perform_check_only: false
   confirmation_required: true
   confirmation_string: "UPGRADE_DOMAIN prod-search-orders to OpenSearch_2.11"
-```
 
 ## Deletion
 
-```yaml
 # Domain deletion
- deletion:
+deletion:
   operation: "delete"
   domain_name: "old-test-domain"
   confirmation_required: true
   confirmation_string: "DELETE_DOMAIN old-test-domain"
 
 # Snapshot deletion
- deletion:
+deletion:
   operation: "delete-snapshot"
   domain_name: "prod-search-orders"
   snapshot_name: "old-snapshot-20260101"
   repository_name: "cs-automated"
   confirmation_required: true
   confirmation_string: "DELETE_SNAPSHOT old-snapshot-20260101 from prod-search-orders"
-```

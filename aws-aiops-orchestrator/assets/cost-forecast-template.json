@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aws-skills/aiops-orchestrator/cost-forecast-template.json",
+  "title": "AIOps Cost Forecast Output",
+  "description": "Canonical output template for the cost-forecast intent. Returned by the orchestrator after running Layer 1-2 against Cost Explorer, CloudWatch, and Compute Optimizer.",
+  "type": "object",
+  "required": ["request_id", "scope", "current", "forecast", "drivers", "recommendations"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Trace correlation ID, propagated from the user request."
+    },
+    "scope": {
+      "type": "object",
+      "required": ["region", "time_window"],
+      "properties": {
+        "account_id": { "type": "string" },
+        "region": { "type": "string", "description": "Or 'global' for account-wide." },
+        "tags": { "type": "object", "additionalProperties": { "type": "string" } },
+        "time_window": { "type": "string", "description": "e.g., next_30d, next_90d." }
+      }
+    },
+    "current": {
+      "type": "object",
+      "description": "Current month's run-rate snapshot.",
+      "properties": {
+        "month_to_date_usd": { "type": "number" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "by_service": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["service", "usd"],
+            "properties": {
+              "service": { "type": "string" },
+              "usd": { "type": "number" },
+              "delta_vs_prev_month_pct": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "forecast": {
+      "type": "object",
+      "required": ["next_30d_usd", "next_90d_usd"],
+      "properties": {
+        "next_30d_usd": { "type": "number" },
+        "next_90d_usd": { "type": "number" },
+        "confidence_low_usd": { "type": "number" },
+        "confidence_high_usd": { "type": "number" },
+        "method": {
+          "type": "string",
+          "enum": ["cost-explorer-getcostforecast", "linear-extrapolation", "ml-ensemble"]
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-text assumptions baked into the forecast."
+        }
+      }
+    },
+    "drivers": {
+      "type": "array",
+      "description": "Top cost drivers projected for the forecast window.",
+      "items": {
+        "type": "object",
+        "required": ["service", "driver", "projected_delta_usd"],
+        "properties": {
+          "service": { "type": "string" },
+          "driver": { "type": "string", "description": "e.g., 'NAT GW data transfer', 'EBS gp3 volume growth'." },
+          "projected_delta_usd": { "type": "number", "description": "Projected change vs current month." },
+          "trend": { "type": "string", "enum": ["rising", "stable", "falling"] },
+          "evidence": { "type": "string", "description": "Source metric or event that triggered the trend." }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Cost optimization actions, ordered by projected savings.",
+      "items": {
+        "type": "object",
+        "required": ["tier", "action", "projected_savings_usd_month"],
+        "properties": {
+          "tier": { "type": "string", "enum": ["AUTO_HEAL", "AI_ASSIST", "MANUAL"] },
+          "action": { "type": "string" },
+          "rationale": { "type": "string" },
+          "rule_id": { "type": "string", "description": "Detection rule that surfaced this." },
+          "target_skill": { "type": "string", "description": "e.g., aws-s3-ops, aws-ec2-ops." },
+          "blast_radius": { "type": "array", "items": { "type": "string" } },
+          "projected_savings_usd_month": { "type": "number" },
+          "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+          "rollback": { "type": "string" }
+        }
+      }
+    },
+    "anomalies": {
+      "type": "array",
+      "description": "Any active cost anomalies detected.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rule_id": { "type": "string", "const": "CO-09" },
+          "service": { "type": "string" },
+          "anomaly_score": { "type": "number" },
+          "impact_usd_per_day": { "type": "number" }
+        }
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "description": "Self-reflection fields populated in Layer 6.",
+      "properties": {
+        "data_completeness_pct": { "type": "number" },
+        "known_gaps": { "type": "array", "items": { "type": "string" } },
+        "next_refresh_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "example": {
+    "request_id": "req_8f12a9c0-2026-06-10",
+    "scope": {
+      "account_id": "123456789012",
+      "region": "us-east-1",
+      "tags": { "Env": "prod" },
+      "time_window": "next_30d"
+    },
+    "current": {
+      "month_to_date_usd": 18432.55,
+      "as_of": "2026-06-10T00:00:00Z",
+      "by_service": [
+        { "service": "EC2", "usd": 6420.10, "delta_vs_prev_month_pct": 12.3 },
+        { "service": "RDS", "usd": 4310.00, "delta_vs_prev_month_pct": -2.1 },
+        { "service": "ELB", "usd": 1280.45, "delta_vs_prev_month_pct": 0.5 },
+        { "service": "DataTransfer", "usd": 3980.20, "delta_vs_prev_month_pct": 18.7 }
+      ]
+    },
+    "forecast": {
+      "next_30d_usd": 21300.00,
+      "next_90d_usd": 64500.00,
+      "confidence_low_usd": 19800.00,
+      "confidence_high_usd": 23400.00,
+      "method": "cost-explorer-getcostforecast",
+      "assumptions": [
+        "Linear growth in DataTransfer (~18%/mo) due to new ASG scaling",
+        "Stable EC2 footprint; new instances absorbed by RI coverage"
+      ]
+    },
+    "drivers": [
+      {
+        "service": "DataTransfer",
+        "driver": "NAT GW bytes processed from new payments-api ASG",
+        "projected_delta_usd": 2400.00,
+        "trend": "rising",
+        "evidence": "AWS/EC2 NATGateway BytesOutToDestination +18% week-over-week"
+      }
+    ],
+    "recommendations": [
+      {
+        "tier": "MANUAL",
+        "action": "Move payments-api to VPC endpoint for S3 (replace NAT GW path)",
+        "rationale": "S3 traffic via NAT GW is the dominant DataTransfer cost",
+        "rule_id": "CO-03",
+        "target_skill": "aws-vpc-ops",
+        "blast_radius": ["i-aaaa1111", "i-bbbb2222", "i-cccc3333", "natgw-payments-a"],
+        "projected_savings_usd_month": 1800.00,
+        "risk": "medium",
+        "rollback": "Remove VPC endpoint; traffic reverts to NAT GW"
+      }
+    ],
+    "anomalies": [
+      {
+        "rule_id": "CO-09",
+        "service": "DataTransfer",
+        "anomaly_score": 84,
+        "impact_usd_per_day": 80.00
+      }
+    ],
+    "feedback": {
+      "data_completeness_pct": 92,
+      "known_gaps": ["Savings Plans coverage data unavailable in this region"],
+      "next_refresh_at": "2026-06-11T00:00:00Z"
+    }
+  }
+}

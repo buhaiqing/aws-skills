@@ -1,0 +1,43 @@
+# AWS RAM — Example Configuration
+
+x-share_defaults: &share_defaults
+  allow_external_principals: false  # true for cross-org sharing
+
+x-org_defaults: &org_defaults
+  allow_external_principals: false
+
+resource_shares:
+  shared_subnet:
+    <<: *share_defaults
+    name: "shared-subnet-prod"
+    resource_arns:
+      - "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:subnet/subnet-abc123"
+      - "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:subnet/subnet-def456"
+    principals:
+      - "222222222222"
+      - "333333333333"
+
+  shared_security_group:
+    <<: *share_defaults
+    name: "shared-sg-prod"
+    resource_arns:
+      - "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:security-group/sg-abc123"
+    principals:
+      - "222222222222"
+
+cross_account_share:
+  <<: *share_defaults
+  name: "partner-access"
+  allow_external_principals: true
+  resource_arns:
+    - "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:subnet/subnet-partner1"
+  principals:
+    - "444444444444"
+
+permissions:
+  vpc_readonly:
+    name: "AmazonVPCReadOnlyAccess"
+    resource_type: "ec2:Subnet"
+  rds_cluster:
+    name: "AmazonRDSDBClusterReadOnlyAccess"
+    resource_type: "rds:DBCluster"

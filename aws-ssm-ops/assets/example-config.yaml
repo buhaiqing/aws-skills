@@ -7,9 +7,9 @@
 # --- Shared Anchors ---
 x-common-tags: &common-tags
   Tags:
-    - Key: "Environment"; Value: "{{user.environment:dev}}"
-    - Key: "ManagedBy"; Value: "AI-Agent"
-    - Key: "Project"; Value: "{{user.project_name}}"
+    - {Key: "Environment", Value: "{{user.environment:dev}}"}
+    - {Key: "ManagedBy", Value: "AI-Agent"}
+    - {Key: "Project", Value: "{{user.project_name}}"}
 
 x-parameter-tier: &parameter-tier
   Tier: "Standard"

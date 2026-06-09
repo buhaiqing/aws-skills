@@ -258,6 +258,90 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml    # 洞察/操作目标/自动化规则配置示例
 │
+├── aws-acm-ops/                   # ACM 操作技能
+│   ├── SKILL.md                   # 精简版 - 证书操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # ACM CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # ACM SDK 代码示例
+│   │   ├── core-concepts.md       # 证书生命周期/验证
+│   │   ├── troubleshooting.md     # ACM 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 证书配置示例
+│
+├── aws-guardduty-ops/             # GuardDuty 操作技能
+│   ├── SKILL.md                   # 精简版 - 威胁检测操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # GuardDuty CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # GuardDuty SDK 代码示例
+│   │   ├── core-concepts.md       # 威胁检测/发现/探测器
+│   │   ├── troubleshooting.md     # GuardDuty 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 探测器/过滤器配置示例
+│
+├── aws-opensearch-ops/            # OpenSearch 操作技能
+│   ├── SKILL.md                   # 精简版 - OpenSearch 域操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # OpenSearch CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # OpenSearch SDK 代码示例
+│   │   ├── core-concepts.md       # OpenSearch 架构/版本
+│   │   ├── troubleshooting.md     # OpenSearch 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # 域/策略配置示例
+│
+├── aws-ssm-ops/                   # SSM 操作技能
+│   ├── SKILL.md                   # 精简版 - Systems Manager 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # SSM CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # SSM SDK 代码示例
+│   │   ├── core-concepts.md       # SSM 架构/文档/参数
+│   │   ├── troubleshooting.md     # SSM 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # SSM 配置示例
+│
+├── aws-waf-ops/                   # WAF 操作技能
+│   ├── SKILL.md                   # 精简版 - WAF 规则/WebACL 操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md       # WAF CLI 命令详解
+│   │   ├── boto3-sdk-usage.md     # WAF SDK 代码示例
+│   │   ├── core-concepts.md       # WAF 规则/WebACL/速率限制
+│   │   ├── troubleshooting.md     # WAF 故障排查
+│   │   ├── rubric.md              # GCL 评分标准
+│   │   └── prompt-templates.md    # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml    # WAF 规则配置示例
+│
+├── aws-athena-ops/              # Athena 操作技能
+│   ├── SKILL.md                  # 精简版 - 查询/工作组/数据目录操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md      # Athena CLI 命令详解
+│   │   ├── boto3-sdk-usage.md    # Athena SDK 代码示例
+│   │   ├── core-concepts.md      # 查询引擎/数据目录架构
+│   │   ├── troubleshooting.md    # Athena 故障排查
+│   │   ├── rubric.md             # GCL 评分标准
+│   │   └── prompt-templates.md   # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml   # 工作组/查询/目录配置示例
+│
+├── aws-ram-ops/                 # RAM 操作技能
+│   ├── SKILL.md                  # 精简版 - 资源共享/权限操作
+│   ├── references/
+│   │   ├── aws-cli-usage.md      # RAM CLI 命令详解
+│   │   ├── boto3-sdk-usage.md    # RAM SDK 代码示例
+│   │   ├── core-concepts.md      # 跨账户共享/权限架构
+│   │   ├── troubleshooting.md    # RAM 故障排查
+│   │   ├── rubric.md             # GCL 评分标准
+│   │   └── prompt-templates.md   # GCL 提示模板
+│   └── assets/
+│       └── example-config.yaml   # 资源共享/权限配置示例
+│
 └── aws-[service]-ops/               # 后续服务技能...
 ```
 
@@ -388,6 +472,7 @@ aws sts get-caller-identity --output json
 
 | 技能 | 服务 | 状态 |
 |------|------|------|
+| aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
 | aws-skill-generator | Meta Skill | ✅ 完成 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 · **GCL 试点 v1.3.0** |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.0.0 |
@@ -410,10 +495,96 @@ aws sts get-caller-identity --output json
 | aws-sqs-ops | SQS (消息队列) | ✅ 完成 |
 | aws-sns-ops | SNS (通知) | ✅ 完成 |
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 |
+| aws-ssm-ops | SSM (Systems Manager) | ✅ 完成 v1.0.0 |
 | aws-stepfunctions-ops | Step Functions | ✅ 完成 |
+| aws-waf-ops | WAF (Web Application Firewall) | ✅ 完成 v1.0.0 |
+| aws-acm-ops | ACM (Certificate Manager) | ✅ 完成 v1.0.0 |
 | aws-opensearch-ops | OpenSearch Service (托管 Elasticsearch) | ✅ 完成 v1.0.0 |
 | aws-guardduty-ops | GuardDuty (威胁检测) | ✅ 完成 v1.0.0 |
 | aws-securityhub-ops | Security Hub (安全发现/合规) | ✅ 完成 v1.0.0 |
+| aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.0.0 |
+| aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.0.0 |
+
+## AIOps 编排器
+
+**`aws-aiops-orchestrator`** 是构建在所有 `aws-*-ops` 技能之上的**跨服务大脑**。它不直接执行 AWS 操作，而是：
+
+1. **路由**：通过标准化的 `aiops_delegate` 信封，将用户意图（健康检查、RCA、自愈、成本/容量预测、变更影响）分发到合适的 `aws-*-ops` 技能。
+2. **关联**：跨服务关联指标、日志、事件、配置、成本信号 —— 一个症状往往横跨 3+ 个服务。
+3. **驱动多技能修复**：通过 22 个标准 runbook（RB-001 … RB-022）。
+4. **全局预测**：借助 CloudWatch FORECAST、Cost Explorer、Compute Optimizer 提供全局容量与成本预测。
+5. **复用 6 层闭环蓝图**：直接复用 [`aws-elb-ops/references/aiops-automation-engine.md`](aws-elb-ops/references/aiops-automation-engine.md) 的设计模式（Data Collection → Detection → RCA → Decision → Action → Feedback）。
+
+### 何时使用编排器
+
+| 用编排器 | 用具体技能 |
+|---------|----------|
+| 跨服务健康（"线上还好吗？""网站很慢"） | 单服务创建/修改/删除 |
+| 跨服务 RCA（"为什么 502""为什么延迟"） | 具体的 CloudWatch / IAM / S3 设置 |
+| 跨服务成本预测 | 单资源查询 |
+| 多技能协同自愈 | 单技能自愈（如 ELB target re-register） |
+| 变更影响 / 爆炸半径分析 | 直接 console 式交互 |
+
+### 文件结构
+
+```
+aws-aiops-orchestrator/
+├── SKILL.md                          # 主入口（440 行）
+├── references/
+│   ├── delegate-routing.md           # 委派契约 + 路由矩阵
+│   ├── delegate-adapter-patch.md     # 下游技能适配补丁规范
+│   ├── correlation-graph.md          # 资源依赖图模型
+│   ├── detection-rules.md            # 47 条检测规则（FD/PD/CO/SD/CD）
+│   └── runbook-recipes.md            # 22 个 runbook（RB-001…RB-022）
+└── assets/
+    ├── example-scope-graph.yaml      # 依赖图示例
+    └── cost-forecast-template.json   # 成本预测输出 schema
+```
+
+### 检测规则覆盖（47 条）
+
+| 领域 | 数量 | 示例规则 | 涉及技能 |
+|------|------|----------|----------|
+| **FD — 故障检测** | 14 | FD-01 target 抖动、FD-03 5xx 飙升、FD-06 status check、FD-10 ALL unhealthy、FD-11 Lambda throttle | elb、cloudwatch、ec2、rds、lambda、vpc、opensearch |
+| **PD — 预测** | 7 | PD-01 证书到期、PD-03 RDS 存储、PD-05 LCU 预测、PD-07 成本超支 | cloudwatch (FORECAST)、acm、rds、Cost Explorer |
+| **CO — 成本优化** | 9 | CO-01 空闲 ALB、CO-03 空闲 NAT GW、CO-04 未挂载 EBS、CO-07 RDS 过大、CO-09 成本异常 | elb、vpc、ec2、Compute Optimizer |
+| **SD — 安全检测** | 7 | SD-01 GuardDuty CRITICAL、SD-02 S3 公开、SD-03 SG 0.0.0.0/0、SD-04 IAM 凭据泄露 | guardduty、securityhub、s3、iam、kms |
+| **CD — 变更检测** | 5 | CD-01 SG 漂移、CD-02 IAM 附加、CD-04 RDS 删除、CD-05 变更前基线 | cloudtrail、config、iam |
+
+### Runbook 库（22 个）
+
+| ID 范围 | 覆盖场景 |
+|---------|----------|
+| RB-001…RB-010 | 核心 LB/EC2/RDS/Cert/Cost 事件 |
+| RB-011…RB-014 | Lambda + VPC + SG（限流、迭代器龄、流量日志异常、SG 漂移） |
+| RB-015…RB-017 | 存储 + 安全（EBS 满、KMS 合规、IAM 凭据泄露） |
+| RB-018…RB-022 | 缓存 + 搜索 + 成本 + DNS（ElastiCache、OpenSearch、S3 生命周期、多区域故障切换、成本尖峰） |
+
+### 委派适配补丁（v0.1）
+
+要让下游技能变成 "orchestrator-aware"，应用
+[`aws-aiops-orchestrator/references/delegate-adapter-patch.md`](aws-aiops-orchestrator/references/delegate-adapter-patch.md) 中的标准补丁。补丁会：
+
+1. 在 skill 的 YAML frontmatter 增加 `metadata.orchestrator_aware`、`orchestrator_compat`、`delegate:` 键。
+2. 在 `SKILL.md` 末尾追加 `## AIOps Delegate Contract` 章节。
+
+**当前适配状态**（迁移顺序见补丁文档 §5）：
+
+| 优先级 | 技能 | 状态 |
+|--------|------|------|
+| **P0**（核心）| cloudwatch、elb、ec2、rds、vpc、acm、route53、waf | ✅ 已打补丁 |
+| **P1**（数据 + 执行器）| cloudtrail、config、autoscaling、kms、iam、guardduty、securityhub、s3 | ✅ 已打补丁 |
+| **P2**（可选）| lambda、stepfunctions、eventbridge、sns、sqs、ssm、secretsmanager、elasticache、opensearch、dynamodb、cloudfront、eks、athena、ram | ⏳ 待办（按需） |
+
+批量应用：使用 `scripts/apply_aiops_adapter_patch.py`（幂等）。
+
+### 完整覆盖统计
+
+- **30** 个 ops 技能（含 1 个 meta-skill）
+- **16** 个技能已应用 orchestrator 适配补丁（P0 + P1）
+- **47** 条检测规则（FD/PD/CO/SD/CD）
+- **22** 个标准 runbook（RB-001 … RB-022）
+- **6** 层 AIOps 闭环（Data Collection → Detection → RCA → Decision → Action → Feedback）
 
 ## 质量门 (GCL)
 
@@ -421,7 +592,7 @@ aws sts get-caller-identity --output json
 [`aws-skill-generator/references/gcl-spec.md`](aws-skill-generator/references/gcl-spec.md)；
 顶层索引位于 `AGENTS.md` §11。
 
-全部 **28 个技能** 现已完成 GCL 实现：
+全部 **30 个技能** 现已完成 GCL 实现：
 
 | 阶段 | 技能 | 类别 | 日期 |
 |---|---|---|---|
@@ -431,6 +602,8 @@ aws sts get-caller-identity --output json
 | **Group 3** | `aws-elasticache-ops`、`aws-waf-ops`、`aws-secretsmanager-ops`、`aws-ssm-ops`、`aws-acm-ops`、`aws-eks-ops`、`aws-sqs-ops`、`aws-sns-ops`、`aws-stepfunctions-ops`、`aws-cloudwatch-ops`、`aws-cloudtrail-ops` | required/recommended/optional | 2026-06-04 |
 | **Group 4** | `aws-autoscaling-ops` | required | 2026-06-07 |
 | **Group 5** | `aws-config-ops`、`aws-eventbridge-ops` | recommended | 2026-06-07 |
+| **Group 6** | `aws-guardduty-ops`、`aws-opensearch-ops`、`aws-securityhub-ops` | required | 2026-06-08 |
+| **Group 7** | `aws-athena-ops`、`aws-ram-ops` | required | 2026-06-10 |
 
 - **5 维度评分** (0 / 0.5 / 1): 正确性、安全性、幂等性、可追溯性、规范合规性。**Safety = 0 → 立即 ABORT。**
 - **跟踪路径:** `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` (git-ignored)。
