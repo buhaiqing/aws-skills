@@ -151,6 +151,16 @@ Confirm: Type DELETE {{user.ZoneName}} to proceed.
 - `aws-s3-ops` — Static website endpoints
 - `aws-cloudfront-ops` — CloudFront alias records
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded record types/limits — use `list-hosted-zones` / `list-resource-record-sets`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 
 - [AWS CLI Usage](references/aws-cli-usage.md)

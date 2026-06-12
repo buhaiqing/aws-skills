@@ -332,6 +332,16 @@ Auto-heal **downgrades** to AI_ASSIST or MANUAL when:
 - `aws-lambda-ops` - Lambda env var encryption
 - `aws-secrets-manager-ops` - Secrets encryption
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded key states/limits — use `describe-key` / `list-keys` / `get-key-rotation-status`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 
 - [Prompt Examples](references/prompt-examples.md) — Concrete user prompts for KMS operations

@@ -76,7 +76,7 @@ Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. Thi
 - Keywords: balance, distribute, health-check, listener, target-group, unhealthy-instance, ec2-lb-diagnostics
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
+- Billing/cost analysis → out of scope; use AWS Cost Explorer directly
 - IAM only → delegate to: `aws-iam-ops`
 - VPC/Subnet → delegate to: `aws-vpc-ops`
 - Load Balancer → delegate to: `aws-elb-ops`
@@ -639,6 +639,16 @@ client.modify_instance_attribute(
     InstanceType={'Value': '{{user.new_instance_type}}'}
 )
 ```
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded instance types/AMIs — use `describe-instance-types` / `describe-images`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 

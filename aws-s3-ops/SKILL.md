@@ -66,7 +66,7 @@ Amazon S3 (Simple Storage Service) provides object storage with scalability, ava
 - Keywords: bucket, object, key, prefix, upload, download, multipart
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
+- Billing only → out of scope; use AWS Cost Explorer directly
 - IAM only → delegate to: `aws-iam-ops`
 - CloudFront CDN → delegate to: `aws-cloudfront-ops`
 - Glacier lifecycle → delegate to: `aws-s3-ops` (same skill with lifecycle policies)
@@ -223,6 +223,16 @@ aws s3api list-objects-v2 \
 | Key | `.Contents[].Key` | Object path |
 | Size | `.Contents[].Size` | Bytes |
 | LastModified | `.Contents[].LastModified` | ISO 8601 |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded storage classes/limits — use `list-buckets` / `get-bucket-location`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 

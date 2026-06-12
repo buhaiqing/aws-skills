@@ -118,7 +118,7 @@ AIOps Loop:  Data Collection → Detection → RCA → Decision → Action → F
                               VPC Flow Logs   Health        Rollback
 ```
 
----
+***
 
 ## AIOps Data Collection
 
@@ -188,7 +188,7 @@ Config Rules Applicable: alb-desync-mitigation-mode, alb-http-drop-invalid-heade
                           alb-waf-enabled, elb-deletion-protection-enabled, elb-logging-enabled
 ```
 
----
+***
 
 ## AIOps Scenario Coverage
 
@@ -222,7 +222,7 @@ See [references/core-concepts.md](references/core-concepts.md) → AIOps Scenari
 | First-seen anomaly type | `[AI_ASSIST]` | No historical pattern |
 | Auto-heal fails 2 consecutive times | `[MANUAL]` | Prevent crash cascade |
 
----
+***
 
 ## Cross-Skill Orchestration
 
@@ -245,7 +245,7 @@ Resource Layer   ← aws-ec2-ops + aws-rds-ops + aws-elasticache-ops + aws-dynam
 Application Layer← aws-eks-ops
 ```
 
----
+***
 
 ## Operations
 
@@ -491,7 +491,7 @@ CLB uses `aws elb` commands (legacy):
 - `aws elb describe-load-balancers`
 - `aws elb delete-load-balancer`
 
----
+***
 
 ## Health Check Configuration
 
@@ -515,7 +515,7 @@ When repeated health check failures are detected, recommend parameter tuning:
 | All targets unhealthy simultaneously | Application outage or SG change | → trigger RC-03 RCA flow; do NOT adjust health checks |
 | Slow recovery after deployment | Cold start / warmup period | Increase `HealthyThresholdCount` temporarily during rollout |
 
----
+***
 
 ## Self-Healing Actions
 
@@ -578,7 +578,7 @@ Based on the last N health check failures:
 - Confirm: Y/N
 ```
 
----
+***
 
 ## Cost Optimization
 
@@ -613,7 +613,7 @@ Overspec check: if ALB but all listeners are TCP-only:
 → [AI_ASSIST] "This ALB only uses TCP listeners. NLB could save ~XX%/month."
 ```
 
----
+***
 
 ## Compliance & Security
 
@@ -646,7 +646,7 @@ config_rules:
     action: "[MANUAL] requires WAF policy decision"
 ```
 
----
+***
 
 ## Feedback & Learning
 
@@ -661,7 +661,17 @@ After each AIOps action, record outcome:
   Knowledge: Add to pattern library for future similar cases
 ```
 
----
+***
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded ELB types/LCU limits — use `describe-load-balancers` / `describe-target-groups`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 

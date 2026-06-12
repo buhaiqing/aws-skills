@@ -65,7 +65,7 @@ AWS IAM (Identity and Access Management) securely controls access to AWS resourc
 ### SHOULD NOT Use When
 - EC2 instance ops → delegate to: `aws-ec2-ops`
 - S3 bucket ops → delegate to: `aws-s3-ops`
-- Billing → delegate to: `aws-cost-ops`
+- Billing → out of scope; use AWS Cost Explorer directly
 - Security audit/compliance → specialized security skill (if exists)
 
 ## Variable Convention
@@ -242,6 +242,16 @@ aws iam list-users --output json
 | Managed (AWS) | Pre-built by AWS | Common permissions (ReadOnly, Admin) |
 | Managed (Customer) | Custom reusable policies | Organization-specific |
 | Inline | Embedded in identity | One-off permissions |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded policy ARNs — use `list-policies` / `get-policy`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 

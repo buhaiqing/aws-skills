@@ -56,7 +56,7 @@ AWS Systems Manager (SSM) provides **remote command execution** and **session ma
 - Checking command execution status or invocation results
 
 ### SHOULD NOT Use When
-- Billing/cost analysis → delegate to: `aws-cost-ops`
+- Billing/cost analysis → out of scope; use AWS Cost Explorer directly
 - IAM role creation for SSM → delegate to: `aws-iam-ops`
 - EC2 instance lifecycle (start/stop/terminate) → delegate to: `aws-ec2-ops`
 - VPC endpoint creation → delegate to: `aws-vpc-ops`
@@ -73,13 +73,20 @@ AWS Systems Manager (SSM) provides **remote command execution** and **session ma
 | `{{user.document_name}}` | User input | Default: `AWS-RunShellScript` |
 | `{{output.command_id}}` | Last API response | Parse `.Command.CommandId` |
 
-## Shared Patterns
+## Execution Flow Pattern
 
-**Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify SSM Agent via `describe-instance-information`, check document exists via `list-documents`.
+Every operation follows **Pre-flight → Execute → Validate → Recover**:
+
+1. **Pre-flight**: `aws --version` + `aws sts get-caller-identity --region {{user.region}} --output json`
+2. **Execute**: CLI primary (`--output json`); boto3 fallback after 3 CLI failures
+3. **Validate**: `list-command-invocations` / `describe-instance-information` to confirm
+4. **Recover**: See Common Recovery table below
+
+## Shared Patterns
 
 **boto3 fallback**: See [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md) → matching section.
 
-**Output**: All commands use `--region {{r.region}} --output json` (omitted in some snippets).
+**Output**: All commands use `--region {{user.region}} --output json` (omitted in some snippets).
 
 **Common Recovery**:
 | Error | Action |
@@ -100,7 +107,7 @@ aws ssm send-command \
   --parameters commands="{{user.commands}}"
 ```
 
-Validate: Poll `list-command-invocations --command-id {{o.command_id}} --details` every 5s, max 300s. Terminal states: `Success`, `Failed`, `Cancelled`, `TimedOut`.
+Validate: Poll `list-command-invocations --command-id {{output.command_id}} --details` every 5s, max 300s. Terminal states: `Success`, `Failed`, `Cancelled`, `TimedOut`.
 
 ### OP: Get Invocation Result
 ```bash
@@ -137,6 +144,16 @@ aws ssm cancel-command --command-id "{{output.command_id}}"
 | `AWS-UpdateSSMAgent` | All | Update SSM Agent |
 | `AWS-InstallApplication` | All | Install packages |
 | `AWS-ConfigurePackage` | All | Configure packages |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded document names/parameters — use `list-documents` / `describe-parameters`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Quality Gate (GCL)
 

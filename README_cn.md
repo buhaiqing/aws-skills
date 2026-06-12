@@ -473,30 +473,30 @@ aws sts get-caller-identity --output json
 | 技能 | 服务 | 状态 |
 |------|------|------|
 | aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
-| aws-skill-generator | Meta Skill | ✅ 完成 |
-| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 · **GCL 试点 v1.3.0** |
+| aws-skill-generator | Meta Skill | ✅ 完成 v1.0.0 |
+| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.3.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.0.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
 | aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.0.0 |
-| aws-s3-ops | S3 (对象存储) | ✅ 完成 · **GCL 试点 v1.1.0** |
-| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 |
-| aws-iam-ops | IAM (身份管理) | ✅ 完成 · **GCL 试点 v1.1.0** |
-| aws-elb-ops | ELB (负载均衡) | ✅ 完成 |
-| aws-eks-ops | EKS (Kubernetes) | ✅ 完成 |
-| aws-lambda-ops | Lambda (函数计算) | ✅ 完成 |
-| aws-vpc-ops | VPC (网络) | ✅ 完成 |
-| aws-rds-ops | RDS (数据库) | ✅ 完成 |
-| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 |
-| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 |
-| aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 |
-| aws-kms-ops | KMS (加密) | ✅ 完成 · **GCL 试点 v2.1.0** |
-| aws-route53-ops | Route53 (DNS) | ✅ 完成 |
-| aws-secretsmanager-ops | Secrets Manager | ✅ 完成 |
-| aws-sqs-ops | SQS (消息队列) | ✅ 完成 |
-| aws-sns-ops | SNS (通知) | ✅ 完成 |
-| aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 |
+| aws-s3-ops | S3 (对象存储) | ✅ 完成 v1.1.0 |
+| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.2.0 |
+| aws-iam-ops | IAM (身份管理) | ✅ 完成 v1.1.0 |
+| aws-elb-ops | ELB (负载均衡) | ✅ 完成 v2.2.0 |
+| aws-eks-ops | EKS (Kubernetes) | ✅ 完成 v1.0.0 |
+| aws-lambda-ops | Lambda (函数计算) | ✅ 完成 v1.1.0 |
+| aws-vpc-ops | VPC (网络) | ✅ 完成 v1.3.0 |
+| aws-rds-ops | RDS (数据库) | ✅ 完成 v1.1.0 |
+| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.0.0 |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.1.0 |
+| aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.0.0 |
+| aws-kms-ops | KMS (加密) | ✅ 完成 v2.1.0 |
+| aws-route53-ops | Route53 (DNS) | ✅ 完成 v1.2.0 |
+| aws-secretsmanager-ops | Secrets Manager | ✅ 完成 v1.0.0 |
+| aws-sqs-ops | SQS (消息队列) | ✅ 完成 v1.1.0 |
+| aws-sns-ops | SNS (通知) | ✅ 完成 v1.1.0 |
+| aws-cloudfront-ops | CloudFront (CDN) | ✅ 完成 v1.1.0 |
 | aws-ssm-ops | SSM (Systems Manager) | ✅ 完成 v1.0.0 |
-| aws-stepfunctions-ops | Step Functions | ✅ 完成 |
+| aws-stepfunctions-ops | Step Functions | ✅ 完成 v1.1.0 |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ 完成 v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ 完成 v1.0.0 |
 | aws-opensearch-ops | OpenSearch Service (托管 Elasticsearch) | ✅ 完成 v1.0.0 |

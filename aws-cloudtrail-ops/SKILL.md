@@ -125,6 +125,16 @@ Continue? (yes/no)
 - `aws-iam-ops` — IAM roles for CloudTrail access
 - `aws-cloudwatch-ops` — CloudWatch Logs integration
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded trail configs/limits — use `describe-trails` / `list-trails`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Quality Gate (GCL)
 
 > Phase 1 GCL rollout (2026-06-04, optional). Every execution of

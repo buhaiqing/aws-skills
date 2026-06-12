@@ -24,7 +24,7 @@ compatibility: >-
   available in the same agent runtime.
 metadata:
   author: aws
-  version: "0.1.0-design"
+  version: "0.1.0"
   last_updated: "2026-06-10"
   status: "design-draft"
   runtime: Harness AI Agent

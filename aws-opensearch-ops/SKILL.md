@@ -192,6 +192,16 @@ All commands use `--output json`. Key JSON paths:
 | OpenSearch Cost Optimization | opensearch → cloudwatch (查闲置 → 建议降配/预留) |
 | OpenSearch Snapshot DR | opensearch → s3 (快照 → 跨区域复制) |
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded engine versions/instance types — use `list-versions` / `describe-domain`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 - `references/aws-cli-usage.md` — CLI command reference
 - `references/boto3-sdk-usage.md` — Python SDK patterns

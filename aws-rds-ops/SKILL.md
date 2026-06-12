@@ -433,6 +433,16 @@ See [references/prompt-examples.md](references/prompt-examples.md) for 10 concre
 - Cross-region DR / Parameter tuning / Aurora failover
 - Cross-skill RCA / Capacity forecast
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded engine versions/instance classes — use `describe-db-engine-versions` / `describe-orderable-db-instance-options`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 - [Prompt Examples](references/prompt-examples.md) — 10 AIOps user prompts
 - [Layered Inspection Template](references/layered-inspection-template.md) — Health check + RCA

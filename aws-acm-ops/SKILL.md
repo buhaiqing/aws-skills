@@ -104,7 +104,7 @@ Certificate Lifecycle:
                           └────────────┘    └──────────────────────┘
 ```
 
----
+***
 
 ## Operations
 
@@ -239,7 +239,7 @@ Email-validated ACM cert: check email for validation link if renewal pending.
 Imported cert: manually re-import before expiry.
 ```
 
----
+***
 
 ## AIOps: Certificate Expiry Monitoring & Prediction
 
@@ -309,7 +309,7 @@ done
   In use certificates: P of N (Q are unused → [AI_ASSIST] cleanup)
 ```
 
----
+***
 
 ## AIOps: Auto-Bind Certificate to ELB Listener
 
@@ -369,7 +369,7 @@ if [ -n "$LISTENER_ARN" ]; then
 fi
 ```
 
----
+***
 
 ## Cross-Skill Orchestration
 
@@ -397,7 +397,7 @@ Steps:
 5. [aws-cloudwatch-ops] Check ClientTLSNegotiationErrorCount
 ```
 
----
+***
 
 ## Cost Awareness
 
@@ -406,7 +406,17 @@ Steps:
 - **Imported certificates**: Free to store; renewal must be manual
 - **Savings**: Using ACM (free) vs purchasing from third-party CA ($50-400/year)
 
----
+***
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded certificate types/limits — use `list-certificates` / `describe-certificate`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Quality Gate (GCL)
 

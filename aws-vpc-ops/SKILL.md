@@ -63,7 +63,7 @@ AWS VPC operational skill for AI Agent automation.
 - IAM → delegate to: `aws-iam-ops`
 - Load Balancer → delegate to: `aws-elb-ops`
 - Route53 DNS → delegate to: `aws-route53-ops`
-- Direct Connect/VPN → delegate to: `aws-network-ops`
+- Direct Connect/VPN → managed within this skill (VPC infrastructure)
 
 ## Scope & Quick Reference
 
@@ -166,7 +166,17 @@ All commands use `--output json`. Key JSON paths (centralized):
 | EC2 instance in subnet | `aws-ec2-ops` |
 | RDS in VPC | `aws-rds-ops` |
 | Lambda VPC config | `aws-lambda-ops` |
-| VPN connection | `aws-network-ops` |
+| VPN connection | this skill |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded CIDR ranges/limits — use `describe-vpcs` / `describe-subnets` / `get-service-quota`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 - `references/aws-cli-usage.md` — CLI commands

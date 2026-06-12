@@ -72,23 +72,23 @@ Operational runbook for CloudWatch metrics, alarms, logs, dashboards, anomaly de
 - SNS topic/subscription → `aws-sns-ops`
 - Auto Scaling group → `aws-ec2-ops`
 
-## Placeholder Convention
+## Variable Convention
 
-| Token | Source | Notes |
-|-------|--------|-------|
-| `{{r.region}}` | User input or `{{env.AWS_DEFAULT_REGION}}` | Default `us-east-1` |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Fallback for `{{r.region}}` |
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Fallback for `{{user.region}}` |
 | `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | Skip if using AWS_PROFILE/IAM |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | Skip if using AWS_PROFILE/IAM |
 | `{{env.AWS_SESSION_TOKEN}}` | Runtime env | STS temp creds only |
 | `{{env.AWS_PROFILE}}` | Runtime env | Overrides explicit keys |
 | `{{env.AWS_ACCOUNT_ID}}` | Runtime env | Required for ARN construction |
-| `{{u.*}}` | User input | Ask once; reuse |
-| `{{o.*}}` | Last API response | Parse from JSON output |
+| `{{user.region}}` | User input or `{{env.AWS_DEFAULT_REGION}}` | Default `us-east-1` |
+| `{{user.*}}` | User input | Ask once; reuse |
+| `{{output.*}}` | Last API response | Parse from JSON output |
 
 ## Config File Injection
 
-`assets/example-config.yaml` contains `{{env.*}}` / `{{u.*}}` placeholders. Load `.env`, substitute, then use rendered config for CLI/SDK.
+`assets/example-config.yaml` contains `{{env.*}}` / `{{user.*}}` placeholders. Load `.env`, substitute, then use rendered config for CLI/SDK.
 
 ## FinOps Cost Awareness
 
@@ -102,8 +102,8 @@ Operational runbook for CloudWatch metrics, alarms, logs, dashboards, anomaly de
 ### Cost Pre-flight (on explicit cost request)
 
 ```bash
-aws cloudwatch describe-alarms --region {{r.region}} --output json | jq '.MetricAlarms | length'
-aws cloudwatch list-dashboards --region {{r.region}} --output json | jq '.DashboardEntries | length'
+aws cloudwatch describe-alarms --region {{user.region}} --output json | jq '.MetricAlarms | length'
+aws cloudwatch list-dashboards --region {{user.region}} --output json | jq '.DashboardEntries | length'
 ```
 ```
 Alarms(N): N≤10=$0/mo else $(N-10)×$0.10
@@ -111,13 +111,18 @@ Dashboards(M): M≤3=$0/mo else $(M-3)×$3.00
 Tip: composite alarms / remove unused dashboards to reduce cost
 ```
 
+## Execution Flow Pattern
+
+Every operation follows **Pre-flight → Execute → Validate → Recover**:
+
+1. **Pre-flight**: `aws --version` + `aws sts get-caller-identity --region {{user.region}} --output json`
+2. **Execute**: CLI primary (`--output json`); boto3 fallback after 3 CLI failures
+3. **Validate**: `describe-alarms` / `list-metrics` / `describe-log-groups` to confirm
+4. **Recover**: See Common Recovery table below
+
 ## Shared Patterns
 
-**Pre-flight**: All operations start with `aws --version` + `aws sts get-caller-identity`.
-
-**Output**: All commands use `--region {{r.region}} --output json` (omitted in some snippets).
-
-**Validate**: For create/update ops, use `describe-alarms` or equivalent read command to confirm.
+**Output**: All commands use `--region {{user.region}} --output json` (omitted in some snippets).
 
 **Common Recovery** (reused unless overridden):
 | Error | Action |
@@ -135,10 +140,10 @@ Tip: composite alarms / remove unused dashboards to reduce cost
 `put-metric-alarm` — standard threshold-based alarm.
 ```bash
 aws cloudwatch put-metric-alarm \
-  --alarm-name "{{u.alarm}}" --metric-name "{{u.metric}}" --namespace "{{u.ns}}" \
-  --statistic "{{u.stat}}" --period {{u.period}} --threshold {{u.th}} \
-  --comparison-operator "{{u.op}}" --evaluation-periods {{u.eval}} \
-  --alarm-actions "{{u.actions}}"
+  --alarm-name "{{user.alarm}}" --metric-name "{{user.metric}}" --namespace "{{user.ns}}" \
+  --statistic "{{user.stat}}" --period {{user.period}} --threshold {{user.th}} \
+  --comparison-operator "{{user.op}}" --evaluation-periods {{user.eval}} \
+  --alarm-actions "{{user.actions}}"
 ```
 Pre-flight: Verify metric via `list-metrics`. **WARN** if `actions` empty (silent alarm).
 ID update: re-run same `--alarm-name` with new params to modify.
@@ -148,13 +153,13 @@ ID update: re-run same `--alarm-name` with new params to modify.
 Alarm Rule syntax: `(ALARM("a") OR ALARM("b"))` — supports `AND`, `OR`, `NOT`, nesting.
 ```bash
 # Pre-flight: verify referenced alarms exist
-aws cloudwatch describe-alarms --alarm-names "{{u.ref1}}" "{{u.ref2}}"
+aws cloudwatch describe-alarms --alarm-names "{{user.ref1}}" "{{user.ref2}}"
 ```
 ```bash
 aws cloudwatch put-composite-alarm \
-  --alarm-name "{{u.alarm}}-Composite" \
-  --alarm-rule '(ALARM("{{u.ref1}}") OR ALARM("{{u.ref2}}"))' \
-  --alarm-actions "{{u.actions}}"
+  --alarm-name "{{user.alarm}}-Composite" \
+  --alarm-rule '(ALARM("{{user.ref1}}") OR ALARM("{{user.ref2}}"))' \
+  --alarm-actions "{{user.actions}}"
 ```
 | Recover Override | Action |
 |-----------------|--------|
@@ -164,7 +169,7 @@ aws cloudwatch put-composite-alarm \
 `put-metric-alarm` with `ANOMALY_DETECTION_BAND` — ML learns seasonal patterns, dynamic threshold.
 ```bash
 # Pre-flight: verify ≥ 2 weeks data
-aws cloudwatch get-metric-statistics --namespace "{{u.ns}}" --metric-name "{{u.metric}}" \
+aws cloudwatch get-metric-statistics --namespace "{{user.ns}}" --metric-name "{{user.metric}}" \
   --statistics Average --period 3600 \
   --start-time $(date -d '-30 days' -u +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   | jq '.Datapoints | length'
@@ -174,12 +179,12 @@ Datapoints ≥ 336 (14d×24h) required. If insufficient, suggest static threshol
 ```
 ```bash
 aws cloudwatch put-metric-alarm \
-  --alarm-name "{{u.alarm}}-Anomaly" --metric-name "{{u.metric}}" --namespace "{{u.ns}}" \
-  --statistic "{{u.stat}}" --period {{u.period}} \
+  --alarm-name "{{user.alarm}}-Anomaly" --metric-name "{{user.metric}}" --namespace "{{user.ns}}" \
+  --statistic "{{user.stat}}" --period {{user.period}} \
   --threshold-metric-id "ad" \
   --comparison-operator "LessThanLowerOrGreaterThanUpperThreshold" \
-  --evaluation-periods {{u.eval}} \
-  --metrics '[{"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{u.ns}}","MetricName":"{{u.metric}}"},"Period":{{u.period}},"Stat":"{{u.stat}}"}},{"Id":"ad","Expression":"ANOMALY_DETECTION_BAND(m1, {{u.deviation}})"}]'
+  --evaluation-periods {{user.eval}} \
+  --metrics '[{"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{user.ns}}","MetricName":"{{user.metric}}"},"Period":{{user.period}},"Stat":"{{user.stat}}"}},{"Id":"ad","Expression":"ANOMALY_DETECTION_BAND(m1, {{user.deviation}})"}]'
 ```
 | Parameter | Notes |
 |-----------|-------|
@@ -192,10 +197,10 @@ aws cloudwatch put-metric-alarm \
 ### OP: Delete Alarm (Destructive)
 **Safety Gate**: Explicit confirmation required.
 ```
-Delete alarm {{u.alarm}}? IRREVERSIBLE.
+Delete alarm {{user.alarm}}? IRREVERSIBLE.
 ```
 ```bash
-aws cloudwatch delete-alarms --alarm-names "{{u.alarm}}"
+aws cloudwatch delete-alarms --alarm-names "{{user.alarm}}"
 ```
 Validate: `describe-alarms` → `.MetricAlarms` empty.
 | Recover Override | Action |
@@ -205,10 +210,10 @@ Validate: `describe-alarms` → `.MetricAlarms` empty.
 ### OP: Delete Insight Rules (Destructive)
 **Safety Gate**: Explicit confirmation required.
 ```
-Delete insight rule {{u.rule}}? Removes collected contributor data permanently.
+Delete insight rule {{user.rule}}? Removes collected contributor data permanently.
 ```
 ```bash
-aws cloudwatch delete-insight-rules --rule-names "{{u.rule}}"
+aws cloudwatch delete-insight-rules --rule-names "{{user.rule}}"
 ```
 Validate: `list-insight-rules` → rule absent.
 | Recover Override | Action |
@@ -219,11 +224,11 @@ Validate: `list-insight-rules` → rule absent.
 List available metrics or alarm states (read-only, no pre-flight).
 ```bash
 # Metrics by namespace
-aws cloudwatch list-metrics --namespace "{{u.ns}}"
+aws cloudwatch list-metrics --namespace "{{user.ns}}"
 # All alarms
 aws cloudwatch describe-alarms
 # By alarm name
-aws cloudwatch describe-alarms --alarm-names "{{u.alarm}}"
+aws cloudwatch describe-alarms --alarm-names "{{user.alarm}}"
 # By state
 aws cloudwatch describe-alarms --state-value ALARM
 ```
@@ -232,12 +237,12 @@ aws cloudwatch describe-alarms --state-value ALARM
 `get-metric-data` — fetch time-series data for a metric.
 ```bash
 # Pre-flight: verify metric exists
-aws cloudwatch list-metrics --namespace "{{u.ns}}" --metric-name "{{u.metric}}"
+aws cloudwatch list-metrics --namespace "{{user.ns}}" --metric-name "{{user.metric}}"
 ```
 ```bash
 aws cloudwatch get-metric-data \
-  --metric-data-queries '[{"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{u.ns}}","MetricName":"{{u.metric}}"},"Stat":"{{u.stat}}","Period":{{u.period}}}}]' \
-  --start-time "{{u.start}}" --end-time "{{u.end}}" \
+  --metric-data-queries '[{"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{user.ns}}","MetricName":"{{user.metric}}"},"Stat":"{{user.stat}}","Period":{{user.period}}}}]' \
+  --start-time "{{user.start}}" --end-time "{{user.end}}" \
   | jq '.MetricDataResults[].Values | length'
 ```
 ```
@@ -248,15 +253,15 @@ Retrieved N datapoints. WARN if empty — expand time range.
 `logs start-query` + `logs get-query-results` — SQL-style log analysis.
 ```bash
 # Pre-flight: verify log group
-aws logs describe-log-groups --log-group-name-prefix "{{u.log}}"
+aws logs describe-log-groups --log-group-name-prefix "{{user.log}}"
 ```
 ```bash
 # Start query
-aws logs start-query --log-group-names "{{u.log}}" \
+aws logs start-query --log-group-names "{{user.log}}" \
   --start-time $(date -d '-1 hour' +%s) --end-time $(date +%s) \
   --query-string 'fields @timestamp, @message | filter @message like /(?i)(error|exception|fail)/ | stats count() by @logStream | sort count desc | limit 20'
 ```
-Save `{{o.qid}}` from response. Poll with `get-query-results --query-id "{{o.qid}}"` until `status=Complete`.
+Save `{{output.qid}}` from response. Poll with `get-query-results --query-id "{{output.qid}}"` until `status=Complete`.
 
 | Query Pattern | String |
 |---------------|--------|
@@ -276,9 +281,9 @@ Save `{{o.qid}}` from response. Poll with `get-query-results --query-id "{{o.qid
 ```bash
 aws cloudwatch get-metric-data \
   --metric-data-queries '[
-    {"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{u.ns}}","MetricName":"{{u.metric}}"},"Stat":"{{u.stat}}","Period":3600}},
+    {"Id":"m1","MetricStat":{"Metric":{"Namespace":"{{user.ns}}","MetricName":"{{user.metric}}"},"Stat":"{{user.stat}}","Period":3600}},
     {"Id":"fc","Expression":"FORECAST(m1, \"linear\", 168)","Label":"7-Day Forecast"}]' \
-  --start-time "{{u.start}}" --end-time "{{u.end}}" \
+  --start-time "{{user.start}}" --end-time "{{user.end}}" \
   | jq '.MetricDataResults[] | select(.Id=="fc") | .Values'
 ```
 Supports `linear` / `diff` / `mahalanobis` models. Forecast overload → scale-up, under-utilization → downsize.
@@ -288,8 +293,8 @@ Forecast data empty → insufficient history.
 `put-dashboard` — monitoring panel for metrics.
 ```bash
 aws cloudwatch put-dashboard \
-  --dashboard-name "{{u.dash}}" \
-  --dashboard-body '{"widgets":[{"type":"metric","properties":{"metrics":[["{{u.ns}}","{{u.metric}}"]],"period":300,"stat":"Average"}}]}'
+  --dashboard-name "{{user.dash}}" \
+  --dashboard-body '{"widgets":[{"type":"metric","properties":{"metrics":[["{{user.ns}}","{{user.metric}}"]],"period":300,"stat":"Average"}}]}'
 ```
 | Recover Override | Action |
 |-----------------|--------|
@@ -298,10 +303,10 @@ aws cloudwatch put-dashboard \
 ### OP: Set Log Retention (FinOps)
 **Safety Gate**: Confirm with user (data loss).
 ```
-Set retention to {{u.retention}}d? Logs older will be permanently deleted.
+Set retention to {{user.retention}}d? Logs older will be permanently deleted.
 ```
 ```bash
-aws logs put-retention-policy --log-group-name "{{u.log}}" --retention-in-days {{u.retention}}
+aws logs put-retention-policy --log-group-name "{{user.log}}" --retention-in-days {{user.retention}}
 ```
 Validate: `describe-log-groups` → `.retentionInDays`.
 | Recover Override | Action |
@@ -312,15 +317,15 @@ Validate: `describe-log-groups` → `.retentionInDays`.
 When user reports "alarm not triggering":
 ```bash
 # 1. Check state
-aws cloudwatch describe-alarms --alarm-names "{{u.alarm}}"
+aws cloudwatch describe-alarms --alarm-names "{{user.alarm}}"
 # 2. Check metric data (last 1h)
-aws cloudwatch get-metric-statistics --namespace "{{u.ns}}" --metric-name "{{u.metric}}" \
-  --statistics Average --period {{u.period}} \
-  --dimensions Name="{{u.dim}}",Value="{{u.dim_val}}" \
+aws cloudwatch get-metric-statistics --namespace "{{user.ns}}" --metric-name "{{user.metric}}" \
+  --statistics Average --period {{user.period}} \
+  --dimensions Name="{{user.dim}}",Value="{{user.dim_val}}" \
   --start-time $(date -d '-1 hour' -u +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   | jq '.Datapoints | length'
 # 3. Check alarm history
-aws cloudwatch describe-alarm-history --alarm-name "{{u.alarm}}"
+aws cloudwatch describe-alarm-history --alarm-name "{{user.alarm}}"
 ```
 | State Observation | Cause | Fix |
 |---|---|---|
@@ -452,7 +457,7 @@ aws cloudwatch put-composite-alarm \
     ],
     "period": 300,
     "stat": "Average",
-    "region": "{{r.region}}",
+    "region": "{{user.region}}",
     "title": "{{lb_name}} — Real-Time Health"
   }
 }
@@ -503,6 +508,16 @@ aws cloudwatch put-metric-alarm \
   }
 }
 ```
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded namespace/metric tables — use `list-metrics` / `describe-alarms`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Quality Gate (GCL)
 

@@ -120,6 +120,16 @@ Confirm: Type DELETE GSI {{user.IndexName}} to proceed.
 - `aws-kms-ops` — Encryption key management
 - `aws-s3-ops` — Export/import DynamoDB data
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded capacity modes/limits — use `describe-table` / `describe-limits`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 
 - [AWS CLI Usage](references/aws-cli-usage.md)

@@ -63,7 +63,7 @@ AWS Lambda serverless compute operations skill for AI Agent automation.
 - Troubleshooting Lambda invocation failures
 
 ### SHOULD NOT Use When
-- API Gateway configuration → delegate to: `aws-apigateway-ops`
+- API Gateway configuration → out of scope; use API Gateway CLI/SDK directly
 - DynamoDB table operations → delegate to: `aws-dynamodb-ops`
 - SQS queue management → delegate to: `aws-sqs-ops`
 - SNS topic operations → delegate to: `aws-sns-ops`
@@ -180,6 +180,16 @@ aws lambda publish-layer-version \
 | invoke (async) | StatusCode = 202 | `.StatusCode` |
 | create-event-source-mapping | State = Enabled | `.State` |
 | publish-version | Version number returned | `.Version` |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded runtimes/limits — use `list-functions` / `get-function-configuration`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Reference Files
 

@@ -473,30 +473,30 @@ aws sts get-caller-identity --output json
 | Skill | Service | Status |
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
-| aws-skill-generator | Meta Skill | ✅ Complete |
-| aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete |
+| aws-skill-generator | Meta Skill | ✅ Complete v1.0.0 |
+| aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.3.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.0.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
 | aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.0.0 |
-| aws-s3-ops | S3 (Object Storage) | ✅ Complete · **GCL pilot v1.1.0** |
-| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete |
-| aws-iam-ops | IAM (Identity Management) | ✅ Complete · **GCL pilot v1.1.0** |
-| aws-elb-ops | ELB (Load Balancing) | ✅ Complete |
-| aws-eks-ops | EKS (Kubernetes) | ✅ Complete |
-| aws-lambda-ops | Lambda (Function Compute) | ✅ Complete |
-| aws-vpc-ops | VPC (Network) | ✅ Complete |
-| aws-rds-ops | RDS (Database) | ✅ Complete |
-| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete |
-| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete |
-| aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete |
-| aws-kms-ops | KMS (Encryption) | ✅ Complete · **GCL pilot v2.1.0** |
-| aws-route53-ops | Route53 (DNS) | ✅ Complete |
-| aws-secretsmanager-ops | Secrets Manager | ✅ Complete |
-| aws-sqs-ops | SQS (Message Queue) | ✅ Complete |
-| aws-sns-ops | SNS (Notification) | ✅ Complete |
-| aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete |
+| aws-s3-ops | S3 (Object Storage) | ✅ Complete v1.1.0 |
+| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.2.0 |
+| aws-iam-ops | IAM (Identity Management) | ✅ Complete v1.1.0 |
+| aws-elb-ops | ELB (Load Balancing) | ✅ Complete v2.2.0 |
+| aws-eks-ops | EKS (Kubernetes) | ✅ Complete v1.0.0 |
+| aws-lambda-ops | Lambda (Function Compute) | ✅ Complete v1.1.0 |
+| aws-vpc-ops | VPC (Network) | ✅ Complete v1.3.0 |
+| aws-rds-ops | RDS (Database) | ✅ Complete v1.1.0 |
+| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.0.0 |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.1.0 |
+| aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.0.0 |
+| aws-kms-ops | KMS (Encryption) | ✅ Complete v2.1.0 |
+| aws-route53-ops | Route53 (DNS) | ✅ Complete v1.2.0 |
+| aws-secretsmanager-ops | Secrets Manager | ✅ Complete v1.0.0 |
+| aws-sqs-ops | SQS (Message Queue) | ✅ Complete v1.1.0 |
+| aws-sns-ops | SNS (Notification) | ✅ Complete v1.1.0 |
+| aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete v1.1.0 |
 | aws-ssm-ops | SSM (Systems Manager) | ✅ Complete v1.0.0 |
-| aws-stepfunctions-ops | Step Functions | ✅ Complete |
+| aws-stepfunctions-ops | Step Functions | ✅ Complete v1.1.0 |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
 | aws-opensearch-ops | OpenSearch Service (managed Elasticsearch) | ✅ Complete v1.0.0 |

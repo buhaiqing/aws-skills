@@ -65,38 +65,38 @@ AWS SNS (Simple Notification Service) operational skill for AI Agent automation.
 
 | Operation | CLI | Safety Gate |
 |-----------|-----|-------------|
-| Create Topic | `aws sns create-topic --name {{u.name}}` | None |
-| Delete Topic | `aws sns delete-topic --topic-arn {{u.arn}}` | **Human confirmation** |
+| Create Topic | `aws sns create-topic --name {{user.name}}` | None |
+| Delete Topic | `aws sns delete-topic --topic-arn {{user.arn}}` | **Human confirmation** |
 | List Topics | `aws sns list-topics` | None |
-| Publish Message | `aws sns publish --topic-arn {{u.arn}} --message "{{u.msg}}"` | None |
-| Subscribe | `aws sns subscribe --topic-arn {{u.arn}} --protocol {{u.proto}} --notification-endpoint {{u.endpoint}}` | None |
-| Unsubscribe | `aws sns unsubscribe --subscription-arn {{u.sub_arn}}` | None |
-| Set Filter Policy | `aws sns set-subscription-attributes --subscription-arn {{u.sub_arn}} --attribute-name FilterPolicy --attribute-value '{{u.policy}}'` | None |
-| Confirm Subscription | `aws sns confirm-subscription --topic-arn {{u.arn}} --token {{u.token}}` | None |
+| Publish Message | `aws sns publish --topic-arn {{user.arn}} --message "{{user.msg}}"` | None |
+| Subscribe | `aws sns subscribe --topic-arn {{user.arn}} --protocol {{user.proto}} --notification-endpoint {{user.endpoint}}` | None |
+| Unsubscribe | `aws sns unsubscribe --subscription-arn {{user.sub_arn}}` | None |
+| Set Filter Policy | `aws sns set-subscription-attributes --subscription-arn {{user.sub_arn}} --attribute-name FilterPolicy --attribute-value '{{user.policy}}'` | None |
+| Confirm Subscription | `aws sns confirm-subscription --topic-arn {{user.arn}} --token {{user.token}}` | None |
 
-## Placeholder Convention
+## Variable Convention
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
 | `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{r.region}}` | User input or `{{env.AWS_DEFAULT_REGION}}` | Default `us-east-1` |
-| `{{u.name}}` | User input | Ask once; reuse |
-| `{{u.arn}}` | User input | Ask once; reuse |
-| `{{u.proto}}` | User input | email, sqs, lambda, http, sms |
-| `{{u.endpoint}}` | User input | email / Lambda ARN / SQS ARN |
-| `{{u.sub_arn}}` | User input | Subscription ARN |
-| `{{u.msg}}` | User input | Message body |
-| `{{u.subject}}` | User input | Optional email subject |
-| `{{u.token}}` | User input | Confirmation token |
-| `{{o.*}}` | Last API response | Parse from JSON output |
+| `{{user.region}}` | User input or `{{env.AWS_DEFAULT_REGION}}` | Default `us-east-1` |
+| `{{user.name}}` | User input | Ask once; reuse |
+| `{{user.arn}}` | User input | Ask once; reuse |
+| `{{user.proto}}` | User input | email, sqs, lambda, http, sms |
+| `{{user.endpoint}}` | User input | email / Lambda ARN / SQS ARN |
+| `{{user.sub_arn}}` | User input | Subscription ARN |
+| `{{user.msg}}` | User input | Message body |
+| `{{user.subject}}` | User input | Optional email subject |
+| `{{user.token}}` | User input | Confirmation token |
+| `{{output.*}}` | Last API response | Parse from JSON output |
 
 ## Execution Flow
 
 **Pre-flight**: `aws --version` + `aws sts get-caller-identity`. Verify topic exists via `get-topic-attributes`.
 
-**CLI (primary)**: `aws sns [command] --region {{r.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
+**CLI (primary)**: `aws sns [command] --region {{user.region}} --output json` — see [references/aws-cli-usage.md](references/aws-cli-usage.md).
 
 **boto3 (fallback)**: After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
 
@@ -115,8 +115,8 @@ AWS SNS (Simple Notification Service) operational skill for AI Agent automation.
 
 ### Topic Deletion
 ```
-⚠️ Deleting {{u.name}} will remove all subscriptions. IRREVERSIBLE.
-Type DELETE {{u.arn}} to confirm.
+⚠️ Deleting {{user.name}} will remove all subscriptions. IRREVERSIBLE.
+Type DELETE {{user.arn}} to confirm.
 ```
 
 ## Related Skills
@@ -124,6 +124,16 @@ Type DELETE {{u.arn}} to confirm.
 - `aws-lambda-ops` — Lambda subscription
 - `aws-sqs-ops` — SQS subscription
 - `aws-kms-ops` — Topic encryption
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded protocol lists/limits — use `list-topics` / `get-topic-attributes`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Quality Gate (GCL)
 

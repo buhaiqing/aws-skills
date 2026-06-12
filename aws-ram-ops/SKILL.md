@@ -258,6 +258,16 @@ BEFORE reject-resource-share-invitation:
 2. Ask: "Type 'REJECT_INVITATION {{user.invitation_arn}}' to confirm"
 ```
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded resource type lists — use `list-resource-types` / `list-resources`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 
 - [AWS CLI Usage](references/aws-cli-usage.md)

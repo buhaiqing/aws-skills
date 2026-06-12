@@ -42,7 +42,6 @@ metadata:
     - aws-cloudfront-ops      # WAF ACL association with CloudFront
     - aws-cloudwatch-ops      # WAF metrics, anomaly detection
     - aws-cloudtrail-ops      # ACL change audit
-    - aws-apigateway-ops      # WAF for API Gateway
   orchestrator_aware: true
   orchestrator_compat: ">=0.1.0"
   delegate:
@@ -73,8 +72,8 @@ AWS WAF (Web Application Firewall) protects web applications from common web exp
 ### SHOULD NOT Use When
 - ALB/load balancer configuration → delegate to: `aws-elb-ops`
 - CloudFront distribution config → delegate to: `aws-cloudfront-ops`
-- API Gateway config → delegate to: `aws-apigateway-ops`
-- Shield Advanced → delegate to: `aws-shield-ops` (future)
+- API Gateway config → out of scope; use API Gateway CLI/SDK directly
+- Shield Advanced → out of scope; use Shield CLI/SDK directly
 - EC2 security group → delegate to: `aws-vpc-ops`
 
 ## WAF Version
@@ -100,7 +99,18 @@ This skill targets **WAF v2** (`wafv2` CLI / API). Classic WAF (`waf`) is deprec
 | `{{output.web_acl_arn}}` | API response | Parse: `.Summary.ARN` or `.WebACL.ARN` |
 | `{{output.web_acl_id}}` | API response | Parse: `.Summary.Id` or `.WebACL.Id` |
 
----
+***
+
+## Execution Flow Pattern
+
+Every operation follows **Pre-flight → Execute → Validate → Recover**:
+
+1. **Pre-flight**: `aws --version` + `aws sts get-caller-identity --output json`; verify WCU quota via `check-capacity`; CLOUDFRONT scope requires `us-east-1`
+2. **Execute**: CLI primary (`--output json`); boto3 fallback after 3 CLI failures
+3. **Validate**: `get-web-acl` / `list-web-acls` / `get-web-acl-for-resource` to confirm
+4. **Recover**: See per-operation Recover table below
+
+***
 
 ## Operations
 
@@ -178,7 +188,7 @@ aws wafv2 get-web-acl --name "{{user.web_acl_name}}" --scope {{user.scope}} --id
 | WAFLimitsExceededException | HALT; reduce WCU or request increase |
 | WAFDuplicateItemException | Use different name |
 
----
+***
 
 ### Operation: Secure Existing ALB with WAF (端到端流程)
 
@@ -319,7 +329,7 @@ Validate:
 aws wafv2 get-web-acl-for-resource --resource-arn {{user.resource_arn}}
 ```
 
----
+***
 
 ### Operation: Add Rate-Based Rule
 
@@ -351,7 +361,7 @@ aws wafv2 update-web-acl \
   --output json
 ```
 
----
+***
 
 ### Operation: Enable WAF Logging
 
@@ -364,7 +374,7 @@ aws wafv2 put-logging-configuration \
   }'
 ```
 
----
+***
 
 ### Operation: List Web ACLs
 
@@ -372,7 +382,7 @@ aws wafv2 put-logging-configuration \
 aws wafv2 list-web-acls --scope {{user.scope}}
 ```
 
----
+***
 
 ### Operation: Delete Web ACL
 
@@ -390,7 +400,7 @@ aws wafv2 disassociate-web-acl --resource-arn {{resource_arn}}
 aws wafv2 delete-web-acl --name {{user.web_acl_name}} --scope {{user.scope}} --id {{web_acl_id}} --lock-token {{lock_token}}
 ```
 
----
+***
 
 ## AIOps: DDoS Detection & Auto-Mitigation
 
@@ -442,7 +452,7 @@ aws cloudwatch get-metric-statistics --namespace AWS/WAFV2 \
   --statistics Sum --period 300
 ```
 
----
+***
 
 ## Cross-Skill Orchestration
 
@@ -451,6 +461,16 @@ aws cloudwatch get-metric-statistics --namespace AWS/WAFV2 \
 | DDoS Mitigation (AH-08) | `aws-elb-ops` FD-06 → `aws-waf-ops` AH-08 → `aws-cloudwatch-ops` verify |
 | ALB Security Hardening | `aws-elb-ops` create ALB → `aws-waf-ops` create+associate Web ACL |
 | WAF Effectiveness Report | `aws-waf-ops` list rules → `aws-cloudwatch-ops` metrics → `aws-cloudtrail-ops` changes |
+
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded WCU limits/rule capacity — use `check-capacity` / `list-web-acls`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
 
 ## Quality Gate (GCL)
 

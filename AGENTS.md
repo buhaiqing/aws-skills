@@ -221,6 +221,11 @@ total score. Full rules in spec §3.
 | `aws-eks-ops` | required | 2 | `delete-cluster` (irreversible) |
 | `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% DRAIN — shipped v2.2.0 |
 | `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |
+| `aws-athena-ops` | **required** | 2 | `delete-work-group`, `delete-named-query`, `delete-data-catalog`, `delete-prepared-statement` — shipped v1.0.0 |
+| `aws-guardduty-ops` | **required** | 2 | `delete-detector`, `delete-filter`, `delete-ip-set`, `delete-threat-intel-set`, `delete-publishing-destination` — shipped v1.0.0 |
+| `aws-opensearch-ops` | **required** | 2 | `delete-domain` (data loss), `delete-snapshot`, `delete-vpc-endpoint`, `delete-ingestion` — shipped v1.0.0 |
+| `aws-ram-ops` | **required** | 2 | `delete-resource-share` (breaks dependent accounts), `delete-permission`, `delete-permission-version` — shipped v1.0.0 |
+| `aws-securityhub-ops` | **required** | 2 | `delete-insight`, `delete-action-target`, `delete-automation-rule`, `delete-configuration-policy`, `disable-securityhub` — shipped v1.0.0 |
 | `aws-cloudtrail-ops` | optional | 3 | read-mostly; `delete-trail` = severe |
 | `aws-skill-generator` | optional | 3 | meta operation; secret-leak guard |
 
@@ -297,6 +302,7 @@ Codified in `gcl-spec.md` §8. Highlights:
 | 1.5.0 | 2026-06-04 | Group 2 GCL rollout: **`aws-vpc-ops`** (v1.3.0) `delete-vpc` 8-describe pre-flight (subnets/IGWs/NATs/RTs/SGs/endpoints/peering/NACLs), main RT undeletable, default SG undeletable while VPC has instances, public SG ingress on sensitive ports; **`aws-route53-ops`** (v1.2.0) `change-resource-record-sets: DELETE` + prod DNS guard, `delete-hosted-zone` non-NS/SOA refusal; **`aws-cloudfront-ops`** (v1.1.0) `delete-distribution` MUST disable first (poll `Status=Deployed`), OAC vs OAI guard; **`aws-elb-ops`** (v2.2.0, **recommended**, max_iter=3) `deregister-targets` 50%/100% drain threshold, default rule undeletable. |
 | 1.6.0 | 2026-06-07 | New skill — **`aws-autoscaling-ops`** (v1.0.0) with full GCL scaffolding: `delete-auto-scaling-group` (`--force-delete` guard + scale-to-0 pre-flight), `delete-launch-configuration`, `detach-instances` (decrement guard), `set-desired-capacity` → 0 guard, `suspend-processes` (HealthCheck/ReplaceUnhealthy) safety, `confirm=DELETE <asg-name>` / `confirm=DETACH <instance-id>` patterns; rubric.md and prompt-templates.md shipped. |
 | 1.7.0 | 2026-06-07 | New skills — **`aws-config-ops`** (v1.0.0, recommended, max_iter=3) with `delete-config-rule`, `stop-configuration-recorder`, `delete-configuration-recorder` guards; **`aws-eventbridge-ops`** (v1.0.0, recommended, max_iter=3) with `delete-rule` target-cleanup guard, `delete-event-bus`, `delete-schedule`, `delete-pipe`; both shipped with full rubric.md and prompt-templates.md. |
+| 1.8.0 | 2026-06-12 | Added 5 skills to §11.5 Per-Skill Defaults table (back-filled from Groups 6–7 GCL rollout): **`aws-athena-ops`** (required, max_iter=2), **`aws-guardduty-ops`** (required, max_iter=2), **`aws-opensearch-ops`** (required, max_iter=2), **`aws-ram-ops`** (required, max_iter=2), **`aws-securityhub-ops`** (required, max_iter=2) — all shipped with rubric.md and prompt-templates.md. |
 
 ### 11.12 See also
 
@@ -316,4 +322,14 @@ Codified in `gcl-spec.md` §8. Highlights:
 - [`aws-route53-ops/references/rubric.md`](aws-route53-ops/references/rubric.md) — Group 2 rubric
 - [`aws-cloudfront-ops/references/rubric.md`](aws-cloudfront-ops/references/rubric.md) — Group 2 rubric
 - [`aws-elb-ops/references/rubric.md`](aws-elb-ops/references/rubric.md) — Group 2 rubric (recommended)
+- [`aws-athena-ops/references/rubric.md`](aws-athena-ops/references/rubric.md) — Group 6 rubric
+- [`aws-athena-ops/references/prompt-templates.md`](aws-athena-ops/references/prompt-templates.md) — Group 6 G/C/O skeletons
+- [`aws-guardduty-ops/references/rubric.md`](aws-guardduty-ops/references/rubric.md) — Group 6 rubric
+- [`aws-guardduty-ops/references/prompt-templates.md`](aws-guardduty-ops/references/prompt-templates.md) — Group 6 G/C/O skeletons
+- [`aws-opensearch-ops/references/rubric.md`](aws-opensearch-ops/references/rubric.md) — Group 6 rubric
+- [`aws-opensearch-ops/references/prompt-templates.md`](aws-opensearch-ops/references/prompt-templates.md) — Group 6 G/C/O skeletons
+- [`aws-ram-ops/references/rubric.md`](aws-ram-ops/references/rubric.md) — Group 7 rubric
+- [`aws-ram-ops/references/prompt-templates.md`](aws-ram-ops/references/prompt-templates.md) — Group 7 G/C/O skeletons
+- [`aws-securityhub-ops/references/rubric.md`](aws-securityhub-ops/references/rubric.md) — Group 7 rubric
+- [`aws-securityhub-ops/references/prompt-templates.md`](aws-securityhub-ops/references/prompt-templates.md) — Group 7 G/C/O skeletons
 - Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)
