@@ -137,7 +137,30 @@ rule:
 - **baseline**: static
 - **default_severity**: medium
 - **default_decision**: AI_ASSIST
-- **applies_to**: RDS read replicas
+- **applies_to**: RDS read replicas (non-Aurora). Aurora → **FD-15**.
+
+### FD-15 — Aurora replica lag
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/RDS.AuroraReplicaLag`
+- **dimensions**: `DBClusterIdentifier`
+- **condition**: > {{user.replica_lag_threshold_ms}} (default 1000ms)
+- **window**: PT15M
+- **baseline**: static
+- **default_severity**: high
+- **default_decision**: AI_ASSIST
+- **runbook**: RB-023
+
+### FD-16 — Aurora writer unhealthy
+
+- **domain**: fault
+- **signal_source**: rds-api + cw-metric
+- **metric_or_event**: writer `DBInstanceStatus` != `available` OR cluster `Status` != `available`
+- **window**: PT5M
+- **default_severity**: critical
+- **default_decision**: MANUAL
+- **runbook**: RB-025
 
 ### FD-10 — ALL targets unhealthy
 
@@ -234,6 +257,29 @@ rule:
 - **window**: PT30M
 - **default_severity**: high
 - **default_decision**: AI_ASSIST
+- **note**: Aurora cluster behind proxy → delegate **`aws-aurora-ops`** (RB-027)
+
+### PD-08 — Aurora Serverless v2 at capacity ceiling
+
+- **domain**: predictive
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/RDS.ServerlessDatabaseCapacity`
+- **condition**: ≥ 90% of configured MaxCapacity
+- **window**: PT15M
+- **default_severity**: high
+- **default_decision**: AUTO_HEAL
+- **runbook**: RB-024
+
+### PD-09 — Aurora Global DB replication lag
+
+- **domain**: predictive
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/RDS.AuroraGlobalDBReplicationLag`
+- **condition**: > 1000ms sustained
+- **window**: PT30M
+- **default_severity**: high
+- **default_decision**: MANUAL
+- **runbook**: RB-026
 
 ### PD-05 — LCU saturation forecast (ALB)
 

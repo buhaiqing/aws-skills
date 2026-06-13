@@ -1,6 +1,6 @@
 # AWS CLI Usage — CloudWatch
 
-_Latest update: 2026-05-28_
+_Latest update: 2026-06-13_
 
 ## Command Map
 
@@ -289,6 +289,59 @@ aws cloudwatch list-insight-rules --region us-east-1 --output json
 aws cloudwatch delete-insight-rules --rule-names TopErrorUsers --region us-east-1 --output json
 ```
 
+## Delete Dashboard (Destructive)
+
+**Safety Gate**: confirm `DELETE_DASHBOARD <name>` before execution.
+
+```bash
+# Pre-flight: verify dashboard exists
+aws cloudwatch get-dashboard --dashboard-name "{{user.dash}}" --region {{user.region}} --output json
+
+aws cloudwatch delete-dashboards --dashboard-names "{{user.dash}}" --region {{user.region}} --output json
+```
+
+Validate: `list-dashboards` → dashboard absent.
+
+## Metric Math Alarm (AIOps: Error Rate %)
+
+```bash
+# Pre-flight: verify Lambda metrics exist
+aws cloudwatch list-metrics --namespace AWS/Lambda --metric-name Errors --region {{user.region}} --output json
+
+aws cloudwatch put-metric-alarm \
+  --alarm-name "{{user.alarm}}-ErrorRate" \
+  --metrics '[
+    {"Id":"errors","MetricStat":{"Metric":{"Namespace":"AWS/Lambda","MetricName":"Errors","Dimensions":[{"Name":"FunctionName","Value":"{{user.fn}}"}]},"Period":300,"Stat":"Sum"}},
+    {"Id":"invocations","MetricStat":{"Metric":{"Namespace":"AWS/Lambda","MetricName":"Invocations","Dimensions":[{"Name":"FunctionName","Value":"{{user.fn}}"}]},"Period":300,"Stat":"Sum"}},
+    {"Id":"error_rate","Expression":"(errors/invocations)*100","Label":"Error Rate %"}
+  ]' \
+  --threshold-metric-id "error_rate" \
+  --threshold 5 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2 \
+  --alarm-actions "{{user.actions}}" \
+  --region {{user.region}} --output json
+```
+
+## CloudWatch Synthetics (Canary)
+
+```bash
+# Pre-flight: verify canary name not taken
+aws synthetics describe-canaries --region {{user.region}} --output json \
+  | jq '.Canaries[] | select(.Name=="{{user.canary}}")'
+
+aws synthetics create-canary \
+  --name "{{user.canary}}" \
+  --artifact-s3-location "s3://{{user.bucket}}/canary-artifacts/" \
+  --execution-role-arn "{{user.role_arn}}" \
+  --schedule expression="rate(5 minutes)" \
+  --runtime-version syn-nodejs-puppeteer-9.1 \
+  --code '{"Handler":"canary.handler","Script":"const synthetics = require(\"Synthetics\"); exports.handler = async () => { await synthetics.executeStep(\"heartbeat\", async () => { await synthetics.getPage(); }); };"}' \
+  --region {{user.region}} --output json
+```
+
+Validate: `describe-canaries` → `Status.State=RUNNING`. Delete: `delete-canary --name` (destructive, confirm required).
+
 ## CLI vs API Coverage Gap
 
 | Operation (API) | CLI Available | Notes |
@@ -310,3 +363,6 @@ aws cloudwatch delete-insight-rules --rule-names TopErrorUsers --region us-east-
 | PutInsightRule | ✅ | `cloudwatch put-insight-rule` |
 | ListInsightRules | ✅ | `cloudwatch list-insight-rules` |
 | DeleteInsightRules | ✅ | `cloudwatch delete-insight-rules` |
+| CreateCanary | ✅ | `synthetics create-canary` |
+| DescribeCanaries | ✅ | `synthetics describe-canaries` |
+| DeleteCanary | ✅ | `synthetics delete-canary` |

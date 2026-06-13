@@ -24,7 +24,7 @@ boto3 SDK (fallback after 3 consecutive CLI failures, per CLAUDE.md and
   #         list-metrics | put-dashboard | delete-dashboards
   #         start-query | get-query-results | describe-log-groups
   #         put-retention-policy | put-insight-rule | delete-insight-rules
-  #         put-metric-data
+  #         put-metric-data | create-canary | delete-canary | describe-canaries
 
 # Required behavior
 1. Follow `references/aws-cli-usage.md` and `references/core-concepts.md`

@@ -517,6 +517,8 @@ runbook:
   name: "RDS Connection Saturation"
   trigger_rules: [PD-04]
   default_decision_tier: AI_ASSIST
+  preconditions:
+    - If target is Aurora cluster behind RDS Proxy, prefer RB-027 (aws-aurora-ops)
 
   steps:
     - id: S1
@@ -1117,7 +1119,253 @@ runbook:
   rollback_strategy: "N/A — investigation and report only."
 ```
 
-## 23. Runbook Library Summary
+## 22. RB-023 — Aurora Replica Lag
+
+**Trigger**: FD-15, AURORA-LAG-01
+**Decision tier**: AI_ASSIST
+**Goal**: diagnose read-side lag and scale readers or writer.
+
+```yaml
+runbook:
+  id: RB-023
+  name: "Aurora Replica Lag"
+  trigger_rules: [FD-15, AURORA-LAG-01]
+  default_decision_tier: AI_ASSIST
+  preconditions:
+    - Target is Aurora cluster (engine aurora-mysql or aurora-postgresql)
+    - At least one reader instance exists OR writer write load is elevated
+
+  steps:
+    - id: S1
+      skill: aws-aurora-ops
+      action: describe_cluster_and_members
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S2
+      skill: aws-cloudwatch-ops
+      action: get_metric_statistics
+      params:
+        namespace: AWS/RDS
+        metric: AuroraReplicaLag
+        dimensions: { DBClusterIdentifier: "{{u.cluster_id}}" }
+        window: PT1H
+
+    - id: S3
+      skill: aws-aurora-ops
+      action: get_writer_pi_top_sql_and_waits
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S4 [decision gate]
+      skill: orchestrator
+      action: decide_replica_lag_remediation
+      # branches: add_reader | scale_reader_class | scale_writer_class | recommend_app_read_split
+
+    - id: S5
+      skill: aws-aurora-ops
+      action: create_db_instance_reader
+      params:
+        cluster_id: "{{u.cluster_id}}"
+        instance_class: "{{S4.instance_class}}"
+      requires_confirm: true
+      idempotency_key: "aurora-add-reader-{{u.cluster_id}}-{{S4.branch}}"
+
+  post_checks:
+    - AuroraReplicaLag < {{u.replica_lag_threshold_ms}} for PT15M
+
+  estimated_mttr: PT30M
+  rollback_strategy: "Delete added reader if lag unchanged; revert instance class change (brief outage)."
+```
+
+## 23. RB-024 — Aurora Serverless v2 Capacity Ceiling
+
+**Trigger**: PD-08, AURORA-SLV2-01
+**Decision tier**: AUTO_HEAL
+**Goal**: raise MaxCapacity when ACU pegged at configured max.
+
+```yaml
+runbook:
+  id: RB-024
+  name: "Aurora Serverless v2 Capacity Ceiling"
+  trigger_rules: [PD-08, AURORA-SLV2-01]
+  default_decision_tier: AUTO_HEAL
+  preconditions:
+    - Cluster has db.serverless instance(s)
+    - ServerlessDatabaseCapacity ≥ 90% of current MaxCapacity for PT15M
+
+  steps:
+    - id: S1
+      skill: aws-aurora-ops
+      action: describe_serverless_scaling_config
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S2
+      skill: aws-cloudwatch-ops
+      action: get_metric_statistics
+      params:
+        metric: ServerlessDatabaseCapacity
+        dimensions: { DBInstanceIdentifier: "{{u.serverless_instance_id}}" }
+        window: PT1H
+
+    - id: S3
+      skill: aws-aurora-ops
+      action: modify_serverless_v2_max_capacity
+      params:
+        cluster_id: "{{u.cluster_id}}"
+        new_max: "{{S3.computed_max}}"
+        ceiling: "{{u.serverless_max_cap_ceiling}}"
+      idempotency_key: "aurora-slv2-max-{{u.cluster_id}}-{{S3.computed_max}}"
+
+  post_checks:
+    - ServerlessDatabaseCapacity < 85% of new MaxCapacity for PT15M
+
+  estimated_mttr: PT10M
+  rollback_strategy: "Lower MaxCapacity after peak; no data loss."
+```
+
+## 24. RB-025 — Aurora Writer Failure (Manual Failover)
+
+**Trigger**: FD-16, RDS-PROXY-AURORA-01
+**Decision tier**: MANUAL
+**Goal**: confirm writer health and execute controlled failover if Aurora did not auto-promote.
+
+```yaml
+runbook:
+  id: RB-025
+  name: "Aurora Writer Failure"
+  trigger_rules: [FD-16, RDS-PROXY-AURORA-01]
+  default_decision_tier: MANUAL
+  preconditions:
+    - Writer DBInstanceStatus != available OR cluster Status != available
+    - Healthy reader exists with lower promotion tier
+
+  steps:
+    - id: S1
+      skill: aws-aurora-ops
+      action: describe_cluster_and_members
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S2
+      skill: aws-cloudwatch-ops
+      action: get_cluster_endpoint_reachability
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S3 [optional]
+      skill: aws-aurora-ops
+      action: describe_db_proxy_targets
+      params: { proxy_name: "{{u.proxy_name}}" }
+      on_failure: skip
+
+    - id: S4 [decision gate]
+      skill: orchestrator
+      action: decide_failover_or_wait
+      # branches: wait_auto_failover | manual_failover | escalate_no_reader
+
+    - id: S5
+      skill: aws-aurora-ops
+      action: failover_db_cluster
+      params:
+        cluster_id: "{{u.cluster_id}}"
+        target_instance_id: "{{S4.target_reader_id}}"
+      requires_confirm: true
+      idempotency_key: "aurora-failover-{{u.cluster_id}}-{{S4.target_reader_id}}"
+
+  post_checks:
+    - describe-db-clusters Status=available
+    - New writer IsClusterWriter=true
+
+  estimated_mttr: PT15M
+  rollback_strategy: "Failover is forward-only; re-balance readers after recovery."
+```
+
+## 25. RB-026 — Aurora Global Database Replication Lag
+
+**Trigger**: PD-09, AURORA-GDB-01
+**Decision tier**: MANUAL
+**Goal**: assess cross-region lag and DR posture; no automatic promotion.
+
+```yaml
+runbook:
+  id: RB-026
+  name: "Aurora Global Database Replication Lag"
+  trigger_rules: [PD-09, AURORA-GDB-01]
+  default_decision_tier: MANUAL
+
+  steps:
+    - id: S1
+      skill: aws-aurora-ops
+      action: describe_global_cluster
+      params: { global_cluster_id: "{{u.global_cluster_id}}" }
+
+    - id: S2
+      skill: aws-cloudwatch-ops
+      action: get_metric_statistics
+      params:
+        metric: AuroraGlobalDBReplicationLag
+        dimensions: { DBClusterIdentifier: "{{u.primary_cluster_id}}" }
+        window: PT1H
+
+    - id: S3
+      skill: aws-aurora-ops
+      action: assess_primary_write_pressure
+      params: { cluster_id: "{{u.primary_cluster_id}}" }
+
+    - id: S4
+      skill: orchestrator
+      action: emit_dr_recommendations
+      # branches: throttle_writes | network_review | planned_dr_test | promote_secondary (MANUAL only)
+
+  estimated_mttr: PT1H
+  rollback_strategy: "Investigation only unless operator confirms secondary promotion."
+```
+
+## 26. RB-027 — Aurora Connection Storm (Proxy Path)
+
+**Trigger**: PD-04, RDS-PROXY-AURORA-02, RDS-PROXY-CONN-01
+**Decision tier**: AI_ASSIST
+**Goal**: relieve connection pressure on Aurora cluster behind RDS Proxy.
+
+```yaml
+runbook:
+  id: RB-027
+  name: "Aurora Connection Storm (RDS Proxy)"
+  trigger_rules: [PD-04, RDS-PROXY-AURORA-02, RDS-PROXY-CONN-01]
+  default_decision_tier: AI_ASSIST
+  preconditions:
+    - Aurora cluster identified as proxy target (TRACKED_CLUSTER or describe-db-proxy-targets)
+
+  steps:
+    - id: S1
+      skill: aws-aurora-ops
+      action: describe_proxy_and_cluster_connections
+      params: { cluster_id: "{{u.cluster_id}}", proxy_name: "{{u.proxy_name}}" }
+
+    - id: S2
+      skill: aws-aurora-ops
+      action: get_cluster_max_connections
+      params: { cluster_id: "{{u.cluster_id}}" }
+
+    - id: S3
+      skill: aws-ssm-ops
+      action: sample_active_app_connections
+      params: { targets: "{{u.app_instance_ids}}" }
+      on_failure: skip
+
+    - id: S4 [decision gate]
+      skill: orchestrator
+      action: decide_connection_remediation
+      # branches: tune_proxy_pool | raise_max_connections | add_reader | app_pool_fix
+
+    - id: S5
+      skill: aws-aurora-ops
+      action: modify_cluster_max_connections
+      params: { cluster_id: "{{u.cluster_id}}", delta: 100 }
+      requires_confirm: true
+
+  estimated_mttr: PT30M
+  rollback_strategy: "Revert parameter group max_connections if mis-tuned."
+```
+
+## 27. Runbook Library Summary
 
 | ID | Name | Trigger Rules | Tier | MTTR | Primary Skills |
 |----|------|--------------|------|------|----------------|
@@ -1143,11 +1391,16 @@ runbook:
 | RB-020 | S3 Lifecycle Gap Remediation | CO-06 | MANUAL | PT15M | s3, cloudwatch |
 | RB-021 | Multi-Region DNS Failover | FD-03 | AI_ASSIST | PT10M | route53, elb, cloudwatch, sns |
 | RB-022 | Cost Spike Containment | CO-09 (high) | MANUAL | PT2H | s3, ec2, elb, rds, vpc, sns |
+| RB-023 | Aurora Replica Lag | FD-15, AURORA-LAG-01 | AI_ASSIST | PT30M | aurora, cloudwatch |
+| RB-024 | Aurora Serverless v2 Capacity | PD-08, AURORA-SLV2-01 | AUTO_HEAL | PT10M | aurora, cloudwatch |
+| RB-025 | Aurora Writer Failure | FD-16, RDS-PROXY-AURORA-01 | MANUAL | PT15M | aurora, cloudwatch |
+| RB-026 | Aurora Global DB Lag | PD-09, AURORA-GDB-01 | MANUAL | PT1H | aurora, cloudwatch |
+| RB-027 | Aurora Connection Storm (Proxy) | PD-04, RDS-PROXY-AURORA-02 | AI_ASSIST | PT30M | aurora, ssm, cloudwatch |
 
 **Coverage check**:
 
-- All `FD-*` fault detection rules have at least one runbook (RB-001/002/003/007/011/012/019/021).
-- All `PD-*` predictive rules have at least one runbook (RB-004/010/015).
+- All `FD-*` fault detection rules have at least one runbook (RB-001/002/003/007/011/012/019/021/023/025).
+- All `PD-*` predictive rules have at least one runbook (RB-004/010/015/024/026/027).
 - All `CO-*` cost rules have at least one runbook (RB-006/009/020/022).
 - All `SD-*` security rules have at least one runbook (RB-008/014/016/017).
 - All `CD-*` change rules use the orchestrator's standard change-impact flow.

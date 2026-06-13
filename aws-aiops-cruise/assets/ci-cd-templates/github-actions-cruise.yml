@@ -1,0 +1,64 @@
+# GitHub Actions — AWS AIOps Cruise (read-only)
+#
+# OIDC trust policy: runbooks/scripts/generate-oidc-trust-policy.py --provider github
+# See references/ci-oidc-trust.md
+name: aws-aiops-cruise
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: AWS Resource Group name
+        required: true
+      region:
+        description: AWS region
+        default: us-east-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  health-cruise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CRUISE_ROLE_ARN }}
+          aws-region: ${{ github.event.inputs.region || 'us-east-1' }}
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run daily health check
+        run: |
+          python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
+            --resource-group "${{ github.event.inputs.resource_group || secrets.AWS_CRUISE_RESOURCE_GROUP }}" \
+            --region "${{ github.event.inputs.region || 'us-east-1' }}" \
+            --render-topology \
+            --non-interactive \
+            --output-dir audit-results
+
+      - name: Upload patrol artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cruise-report
+          path: |
+            audit-results/cruise-*.json
+            audit-results/cruise-*.md
+            audit-results/health-overlay-*.json
+          retention-days: 14
+
+      - name: Upload topology artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cruise-topology
+          path: audit-results/topology/
+          retention-days: 14

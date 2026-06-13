@@ -146,6 +146,20 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml # DB/Snapshot/ParamGroup 示例
 │
+├── aws-aurora-ops/           # Aurora 集群操作技能
+│   ├── SKILL.md              # Aurora 集群、故障转移、Global DB、Serverless v2、AIOps
+│   ├── references/
+│   │   ├── aws-cli-usage.md  # Aurora/RDS 集群 CLI + AIOps 指标采集
+│   │   ├── boto3-sdk-usage.md # Aurora 集群 SDK 模式
+│   │   ├── core-concepts.md  # 集群架构、AIOps Metrics Map
+│   │   ├── prompt-examples.md # 8 个 AIOps 用户 Prompt
+│   │   ├── layered-inspection-template.md # 健康巡检 + RCA 模板
+│   │   ├── rubric.md         # GCL 评分标准（required）
+│   │   ├── prompt-templates.md # GCL G/C/O 提示模板
+│   │   └── troubleshooting.md # Aurora 集群故障排查
+│   └── assets/
+│       └── example-config.yaml # 集群/Serverless/Global DB 示例
+│
 ├── aws-elasticache-ops/     # ElastiCache 操作技能
 │   ├── SKILL.md             # 精简版 - Redis/Memcached 操作
 │   ├── references/
@@ -479,13 +493,14 @@ aws sts get-caller-identity --output json
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
 | aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.0.0 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 v1.1.0 |
-| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.2.0 |
+| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.4.0 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 v1.1.0 |
 | aws-elb-ops | ELB (负载均衡) | ✅ 完成 v2.2.0 |
 | aws-eks-ops | EKS (Kubernetes) | ✅ 完成 v1.0.0 |
 | aws-lambda-ops | Lambda (函数计算) | ✅ 完成 v1.1.0 |
 | aws-vpc-ops | VPC (网络) | ✅ 完成 v1.3.0 |
 | aws-rds-ops | RDS (数据库) | ✅ 完成 v1.1.0 |
+| aws-aurora-ops | Aurora (MySQL/PostgreSQL 集群) | ✅ 完成 v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.0.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.1.0 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.0.0 |
@@ -504,6 +519,26 @@ aws sts get-caller-identity --output json
 | aws-securityhub-ops | Security Hub (安全发现/合规) | ✅ 完成 v1.0.0 |
 | aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.0.0 |
 | aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.0.0 |
+| aws-topo-discovery | 跨产品拓扑发现 | ✅ 完成 v1.1.0 |
+| aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.0.0** — 见 [§AIOps 巡检](#aiops-巡检) |
+
+## AIOps 巡检
+
+**`aws-aiops-cruise`** 是 **只读全链路巡航技能**（EIP → ALB → EC2 → RDS/ElastiCache → NAT → 安全组），与下列技能分工：
+
+| 技能 | 职责 |
+|------|------|
+| `aws-topo-discovery` | 静态拓扑 + HCL/基线 |
+| `aws-aiops-cruise` | 定时健康巡检 + 7 个感知 Agent + runbook 01–09 |
+| `aws-aiops-orchestrator` | 跨服务 RCA、自愈编排、成本预测 |
+
+快速开始：
+
+```bash
+python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
+  --resource-group prod-web-rg --region us-east-1 \
+  --render-topology --non-interactive
+```
 
 ## AIOps 编排器
 

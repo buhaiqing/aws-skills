@@ -1,0 +1,25 @@
+# Topology Baseline - GitLab CI
+# Schedule: daily 2 AM UTC via pipeline schedule
+stages:
+  - baseline
+
+baseline:
+  stage: baseline
+  image: python:3.10
+  before_script:
+    - pip install jsonschema>=4.21
+  script:
+    - python aws-topo-discovery/scripts/baseline-manager.py --output-dir ./infra-baseline
+  after_script:
+    - git config user.name "topo-discovery"
+    - git config user.email "topo@aws-skills.local"
+    - git add infra-baseline/
+    - git diff --staged --quiet || git commit -m "baseline: $(date +%Y-%m-%d)"
+    - git push
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - when: manual
+  variables:
+    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION

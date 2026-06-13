@@ -52,12 +52,12 @@ AWS Relational Database Service (RDS) operational skill for AI Agent automation.
 - User asks to create, restore, or manage database snapshots
 - User needs read replica setup or management
 - User requests parameter group configuration
-- User asks about Aurora cluster operations
-- Keywords: database, mysql, postgresql, aurora, snapshot, replica, failover
+- Keywords: database, mysql, postgresql, snapshot, replica, failover
 - (AIOps) User reports slow database, connection issues, storage warning, backup compliance
 - (AIOps) User asks for cost optimization or capacity forecast
 
 ### SHOULD NOT Use When
+- Aurora cluster operations (failover, Global Database, Serverless v2, cluster snapshots) → `aws-aurora-ops`
 - DynamoDB → delegate to: `aws-dynamodb-ops`
 - ElastiCache → delegate to: `aws-elasticache-ops`
 - EC2 self-managed DB / DocumentDB / Neptune
@@ -430,7 +430,7 @@ All commands use `--output json`. Key JSON paths:
 See [references/prompt-examples.md](references/prompt-examples.md) for 10 concrete scenarios:
 - Slow query RCA / Storage AUTO_HEAL / Connection surge diagnosis
 - Backup compliance scan / Idle instance cleanup (FinOps)
-- Cross-region DR / Parameter tuning / Aurora failover
+- Cross-region DR / Parameter tuning → delegate **`aws-aurora-ops`** for Aurora failover
 - Cross-skill RCA / Capacity forecast
 
 ## Token Efficiency

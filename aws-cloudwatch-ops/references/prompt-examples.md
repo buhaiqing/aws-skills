@@ -5,7 +5,7 @@ _Latest update: 2026-05-28_
 This document provides concrete user prompts that activate the `aws-cloudwatch-ops` skill. Copy and adapt these for your use cases.
 
 > **双向链接**: SKILL.md → [prompt-examples.md](prompt-examples.md)
-> **双向链接**: prompt-examples.md → [SKILL.md](../SKILL.md)
+> **双向链接**: prompt-examples.md → [SKILL.md](../SKILL.md) (`## Scope` + [operation-index.md](operation-index.md))
 
 ---
 

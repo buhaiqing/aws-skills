@@ -158,19 +158,7 @@ aws rds describe-db-parameters --db-parameter-group-name {{u.pg}}
 
 ## 场景 8：Aurora 集群故障切换诊断
 
-### Prompt
-```
-Aurora 集群 prod-aurora-catalog 的写节点好像挂了，帮我检查并做故障切换。
-```
-
-### Agent 执行流程
-| 步骤 | 操作 |
-|------|------|
-| 1. 查集群 | `describe-db-clusters --db-cluster-identifier prod-aurora-catalog` |
-| 2. 查节点 | `.DBClusterMembers` → 哪个是 writer, 状态 |
-| 3. 故障切换 | `failover-db-cluster --db-cluster-identifier prod-aurora-catalog --target-db-instance-identifier {{replica_id}}` |
-| 4. 验证 | 检查新 writer 端点 (`Endpoint`) 是否可达 |
-| 5. SLA | P0 (15分钟) — 写中断 = 业务不可用 |
+> **已迁移** → 使用 **`aws-aurora-ops`** [prompt-examples.md](../../aws-aurora-ops/references/prompt-examples.md) 场景 2。
 
 ---
 

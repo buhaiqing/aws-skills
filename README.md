@@ -146,6 +146,20 @@ aws-skills/
 │   └── assets/
 │       └── example-config.yaml # DB/Snapshot/ParamGroup examples
 │
+├── aws-aurora-ops/           # Aurora Cluster Operations Skill
+│   ├── SKILL.md              # Aurora cluster, failover, Global DB, Serverless v2, AIOps
+│   ├── references/
+│   │   ├── aws-cli-usage.md  # Aurora/RDS cluster CLI + AIOps metrics
+│   │   ├── boto3-sdk-usage.md # Aurora cluster SDK patterns
+│   │   ├── core-concepts.md  # Cluster architecture, AIOps Metrics Map
+│   │   ├── prompt-examples.md # 8 AIOps user prompts
+│   │   ├── layered-inspection-template.md # Health check + RCA template
+│   │   ├── rubric.md         # GCL rubric (required)
+│   │   ├── prompt-templates.md # GCL G/C/O prompts
+│   │   └── troubleshooting.md # Aurora cluster troubleshooting
+│   └── assets/
+│       └── example-config.yaml # Cluster/Serverless/Global DB examples
+│
 ├── aws-elasticache-ops/      # ElastiCache Operations Skill
 │   ├── SKILL.md              # Concise - Redis/Memcached operations
 │   ├── references/
@@ -479,13 +493,14 @@ aws sts get-caller-identity --output json
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
 | aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.0.0 |
 | aws-s3-ops | S3 (Object Storage) | ✅ Complete v1.1.0 |
-| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.2.0 |
+| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.4.0 |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete v1.1.0 |
 | aws-elb-ops | ELB (Load Balancing) | ✅ Complete v2.2.0 |
 | aws-eks-ops | EKS (Kubernetes) | ✅ Complete v1.0.0 |
 | aws-lambda-ops | Lambda (Function Compute) | ✅ Complete v1.1.0 |
 | aws-vpc-ops | VPC (Network) | ✅ Complete v1.3.0 |
 | aws-rds-ops | RDS (Database) | ✅ Complete v1.1.0 |
+| aws-aurora-ops | Aurora (MySQL/PostgreSQL clusters) | ✅ Complete v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.0.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.1.0 |
 | aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.0.0 |
@@ -504,6 +519,26 @@ aws sts get-caller-identity --output json
 | aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.0.0 |
 | aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.0.0 |
+| aws-topo-discovery | Cross-product Topology Discovery | ✅ Complete v1.1.0 |
+| aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.0.0** — see [§AIOps Cruise](#aiops-cruise) |
+
+## AIOps Cruise
+
+**`aws-aiops-cruise`** is the **read-only end-to-end patrol skill** (EIP → ALB → EC2 → RDS/ElastiCache → NAT → Security Groups). It complements:
+
+| Skill | Role |
+|-------|------|
+| `aws-topo-discovery` | Static topology + HCL/baseline |
+| `aws-aiops-cruise` | Scheduled health cruise + 7 Perceive Agents + runbooks 01–09 |
+| `aws-aiops-orchestrator` | Cross-service RCA, self-heal, cost forecast orchestration |
+
+Quick start:
+
+```bash
+python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
+  --resource-group prod-web-rg --region us-east-1 \
+  --render-topology --non-interactive
+```
 
 ## AIOps Orchestrator
 
@@ -685,7 +720,7 @@ expanded coverage:
 |--------|-----------------|----------------|-------------|
 | `aws-aiops-orchestrator` | — | **v0.1.0 (new)** | **Cross-service orchestrator**: 47 detection rules, 22 runbooks, 16 downstream skills patched with delegate contract; bridges single-service AIOps into end-to-end RCA + coordinated remediation |
 | `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management; **orchestrator-aware (P0 patched)** |
-| `aws-cloudwatch-ops` | v2.1.0 | **v2.2.0** | ELB-specific alarms, metrics mapping, layered inspection; **orchestrator-aware (P0 patched)** |
+| `aws-cloudwatch-ops` | v2.3.0 | **v2.4.0** | SKILL极致瘦身 (610→~145 lines); Operation Index → references/operation-index.md |
 | `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** + **orchestrator-aware (P0 patched)** |
 | `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA; **orchestrator-aware (P0 patched)** |
 | `aws-rds-ops` | v1.1.0 | **v1.1.0+** | DB diagnostics, RDS connections; **orchestrator-aware (P0 patched)** |

@@ -1,0 +1,38 @@
+# GitLab CI — AWS AIOps Cruise (read-only)
+# Schedule via Pipeline → Schedules (e.g. every 6h). Set CI/CD variables:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+#   AWS_CRUISE_RESOURCE_GROUP (required)
+
+stages:
+  - patrol
+
+variables:
+  CRUISE_OUTPUT_DIR: audit-results
+  CRUISE_REGION: us-east-1
+
+health-cruise:
+  stage: patrol
+  image: python:3.10
+  before_script:
+    - apt-get update && apt-get install -y jq curl unzip
+    - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    - unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
+  script:
+    - |
+      python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
+        --resource-group "${AWS_CRUISE_RESOURCE_GROUP}" \
+        --region "${CRUISE_REGION}" \
+        --render-topology \
+        --non-interactive \
+        --output-dir "${CRUISE_OUTPUT_DIR}"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - audit-results/cruise-*.json
+      - audit-results/cruise-*.md
+      - audit-results/health-overlay-*.json
+      - audit-results/topology/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - when: manual

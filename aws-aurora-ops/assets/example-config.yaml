@@ -1,0 +1,115 @@
+# Aurora Example Configurations
+
+```yaml
+x-aurora-prod: &aurora_prod
+  backup_retention_period: 14
+  storage_encrypted: true
+  deletion_protection: true
+  publicly_accessible: false
+  performance_insights_enabled: true
+
+x-aurora-dev: &aurora_dev
+  backup_retention_period: 1
+  deletion_protection: false
+  publicly_accessible: false
+```
+
+## Aurora MySQL — Production Cluster
+
+```yaml
+db_cluster:
+  <<: *aurora_prod
+  identifier: "{{user.DBClusterIdentifier}}"
+  engine: "aurora-mysql"
+  engine_version: "{{user.EngineVersion}}"
+  master_username: "{{user.MasterUsername}}"
+  master_user_password: "{{user.password_secrets_manager_arn}}"
+  db_subnet_group_name: "{{user.DBSubnetGroupName}}"
+  vpc_security_group_ids: ["{{user.SecurityGroupId}}"]
+  db_cluster_parameter_group_name: "aurora-mysql8.0-prod"
+  kms_key_id: "{{user.KmsKeyId}}"
+  tags:
+    - {Key: Environment, Value: production}
+  instances:
+    - identifier: "{{user.DBClusterIdentifier}}-writer"
+      instance_class: "db.r6g.xlarge"
+      promotion_tier: 1
+    - identifier: "{{user.DBClusterIdentifier}}-reader-1"
+      instance_class: "db.r6g.large"
+      promotion_tier: 2
+```
+
+## Aurora PostgreSQL — Dev Cluster
+
+```yaml
+db_cluster:
+  <<: *aurora_dev
+  identifier: "dev-aurora-app"
+  engine: "aurora-postgresql"
+  engine_version: "{{user.EngineVersion}}"
+  master_username: "postgres"
+  master_user_password: "{{user.password_secrets_manager_arn}}"
+  db_subnet_group_name: "dev-db-subnets"
+  vpc_security_group_ids: ["sg-dev-aurora"]
+  instances:
+    - identifier: "dev-aurora-app-writer"
+      instance_class: "db.t4g.medium"
+      promotion_tier: 1
+```
+
+## Serverless v2
+
+```yaml
+db_cluster:
+  identifier: "analytics-serverless"
+  engine: "aurora-mysql"
+  master_username: "admin"
+  master_user_password: "{{user.password_secrets_manager_arn}}"
+  db_subnet_group_name: "{{user.DBSubnetGroupName}}"
+  vpc_security_group_ids: ["{{user.SecurityGroupId}}"]
+  instances:
+    - identifier: "analytics-serverless-1"
+      instance_class: "db.serverless"
+      serverless_v2_scaling_configuration:
+        min_capacity: 0.5
+        max_capacity: 32
+```
+
+## Global Database
+
+```yaml
+global_cluster:
+  global_cluster_identifier: "{{user.GlobalClusterId}}"
+  engine: "aurora-mysql"
+primary_cluster:
+  identifier: "{{user.DBClusterIdentifier}}"
+  region: "{{env.AWS_DEFAULT_REGION}}"
+  global_cluster_identifier: "{{user.GlobalClusterId}}"
+secondary_cluster:
+  identifier: "{{user.SecondaryClusterId}}"
+  region: "{{user.SecondaryRegion}}"
+  global_cluster_identifier: "{{user.GlobalClusterId}}"
+```
+
+## Cluster Snapshot & Restore
+
+```yaml
+snapshot:
+  db_cluster_snapshot_identifier: "{{user.SnapshotId}}"
+  db_cluster_identifier: "{{user.DBClusterIdentifier}}"
+
+restore:
+  db_cluster_identifier: "{{user.NewClusterId}}"
+  snapshot_identifier: "{{user.SnapshotId}}"
+  engine: "aurora-mysql"
+```
+
+## Deletion (Safety Gate)
+
+```yaml
+deletion:
+  db_cluster_identifier: "{{user.DBClusterIdentifier}}"
+  final_db_snapshot_identifier: "{{user.FinalSnapshotId}}"
+  confirmation_required: true
+  confirmation_string: "DELETE {{user.DBClusterIdentifier}}"
+```

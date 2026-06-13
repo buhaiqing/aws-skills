@@ -1,0 +1,64 @@
+# GitLab CI — AWS AIOps Cruise with OIDC (read-only)
+#
+# Prerequisites:
+# 1. GitLab project → Settings → CI/CD → Token Access: enable OIDC
+# 2. AWS IAM OIDC identity provider for your GitLab instance
+# 3. IAM role trust policy allowing gitlab.com (or self-hosted) + project path
+# 4. CI/CD variables (protected/masked where noted):
+#      AWS_CRUISE_ROLE_ARN     — IAM role ARN to assume
+#      AWS_CRUISE_RESOURCE_GROUP — Resource Group name
+#      GITLAB_OIDC_AUD         — optional; default https://gitlab.com
+#      CRUISE_REGION           — optional; default us-east-1
+#
+# See references/gitlab-oidc-integration.md for trust policy example.
+
+stages:
+  - patrol
+
+variables:
+  CRUISE_OUTPUT_DIR: audit-results
+  CRUISE_REGION: us-east-1
+  GITLAB_OIDC_AUD: https://gitlab.com
+
+health-cruise-oidc:
+  stage: patrol
+  image: python:3.10
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    - apt-get update && apt-get install -y jq curl unzip
+    - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    - unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
+    - |
+      CREDS=$(aws sts assume-role-with-web-identity \
+        --role-arn "${AWS_CRUISE_ROLE_ARN}" \
+        --role-session-name "gitlab-cruise-${CI_PIPELINE_ID}" \
+        --web-identity-token "${GITLAB_OIDC_TOKEN}" \
+        --duration-seconds 3600 \
+        --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+        --output text)
+      export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | awk '{print $1}')
+      export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | awk '{print $2}')
+      export AWS_SESSION_TOKEN=$(echo "$CREDS" | awk '{print $3}')
+      export AWS_DEFAULT_REGION="${CRUISE_REGION}"
+      aws sts get-caller-identity
+  script:
+    - |
+      python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
+        --resource-group "${AWS_CRUISE_RESOURCE_GROUP}" \
+        --region "${CRUISE_REGION}" \
+        --render-topology \
+        --non-interactive \
+        --output-dir "${CRUISE_OUTPUT_DIR}"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - audit-results/cruise-*.json
+      - audit-results/cruise-*.md
+      - audit-results/health-overlay-*.json
+      - audit-results/topology/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - when: manual

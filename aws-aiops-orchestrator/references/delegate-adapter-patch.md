@@ -155,6 +155,7 @@ produces. The orchestrator uses this to route without parsing SKILL.md.
 | aws-cloudwatch-ops | health-check, rca, capacity-forecast | metric, log | PT24H |
 | aws-ec2-ops | health-check, rca, self-heal, change-impact | metric, state, event | PT24H |
 | aws-rds-ops | health-check, rca, self-heal, change-impact | metric, state, event | PT24H |
+| aws-aurora-ops | health-check, rca, self-heal, change-impact, compliance-scan, capacity-forecast | metric, state, event, finding | PT24H |
 | aws-vpc-ops | health-check, rca, change-impact | metric, log, config | PT24H |
 | aws-acm-ops | health-check, self-heal | state, event | PT24H |
 | aws-route53-ops | health-check, self-heal, change-impact | state | PT24H |

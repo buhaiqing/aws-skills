@@ -1,0 +1,70 @@
+{
+  "Comment": "EventBridge rule: CloudWatch Alarm ALARM -> SNS (wire to cruise runner)",
+  "Resources": {
+    "CruiseAlarmRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Forward CloudWatch alarm state changes to SNS for aws-aiops-cruise emergency runbook",
+        "EventPattern": {
+          "source": ["aws.cloudwatch"],
+          "detail-type": ["CloudWatch Alarm State Change"],
+          "detail": {
+            "state": {
+              "value": ["ALARM"]
+            }
+          }
+        },
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": { "Ref": "CruiseAlertTopic" },
+            "Id": "CruiseSnsTarget",
+            "InputTransformer": {
+              "InputPathsMap": {
+                "alarm": "$.detail.alarmName",
+                "region": "$.region",
+                "reason": "$.detail.state.reason"
+              },
+              "InputTemplate": "\"CloudWatch ALARM: <alarm> in <region> — <reason>. Run: bash runbooks/scripts/alarm-trigger.sh --alarm-name <alarm> --region <region> --symptom alarm\""
+            }
+          }
+        ]
+      }
+    },
+    "CruiseAlertTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": "aws-aiops-cruise-alerts",
+        "DisplayName": "AIOps Cruise Alarm Fanout"
+      }
+    },
+    "CruiseAlarmTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "Topics": [{ "Ref": "CruiseAlertTopic" }],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "events.amazonaws.com" },
+              "Action": "sns:Publish",
+              "Resource": { "Ref": "CruiseAlertTopic" },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:SourceArn": { "Fn::GetAtt": ["CruiseAlarmRule", "Arn"] }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "SnsTopicArn": {
+      "Value": { "Ref": "CruiseAlertTopic" },
+      "Description": "Subscribe Lambda/Chatbot/SSM Automation to this topic to invoke alarm-trigger.sh"
+    }
+  }
+}

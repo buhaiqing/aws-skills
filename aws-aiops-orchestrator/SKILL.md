@@ -43,7 +43,8 @@ metadata:
     - aws-config-ops       # resource compliance + config drift
     - aws-elb-ops          # most mature AIOps engine; first-class delegate
     - aws-ec2-ops          # compute-side diagnosis + auto-reboot
-    - aws-rds-ops          # database-side diagnosis
+    - aws-rds-ops          # standalone RDS diagnosis
+    - aws-aurora-ops       # Aurora cluster diagnosis (lag, failover, Serverless)
     - aws-vpc-ops          # network-side diagnosis
     - aws-acm-ops          # certificate lifecycle
     - aws-waf-ops          # traffic anomaly mitigation
@@ -57,6 +58,8 @@ metadata:
     - aws-lambda-ops       # serverless health
     - aws-stepfunctions-ops
     - aws-eventbridge-ops  # event-driven remediation triggers
+    - aws-aiops-cruise     # read-only full-chain patrol producer
+    - aws-topo-discovery   # topology manifest + health overlay
     - aws-sns-ops          # alert fanout
     - aws-sqs-ops          # async work queue
 ---

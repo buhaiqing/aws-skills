@@ -1,0 +1,193 @@
+"""Governance & insight collectors (CloudWatch alarms, Guru, Security Hub, Config, CO)."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from _shared import make_incident, resource_in_scope, run_aws
+
+def audit_cloudwatch_alarms(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+    """Resources in ALARM state — AWS-native proactive signal."""
+    incidents: list[dict] = []
+    token = None
+    while True:
+        cmd = ["aws", "cloudwatch", "describe-alarms", "--state-value", "ALARM"]
+        if token:
+            cmd.extend(["--next-token", token])
+        data = run_aws(cmd, region)
+        if not data:
+            break
+        for alarm in data.get("MetricAlarms", []):
+            name = alarm.get("AlarmName", "")
+            dims = {d["Name"]: d["Value"] for d in alarm.get("Dimensions", [])}
+            subject = next(iter(dims.values()), name)
+            if scope_ids and not any(resource_in_scope(v, scope_ids) for v in dims.values()):
+                continue
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="CloudWatch",
+                    resource_id=name,
+                    rule_id="CW-ALARM-01",
+                    title=f"CloudWatch alarm in ALARM: {name}",
+                    level="CRITICAL" if "critical" in name.lower() else "WARNING",
+                    metric=alarm.get("MetricName", "AlarmState"),
+                    current_value=1.0,
+                    recommendation=f"Investigate {alarm.get('Namespace')}/{alarm.get('MetricName')}; "
+                    f"check alarm history via aws-cloudwatch-ops",
+                )
+            )
+        token = data.get("NextToken")
+        if not token:
+            break
+    return incidents
+
+def audit_devops_guru(region: str, run_id: str, customer: str) -> list[dict]:
+    """DevOps Guru proactive/reactive insights (RDS, Lambda, etc.)."""
+    incidents: list[dict] = []
+    for op, label in (
+        (["aws", "devops-guru", "list-proactive-insights", "--max-results", "15"], "proactive"),
+        (["aws", "devops-guru", "list-reactive-insights", "--max-results", "15"], "reactive"),
+    ):
+        data = run_aws(op, region)
+        if not data:
+            continue
+        key = "ProactiveInsights" if "proactive" in label else "ReactiveInsights"
+        for ins in data.get(key, []):
+            status = ins.get("Status", "")
+            if status not in ("ONGOING", "OPEN"):
+                continue
+            iid = ins.get("Id", "")
+            sev = ins.get("Severity", "MEDIUM")
+            level = "CRITICAL" if sev in ("CRITICAL", "HIGH") else "WARNING"
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="DevOpsGuru",
+                    resource_id=iid or label,
+                    rule_id="DG-INSIGHT-01",
+                    title=(ins.get("Name") or f"DevOps Guru {label} insight")[:120],
+                    level=level,
+                    metric="InsightSeverity",
+                    current_value=1.0,
+                    recommendation="Review DevOps Guru recommendation detail; correlate CloudWatch",
+                )
+            )
+    return incidents
+
+def audit_security_hub(region: str, run_id: str, customer: str) -> list[dict]:
+    incidents: list[dict] = []
+    # Security Hub is often us-east-1 for API; try requested region first
+    filters = {
+        "RecordState": [{"Value": "ACTIVE", "Comparison": "EQUALS"}],
+        "SeverityLabel": [{"Value": "CRITICAL", "Comparison": "EQUALS"}],
+    }
+    import json
+
+    data = run_aws(
+        [
+            "aws",
+            "securityhub",
+            "get-findings",
+            "--filters",
+            json.dumps(filters),
+            "--max-results",
+            "20",
+        ],
+        region,
+    )
+    if not data:
+        return incidents
+    findings = data.get("Findings", [])
+    if findings:
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="SecurityHub",
+                resource_id="aggregate",
+                rule_id="SH-CRIT-01",
+                title=f"Security Hub: {len(findings)} ACTIVE CRITICAL findings (sample)",
+                level="CRITICAL",
+                metric="CriticalFindings",
+                current_value=float(len(findings)),
+                recommendation="Delegate aws-securityhub-ops; map to ASFF compliance controls",
+            )
+        )
+    return incidents
+
+def audit_config_compliance(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+    incidents: list[dict] = []
+    rules = run_aws(["aws", "config", "describe-config-rules"], region)
+    if not rules:
+        return incidents
+    for rule in rules.get("ConfigRules", [])[:15]:
+        name = rule.get("ConfigRuleName", "")
+        comp = run_aws(
+            ["aws", "config", "describe-compliance-by-config-rule", "--config-rule-name", name],
+            region,
+        )
+        if not comp:
+            continue
+        for result in comp.get("ComplianceByConfigRules", []):
+            if result.get("Compliance", {}).get("ComplianceType") == "NON_COMPLIANT":
+                count = result.get("Compliance", {}).get("ComplianceContributorCount", {})
+                nc = count.get("CappedCount", 1)
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="Config",
+                        resource_id=name,
+                        rule_id="CFG-NC-01",
+                        title=f"Config rule NON_COMPLIANT: {name} ({nc} resources)",
+                        level="WARNING",
+                        metric="NonCompliantCount",
+                        current_value=float(nc),
+                        recommendation="aws-config-ops describe-compliance-by-resource; remediate via AI_ASSIST",
+                    )
+                )
+                break
+    return incidents[:10]
+
+def audit_compute_optimizer(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+    incidents: list[dict] = []
+    status = run_aws(["aws", "compute-optimizer", "get-enrollment-status"], region)
+    if not status or status.get("status") != "Active":
+        return incidents
+    recs = run_aws(
+        ["aws", "compute-optimizer", "get-ec2-instance-recommendations", "--max-results", "50"],
+        region,
+    )
+    if not recs:
+        return incidents
+    for r in recs.get("instanceRecommendations", []):
+        iid = r.get("instanceArn", "").split("/")[-1]
+        if scope_ids and not resource_in_scope(iid, scope_ids):
+            continue
+        if r.get("finding") in ("OVER_PROVISIONED", "UNDER_PROVISIONED"):
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="EC2",
+                    resource_id=iid,
+                    rule_id="CO-EC2-01",
+                    title=f"Compute Optimizer: {r.get('finding')} — {iid}",
+                    level="INFO",
+                    metric="OptimizerFinding",
+                    current_value=1.0,
+                    recommendation=f"Current {r.get('currentInstanceType')} → suggested "
+                    f"{(r.get('recommendationOptions') or [{}])[0].get('instanceType', 'N/A')}",
+                )
+            )
+    return incidents
+

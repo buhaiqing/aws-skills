@@ -115,24 +115,79 @@ below maps intents to (skill, primary CLI command(s)). All commands assume
 | Resource-level health overview | `aws-cloudwatch-ops` | `describe-alarms`, `get-metric-statistics` |
 | LB health & 5xx | `aws-elb-ops` | `describe-target-health`, `describe-load-balancers` |
 | EC2 health | `aws-ec2-ops` | `describe-instance-status`, `describe-instances` |
-| DB health | `aws-rds-ops` | `describe-db-instances`, `describe-db-clusters` |
+| DB health (standalone RDS) | `aws-rds-ops` | `describe-db-instances` |
+| Aurora cluster health | `aws-aurora-ops` | `describe-db-clusters`, cluster CW metrics |
 | Cache health | `aws-elasticache-ops` | `describe-replication-groups` |
 | Search health | `aws-opensearch-ops` | `describe-domain`, `describe-domain-health` |
 | DNS health | `aws-route53-ops` | `get-health-check-status` |
 | Cert expiry | `aws-acm-ops` | `list-certificates` + `describe-certificate` |
 | Threat posture | `aws-guardduty-ops` | `list-findings` (severity ≥ HIGH, unarchived) |
 | Security score | `aws-securityhub-ops` | `get-insights` + `describe-hub` |
+| **Full-chain patrol (read-only)** | **`aws-aiops-cruise`** | `daily-health-check.py` → `cruise-*.json` + `aiops_context` |
+| **Topology + health overlay** | **`aws-topo-discovery`** | `topo-scan.sh` + `--health-json` from cruise overlay |
+
+When `aws-aiops-cruise` returns `aiops_context.next_skill: aws-aiops-orchestrator` (≥ 3 CRITICAL), the orchestrator **consumes** the cruise envelope and may delegate to per-service skills below for RCA/self-heal.
+
+### 3.1a Full-chain patrol (`aws-aiops-cruise`)
+
+| Sub-intent | CLI entry | `parameters` |
+|------------|-----------|--------------|
+| Scheduled health | `runbooks/scripts/daily-health-check.py` | `scenario: daily_check`, `resource_group`, `regions` |
+| Emergency | `runbooks/scripts/emergency-troubleshoot.py` | `symptom`, `resource_group` |
+| Topology render | `--render-topology` or `cruise-topo-render.py` | `cruise_json`, `topo_mode: brief\|detailed` |
+
+Delegate example:
+
+```yaml
+aiops_delegate:
+  parent_intent: health-check
+  target_skill: aws-aiops-cruise
+  action_mode: observe
+  scope:
+    region: us-east-1
+    tags: { Environment: production }
+  parameters:
+    scenario: daily_check
+    resource_group: prod-web-rg
+    render_topology: true
+    enable_xray: false
+  decision_tier: AI_ASSIST
+```
+
+Cruise response MUST include `aiops_context` per [`aws-aiops-cruise/references/orchestrator-integration.md`](../../aws-aiops-cruise/references/orchestrator-integration.md).
+
+### 3.1b Topology manifest (`aws-topo-discovery`)
+
+| Sub-intent | CLI entry | Notes |
+|------------|-----------|-------|
+| Inventory scan | `scripts/topo-scan.sh` | Read-only parallel describe |
+| Health overlay | `--health-json` from cruise | Colors Mermaid/ASCII by incident level |
+| Baseline diff | `baseline-manager.py` | Drift vs saved manifest |
+
+```yaml
+aiops_delegate:
+  parent_intent: health-check
+  target_skill: aws-topo-discovery
+  action_mode: observe
+  parameters:
+    mode: detailed
+    health_json: audit-results/health-overlay-<run_id>.json
+```
 
 ### 3.2 Root-cause intents
 
 | Symptom | Primary skill | RCA chain (in order) |
 |---------|---------------|----------------------|
+| **Full-stack degradation (unknown layer)** | **`aws-aiops-cruise`** | cruise (observe) → orchestrator if ≥3 CRITICAL → elb → rds/aurora → vpc |
 | 5xx surge | `aws-elb-ops` | elb → ec2 → rds/eks → vpc → cloudtrail |
 | High latency | `aws-elb-ops` | elb → ec2 → rds/eks → cloudwatch (logs insights) |
 | Connection timeout | `aws-elb-ops` | elb → vpc (SG/NACL) → ec2 → rds |
 | TLS handshake failure | `aws-elb-ops` | elb → acm → cloudwatch (logs) |
 | DNS failure | `aws-route53-ops` | route53 → elb → waf (block?) |
-| DB slowdown | `aws-rds-ops` | rds (perf insights) → ec2 (app) → vpc (network) |
+| DB slowdown (standalone RDS) | `aws-rds-ops` | rds (perf insights) → ec2 (app) → vpc (network) |
+| Aurora replica lag / writer failure | `aws-aurora-ops` | aurora (lag, members) → cloudwatch → vpc |
+| Connection timeout (Aurora + Proxy) | `aws-aurora-ops` | aurora (proxy targets, connections) → vpc → secretsmanager |
+| **Edge / CDN / static origin** | **`aws-aiops-cruise`** | cloudfront → s3/apigw/alb origins → target health |
 | WAF block spike | `aws-waf-ops` | waf → elb → ec2 (origin) |
 | Cost anomaly | direct (Cost Explorer) | cost-explorer → cloudwatch → resource-level detail |
 | Cert expired | `aws-acm-ops` | acm → route53 (DNS validation?) → cloudtrail |
@@ -160,6 +215,7 @@ below maps intents to (skill, primary CLI command(s)). All commands assume
 | LB capacity | `aws-cloudwatch-ops` | FORECAST on `RequestCount`, `ConsumedLCUs`, `ActiveConnectionCount` |
 | EC2 CPU pressure | `aws-cloudwatch-ops` | FORECAST on `CPUUtilization` (per instance, per ASG) |
 | RDS storage | `aws-cloudwatch-ops` | FORECAST on `FreeStorageSpace` (linear from 30d trend) |
+| Aurora Serverless capacity | `aws-aurora-ops` | FORECAST on `ServerlessDatabaseCapacity` vs MaxCapacity |
 | RDS connections | `aws-cloudwatch-ops` | FORECAST on `DatabaseConnections` |
 | Cert expiry | `aws-acm-ops` | Compute days remaining from `NotAfter` |
 | Cost (next 30/90 days) | direct Cost Explorer | `GetCostForecast` |
@@ -175,6 +231,7 @@ below maps intents to (skill, primary CLI command(s)). All commands assume
 | Unassociated EIP | `aws-ec2-ops` | not associated > 24h |
 | S3 lifecycle gap | `aws-s3-ops` | bucket without lifecycle rule, > 90d old |
 | RDS over-provisioned | `aws-rds-ops` | avg CPU < 10% for 14d |
+| Aurora idle readers / Serverless oversize | `aws-aurora-ops` | reader CPU < 10% 14d; MaxCapacity >> p99 ACU |
 | ElastiCache over-provisioned | `aws-elasticache-ops` | `CPUUtilization` < 10% for 14d |
 | Rightsizing (general) | Compute Optimizer (direct CLI) | `get-ec2-instance-recommendations`, `get-rds-db-instance-recommendations` |
 
@@ -257,3 +314,19 @@ If you maintain an `aws-*-ops` skill and want it to be orchestrator-aware:
 - [ ] Use `{{env.*}}` only — never echo credentials.
 - [ ] Test by running a smoke invocation from the orchestrator against
       your skill in observe mode.
+
+## 8. Cross-product skills (read-only patrol)
+
+These skills are **not** `aws-*-ops` service skills but participate in the same
+`aiops_context` contract:
+
+| Skill | Role | Orchestrator uses when… |
+|-------|------|-------------------------|
+| `aws-aiops-cruise` | Producer: full-chain patrol + chain inference | User wants end-to-end health, pre-launch, emergency cruise; or ≥3 CRITICAL escalation source |
+| `aws-topo-discovery` | Producer: static topology + optional health overlay | User needs manifest/HCL/baseline; or cruise `--render-topology` companion |
+
+**Escalation path**: `aws-aiops-cruise` sets `next_skill: aws-aiops-orchestrator` when  
+`incidents` contains ≥ 3 `CRITICAL`. Orchestrator MUST NOT auto-heal from cruise alone —  
+re-delegate to the appropriate `aws-*-ops` skill with `action_mode: recommend` or `manual` first.
+
+See also: [`aws-aiops-cruise/references/orchestrator-integration.md`](../../aws-aiops-cruise/references/orchestrator-integration.md).

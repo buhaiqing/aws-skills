@@ -205,6 +205,7 @@ total score. Full rules in spec §3.
 | `aws-kms-ops` | **required (pilot)** | 2 | `schedule-key-deletion` is irreversible; `--pending-window-in-days ≥ 7` |
 | `aws-s3-ops` | **required (pilot)** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal) |
 | `aws-rds-ops` | **required** | 2 | `delete-db-instance` (final-snapshot guard for prod) — shipped v1.1.0 |
+| `aws-aurora-ops` | **required** | 2 | `delete-db-cluster`, `delete-db-cluster-snapshot`, `failover-db-cluster`, `backtrack-db-cluster`, Global Database detach — shipped v1.0.0 |
 | `aws-lambda-ops` | **required** | 2 | `delete-function` (irreversible), `delete-function-concurrency` — shipped v1.1.0 |
 | `aws-dynamodb-ops` | **required** | 2 | `delete-table` (data loss), `update-table` (throughput) — shipped v1.1.0 |
 | `aws-elasticache-ops` | **required** | 2 | `delete-replication-group`, `delete-cache-cluster` |
@@ -228,6 +229,8 @@ total score. Full rules in spec §3.
 | `aws-securityhub-ops` | **required** | 2 | `delete-insight`, `delete-action-target`, `delete-automation-rule`, `delete-configuration-policy`, `disable-securityhub` — shipped v1.0.0 |
 | `aws-cloudtrail-ops` | optional | 3 | read-mostly; `delete-trail` = severe |
 | `aws-skill-generator` | optional | 3 | meta operation; secret-leak guard |
+| `aws-topo-discovery` | optional | 3 | read-only discovery; no destructive operations |
+| `aws-aiops-cruise` | optional | 3 | read-only full-chain patrol; 7 Perceive Agents; no destructive operations |
 
 Each skill may override its own `max_iter` in its `SKILL.md` under
 `## Quality Gate (GCL)`. A skill not yet listed has GCL **disabled** by
@@ -303,6 +306,8 @@ Codified in `gcl-spec.md` §8. Highlights:
 | 1.6.0 | 2026-06-07 | New skill — **`aws-autoscaling-ops`** (v1.0.0) with full GCL scaffolding: `delete-auto-scaling-group` (`--force-delete` guard + scale-to-0 pre-flight), `delete-launch-configuration`, `detach-instances` (decrement guard), `set-desired-capacity` → 0 guard, `suspend-processes` (HealthCheck/ReplaceUnhealthy) safety, `confirm=DELETE <asg-name>` / `confirm=DETACH <instance-id>` patterns; rubric.md and prompt-templates.md shipped. |
 | 1.7.0 | 2026-06-07 | New skills — **`aws-config-ops`** (v1.0.0, recommended, max_iter=3) with `delete-config-rule`, `stop-configuration-recorder`, `delete-configuration-recorder` guards; **`aws-eventbridge-ops`** (v1.0.0, recommended, max_iter=3) with `delete-rule` target-cleanup guard, `delete-event-bus`, `delete-schedule`, `delete-pipe`; both shipped with full rubric.md and prompt-templates.md. |
 | 1.8.0 | 2026-06-12 | Added 5 skills to §11.5 Per-Skill Defaults table (back-filled from Groups 6–7 GCL rollout): **`aws-athena-ops`** (required, max_iter=2), **`aws-guardduty-ops`** (required, max_iter=2), **`aws-opensearch-ops`** (required, max_iter=2), **`aws-ram-ops`** (required, max_iter=2), **`aws-securityhub-ops`** (required, max_iter=2) — all shipped with rubric.md and prompt-templates.md. |
+| 1.9.0 | 2026-06-13 | New skill — **`aws-aurora-ops`** (v1.0.0→**v1.1.0** AIOps): orchestrator delegate contract, 8 prompt scenarios, layered inspection, AIOps metrics CLI, cross-skill chains; **`aws-rds-ops`** delegates Aurora failover; **`aws-aiops-cruise`** / **`aws-aiops-orchestrator`** route Aurora cluster ops here. |
+| 1.10.0 | 2026-06-13 | **`aws-aurora-ops`** v1.2.0 P2: orchestrator runbooks RB-023–RB-027, detection rules FD-15/16 PD-08/09, `incident-schema` v1.1.0 Aurora/`RDSProxy` resource types + examples. |
 
 ### 11.12 See also
 
