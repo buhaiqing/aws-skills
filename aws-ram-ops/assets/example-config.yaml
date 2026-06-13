@@ -25,6 +25,22 @@ resource_shares:
     principals:
       - "222222222222"
 
+  org_workloads_ou:
+    <<: *org_defaults
+    name: "org-workloads-network"
+    resource_arns:
+      - "arn:aws:ec2:{{user.region}}:{{env.AWS_ACCOUNT_ID}}:subnet/subnet-shared"
+    principals:
+      - "{{user.ou_arn}}"  # e.g. arn:aws:organizations::111111111111:ou/o-xxx/ou-workloads
+
+permission_associations:
+  subnet_readonly:
+    share_ref: shared_subnet
+    permission_arn: "arn:aws:ram::aws:permission/AmazonVPCSubnetReadOnlyAccess"
+  aurora_readonly:
+    share_ref: shared_subnet  # replace with aurora share name when used
+    permission_arn: "arn:aws:ram::aws:permission/AmazonRDSDBClusterReadOnlyAccess"
+
 cross_account_share:
   <<: *share_defaults
   name: "partner-access"

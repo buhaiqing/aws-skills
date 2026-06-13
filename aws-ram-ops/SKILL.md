@@ -11,8 +11,8 @@ compatibility: >-
   to AWS RAM endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-06-10"
+  version: "1.1.0"
+  last_updated: "2026-06-13"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -29,9 +29,10 @@ metadata:
     - AWS_DEFAULT_REGION
     - AWS_PROFILE
   cross_skill_deps:
-    - aws-iam-ops         # RAM service-linked role / IAM policies for shared resources
+    - aws-iam-ops         # Consumer-account IAM after RAM resource visibility
     - aws-ec2-ops         # VPC Subnet / Security Group sharing
     - aws-rds-ops         # DB Cluster sharing
+    - aws-aurora-ops      # Aurora cluster ARN lookup + consumer validation
     - aws-vpc-ops         # VPC and network resource sharing
 ---
 
@@ -59,10 +60,14 @@ AWS RAM helps you securely share resources across AWS accounts or within an orga
 - Task involves CRUD on **resource shares**, **permissions**, or **principals**
 - Task involves **accepting/rejecting** resource share invitations
 - Task involves **enabling Organizations sharing** or **disassociating** resources
-- Keywords: ram, resource-share, cross-account, sharing, permission, invitation, principal
+- **Multi-account / app-team accounts**: share subnets, SGs, Aurora/RDS clusters to application management accounts
+- **Authorization**: associate/disassociate/replace RAM **permissions** (read-only vs read-write) on a share
+- **Onboarding**: new app account accepts invitation; audit `list-resources` / `list-principals` for a principal
+- Keywords: ram, resource-share, cross-account, sharing, permission, invitation, principal, app account, OU share
 
 ### SHOULD NOT Use When
-- IAM roles/policies for shared resources → delegate to: `aws-iam-ops`
+- **Creating AWS accounts** or Organizations member accounts → outside RAM; complete account provisioning first, then use this skill to share resources
+- IAM roles/policies **inside** consumer accounts (e.g. `ec2:RunInstances` after subnet is shared) → delegate to: `aws-iam-ops`
 - VPC/Subnet/Security Group operations → delegate to: `aws-vpc-ops`
 - EC2 instances in shared VPC → delegate to: `aws-ec2-ops`
 - RDS cluster sharing details → delegate to: `aws-rds-ops`
@@ -83,6 +88,10 @@ AWS RAM helps you securely share resources across AWS accounts or within an orga
 | `{{user.permission_arn}}` | User input | RAM permission ARN |
 | `{{user.invitation_arn}}` | User input | Resource share invitation ARN |
 | `{{user.share_arn}}` | User input | Resource share ARN |
+| `{{user.permission_name}}` | User input | Custom RAM permission name |
+| `{{user.resource_type}}` | User input | e.g. `ec2:Subnet`, `rds:Cluster` — use `list-resource-types` |
+| `{{user.policy_template}}` | User input | JSON policy template for `create-permission` |
+| `{{user.ou_arn}}` | User input | Organizations OU ARN as principal |
 | `{{output.resourceShareArn}}` | Last API response | Parse: `.resourceShare.resourceShareArn` |
 | `{{output.invitationArn}}` | Last API response | Parse: `.resourceShareInvitation.resourceShareInvitationArn` |
 
@@ -194,6 +203,17 @@ aws ram create-permission \
   --output json
 ```
 
+### Operation: Associate Resource Share Permission
+
+```bash
+aws ram associate-resource-share-permission \
+  --resource-share-arn "{{user.share_arn}}" \
+  --permission-arn "{{user.permission_arn}}" \
+  --region "{{user.region}}" \
+  --output json
+```
+Validate: `get-permission --permission-arn {{user.permission_arn}}` + associations on share.
+
 ### Operation: Delete Resource Share
 **Safety Gate**: `confirm=DELETE_RESOURCE_SHARE {{user.share_arn}}`
 
@@ -270,6 +290,7 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 
 ## Reference Files
 
+- [Prompt Examples](references/prompt-examples.md) — multi-account app sharing & authorization scenarios
 - [AWS CLI Usage](references/aws-cli-usage.md)
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
 - [Core Concepts](references/core-concepts.md)

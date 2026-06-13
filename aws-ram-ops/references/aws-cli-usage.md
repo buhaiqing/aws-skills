@@ -88,6 +88,46 @@ aws ram enable-sharing-with-aws-organization \
   --output json
 ```
 
+### Share with OU Principal (batch app accounts)
+```bash
+aws ram create-resource-share \
+  --name "workloads-ou-network" \
+  --principals "arn:aws:organizations::111111111111:ou/o-abc123/ou-workloads" \
+  --resource-arns "arn:aws:ec2:us-east-1:111111111111:subnet/subnet-shared" \
+  --region us-east-1 \
+  --output json
+```
+
+### Associate Read-Only Permission (authorization)
+```bash
+aws ram associate-resource-share-permission \
+  --resource-share-arn "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
+  --permission-arn "arn:aws:ram::aws:permission/AmazonVPCSubnetReadOnlyAccess" \
+  --region us-east-1 \
+  --output json
+```
+
+### Replace Permission (upgrade/downgrade)
+```bash
+aws ram replace-permission-associations \
+  --resource-share-arn "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
+  --from-permission-arn "arn:aws:ram::aws:permission/AmazonRDSDBClusterReadOnlyAccess" \
+  --to-permission-arn "arn:aws:ram::aws:permission/AmazonRDSDBClusterShare" \
+  --region us-east-1 \
+  --output json
+```
+
+### Audit Principals and Resources
+```bash
+aws ram list-principals --region us-east-1 --output json
+aws ram list-resources --region us-east-1 --output json
+aws ram get-resource-share-associations \
+  --association-type PRINCIPAL \
+  --resource-share-arns "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
+  --region us-east-1 \
+  --output json
+```
+
 ## Retry Strategy
 
 | Error Code | Retry? | Max Retries |

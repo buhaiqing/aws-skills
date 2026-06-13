@@ -35,8 +35,21 @@ Account B (Consumer)
 | Model | Description | When to Use |
 |-------|-------------|-------------|
 | AWS Organization | Share with all/org accounts via org sharing | Internal org sharing |
+| OU Principal | Share with `arn:aws:organizations::acct:ou/o-xxx/ou-yyy` | Batch authorize all app accounts under an OU |
 | External Accounts | Share with specific account IDs via invitation | Cross-org / partner sharing |
 | IAM Principal | Share with specific IAM roles/users | Fine-grained access |
+
+## Multi-Account App Patterns
+
+| Pattern | Owner Account | Consumer | RAM Operations |
+|---------|---------------|----------|----------------|
+| Shared VPC subnets | Network / shared-services | App-team accounts | `create-resource-share` + subnet ARNs |
+| Standard security groups | Platform / security | App-team accounts | Share SG ARNs; consumer uses `aws-ec2-ops` |
+| Aurora read-only for BI | Database / data platform | Analytics app account | Share cluster + `AmazonRDSDBClusterReadOnlyAccess` |
+| Org-wide landing zone | Management account | All workloads OU | `enable-sharing-with-aws-organization` + OU principal |
+| Partner dedicated subnet | Service provider | External partner account | `--allow-external-principals` + invitation accept |
+
+**RAM vs IAM**: RAM grants **resource visibility** across accounts. Consumer accounts still need `aws-iam-ops` policies (e.g. `ec2:RunInstances`) to operate on shared resources.
 
 ## Supported Resource Types
 
