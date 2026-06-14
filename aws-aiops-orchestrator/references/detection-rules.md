@@ -115,6 +115,86 @@ rule:
 - **baseline**: adaptive:30d
 - **default_severity**: high
 - **default_decision**: AI_ASSIST (scale out or resize)
+- **applies_to**: EC2 instances
+- **false_positive_notes**: Transient spike during batch jobs; correlate with ASG scaling events.
+
+### FD-07a — EC2 memory pressure
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `CWAgent.Memory % Used` (custom metric via CloudWatch Agent)
+- **condition**: avg > 85% sustained
+- **window**: PT15M
+- **baseline**: adaptive:30d
+- **default_severity**: high
+- **default_decision**: AI_ASSIST (identify leak or resize)
+- **applies_to**: EC2 instances with CloudWatch Agent installed
+- **false_positive_notes**: Requires CW Agent with memory metrics. Verify agent via SSM before resize.
+
+### FD-07b — EC2 EBS IOPS saturation
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/EBS.VolumeQueueLength`
+- **condition**: avg > 64 sustained
+- **window**: PT10M
+- **baseline**: adaptive:30d
+- **default_severity**: high
+- **default_decision**: AI_ASSIST (upgrade EBS type or add IOPS)
+- **applies_to**: EC2 instances with EBS volumes
+- **false_positive_notes**: Transient burst I/O on gp3/io2 baseline; correlate with BurstBalance.
+
+### FD-07c — EC2 EBS throughput exhaustion
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/EBS.BurstBalance`
+- **condition**: < 20%
+- **window**: PT10M
+- **baseline**: static
+- **default_severity**: high
+- **default_decision**: AI_ASSIST (upgrade to io1/io2/gp3 with provisioned throughput)
+- **applies_to**: EC2 instances with gp2/st1/sc1 volumes
+- **false_positive_notes**: gp3/io2 with provisioned throughput do not use burst balance.
+
+### FD-07d — EC2 EBS read/write latency
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/EBS.ReadLatency` / `AWS/EBS.WriteLatency`
+- **condition**: p95 > 20ms sustained
+- **window**: PT15M
+- **baseline**: adaptive:30d
+- **default_severity**: medium
+- **default_decision**: AI_ASSIST (investigate EBS type, queue depth, or instance EBS bandwidth)
+- **applies_to**: EC2 instances with EBS volumes
+- **false_positive_notes**: Transient spikes during snapshot creation; correlate with VolumeQueueLength.
+
+### FD-07e — EC2 network bandwidth saturation
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/EC2.NetworkIn` / `AWS/EC2.NetworkOut`
+- **condition**: avg > 80% of instance type network limit
+- **window**: PT15M
+- **baseline**: adaptive:30d
+- **default_severity**: high
+- **default_decision**: AI_ASSIST (resize to higher network capacity instance type)
+- **applies_to**: EC2 instances
+- **false_positive_notes**: Network limit varies by instance type. Fetch via `describe-instance-types`.
+
+### FD-07f — EC2 network packet drops
+
+- **domain**: fault
+- **signal_source**: cw-metric
+- **metric_or_event**: `AWS/EC2.NetworkPacketsIn` / `AWS/EC2.NetworkPacketsOut`
+- **condition**: drop rate > 1% (requires VPC Flow Logs or agent-level metrics)
+- **window**: PT15M
+- **baseline**: adaptive:30d
+- **default_severity**: medium
+- **default_decision**: AI_ASSIST (check ENI limits, SG rules, or instance network driver)
+- **applies_to**: EC2 instances
+- **false_positive_notes**: Packet drops can be legitimate (ICMP reject, firewall). Correlate with Flow Logs.
 
 ### FD-08 — RDS high CPU / connections
 

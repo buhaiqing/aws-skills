@@ -77,6 +77,28 @@ ALB listener using cert expiring < 30d → TLS handshake failures masquerading a
 
 **CO-EC2-01**: Compute Optimizer UNDER_PROVISIONED → proactive scale-up before CPU breach.
 
+### EC2 Memory & IO (AIOps)
+
+**EC2-MEM-01**: CloudWatch Agent memory > 85% sustained + OOM kills in `/var/log/messages` or `dmesg`
+- **Inference**: Memory leak or undersized instance. Check process-level memory via `ps aux --sort=-%mem`.
+- **Fix path**: Identify top memory consumer process; consider instance resize or application memory tuning. Delegate `aws-ec2-ops`.
+
+**EC2-IO-01**: `VolumeQueueLength` > 64 + `BurstBalance` < 20%
+- **Inference**: EBS IOPS/throughput exhaustion. gp2/st1/sc1 burst bucket depleted.
+- **Fix path**: Upgrade to gp3/io1/io2 with provisioned IOPS/throughput. Check `describe-volume-types` for limits. Delegate `aws-ec2-ops`.
+
+**EC2-IO-02**: `ReadLatency`/`WriteLatency` p95 > 20ms + `VolumeQueueLength` > 32
+- **Inference**: EBS latency caused by queue depth. Application experiencing slow disk reads/writes.
+- **Fix path**: Reduce concurrent I/O threads, increase EBS IOPS, or migrate to io1/io2. Delegate `aws-ec2-ops`.
+
+**EC2-NET-01**: `NetworkOut` > 80% instance type network limit + retransmits in TCP stats
+- **Inference**: Network bandwidth saturation. Instance type too small for traffic volume.
+- **Fix path**: Resize to higher network capacity instance (e.g., m5.large → m5.xlarge). Check `describe-instance-types` for NetworkPerformance. Delegate `aws-ec2-ops`.
+
+**EC2-NET-02**: `NetworkPacketsIn`/`Out` drop rate > 1% + VPC Flow Logs `REJECT` entries
+- **Inference**: Packet drops from security group rules or ENI limits.
+- **Fix path**: Review SG inbound/outbound rules; check instance ENI limits. Delegate `aws-vpc-ops` + `aws-ec2-ops`.
+
 ### ECS
 
 **ECS-TASK-01**: `runningCount < desiredCount` → task placement, Fargate limits, image pull, or CPU/mem.

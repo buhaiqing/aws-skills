@@ -125,6 +125,23 @@ Each round, for every modified skill:
    block at the top of SKILL.md.
 8. Verify `README.md` and `README_cn.md` "Existing Skills" tables reflect
    the new state (add/remove/version row).
+9. **Token Efficiency Post-Change Audit** — After ANY change to a skill's
+   references/ or runbooks/, scan for token waste:
+   a. **Deduplication**: If the same metric/threshold/command appears in
+      multiple files (e.g., detection-rules.md + threshold-definitions.md
+      + SKILL.md), keep the canonical definition in ONE location and
+      cross-reference from others. Example: CPUUtilization threshold in
+      threshold-definitions.md should not be redefined in detection-rules.md.
+   b. **Reference over repetition**: Use `> See [§section](file.md#anchor)`
+      instead of duplicating tables/lists. The agent can load the reference
+      on-demand; inline duplication costs tokens every session.
+   c. **Compact tables**: Use minimal column widths. Remove "Notes" columns
+      that repeat the metric name. Merge rows with identical thresholds.
+   d. **Kill dead rules**: If a new rule makes an old rule redundant,
+      remove the old one — do not keep both with a "deprecated" note.
+   e. **Runbook bloat check**: If a runbook grows >150 lines, verify each
+      section adds unique diagnostic value not already covered by
+      another runbook or SKILL.md AIOps section.
 
 After round 2 passes cleanly, report a one-line summary per modified
 skill: `[OK] aws-<service>-ops v<version> — 2 rounds clean`.

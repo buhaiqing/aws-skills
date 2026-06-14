@@ -569,18 +569,18 @@ aws-aiops-orchestrator/
 │   ├── delegate-routing.md           # 委派契约 + 路由矩阵
 │   ├── delegate-adapter-patch.md     # 下游技能适配补丁规范
 │   ├── correlation-graph.md          # 资源依赖图模型
-│   ├── detection-rules.md            # 47 条检测规则（FD/PD/CO/SD/CD）
+│   ├── detection-rules.md            # 53 条检测规则（FD/PD/CO/SD/CD）
 │   └── runbook-recipes.md            # 22 个 runbook（RB-001…RB-022）
 └── assets/
     ├── example-scope-graph.yaml      # 依赖图示例
     └── cost-forecast-template.json   # 成本预测输出 schema
 ```
 
-### 检测规则覆盖（47 条）
+### 检测规则覆盖（53 条）
 
 | 领域 | 数量 | 示例规则 | 涉及技能 |
 |------|------|----------|----------|
-| **FD — 故障检测** | 14 | FD-01 target 抖动、FD-03 5xx 飙升、FD-06 status check、FD-10 ALL unhealthy、FD-11 Lambda throttle | elb、cloudwatch、ec2、rds、lambda、vpc、opensearch |
+| **FD — 故障检测** | 20 | FD-01 target 抖动、FD-03 5xx 飙升、FD-06 status check、FD-07a 内存压力、FD-07b IOPS 饱和、FD-07e 网络带宽、FD-10 ALL unhealthy、FD-11 Lambda throttle | elb、cloudwatch、ec2、rds、lambda、vpc、opensearch |
 | **PD — 预测** | 7 | PD-01 证书到期、PD-03 RDS 存储、PD-05 LCU 预测、PD-07 成本超支 | cloudwatch (FORECAST)、acm、rds、Cost Explorer |
 | **CO — 成本优化** | 9 | CO-01 空闲 ALB、CO-03 空闲 NAT GW、CO-04 未挂载 EBS、CO-07 RDS 过大、CO-09 成本异常 | elb、vpc、ec2、Compute Optimizer |
 | **SD — 安全检测** | 7 | SD-01 GuardDuty CRITICAL、SD-02 S3 公开、SD-03 SG 0.0.0.0/0、SD-04 IAM 凭据泄露 | guardduty、securityhub、s3、iam、kms |

@@ -578,14 +578,14 @@ aws-aiops-orchestrator/
 │   ├── delegate-routing.md           # delegate contract + routing matrix
 │   ├── delegate-adapter-patch.md     # canonical patch for downstream skills
 │   ├── correlation-graph.md          # resource dependency graph model
-│   ├── detection-rules.md            # 47 detection rules (FD/PD/CO/SD/CD)
+│   ├── detection-rules.md            # 53 detection rules (FD/PD/CO/SD/CD)
 │   └── runbook-recipes.md            # 22 runbooks (RB-001…RB-022)
 └── assets/
     ├── example-scope-graph.yaml      # sample dependency graph
     └── cost-forecast-template.json   # cost forecast output schema
 ```
 
-### Detection Rule Coverage (47 rules)
+### Detection Rule Coverage (53 rules)
 
 | Domain | Count | Sample Rules | Primary Skills |
 |--------|-------|--------------|----------------|
@@ -673,11 +673,11 @@ remains the canonical blueprint. As of v0.1.0, the AIOps Orchestrator
 generalizes this across the entire `aws-*-ops` fleet with the following
 expanded coverage:
 
-#### Detection Rules (47 total — see `aws-aiops-orchestrator/references/detection-rules.md`)
+#### Detection Rules (53 total — see `aws-aiops-orchestrator/references/detection-rules.md`)
 
 | Domain | Count | Examples | Key Modules |
 |--------|-------|----------|-------------|
-| **FD — Fault Detection** | 14 | FD-01 target flapping, FD-03 5xx surge, FD-06 status check, FD-10 ALL unhealthy, FD-11 Lambda throttle | `aws-elb-ops`, `aws-cloudwatch-ops`, `aws-ec2-ops`, `aws-rds-ops`, `aws-lambda-ops`, `aws-vpc-ops`, `aws-opensearch-ops` |
+| **FD — Fault Detection** | 20 | FD-01 target flapping, FD-03 5xx surge, FD-06 status check, FD-07a memory pressure, FD-07b IOPS saturation, FD-07e network bandwidth, FD-10 ALL unhealthy, FD-11 Lambda throttle | `aws-elb-ops`, `aws-cloudwatch-ops`, `aws-ec2-ops`, `aws-rds-ops`, `aws-lambda-ops`, `aws-vpc-ops`, `aws-opensearch-ops` |
 | **PD — Predictive** | 7 | PD-01 cert expiry, PD-03 RDS storage, PD-05 LCU forecast, PD-07 cost overrun | `aws-cloudwatch-ops` (FORECAST), `aws-acm-ops`, `aws-rds-ops`, Cost Explorer |
 | **CO — Cost Optimization** | 9 | CO-01 idle ALB, CO-03 idle NAT GW, CO-04 unattached EBS, CO-07 RDS over-prov, CO-09 cost anomaly | `aws-elb-ops`, `aws-vpc-ops`, `aws-ec2-ops`, Compute Optimizer |
 | **SD — Security Detection** | 7 | SD-01 GuardDuty CRITICAL, SD-02 S3 public, SD-03 SG 0.0.0.0/0, SD-04 IAM leak | `aws-guardduty-ops`, `aws-securityhub-ops`, `aws-s3-ops`, `aws-iam-ops`, `aws-kms-ops` |
@@ -718,7 +718,7 @@ expanded coverage:
 
 | Module | Original Version | Current Version | Enhancement |
 |--------|-----------------|----------------|-------------|
-| `aws-aiops-orchestrator` | — | **v0.1.0 (new)** | **Cross-service orchestrator**: 47 detection rules, 22 runbooks, 16 downstream skills patched with delegate contract; bridges single-service AIOps into end-to-end RCA + coordinated remediation |
+| `aws-aiops-orchestrator` | — | **v0.1.0 (new)** | **Cross-service orchestrator**: 53 detection rules, 22 runbooks, 16 downstream skills patched with delegate contract; bridges single-service AIOps into end-to-end RCA + coordinated remediation |
 | `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management; **orchestrator-aware (P0 patched)** |
 | `aws-cloudwatch-ops` | v2.3.0 | **v2.4.0** | SKILL极致瘦身 (610→~145 lines); Operation Index → references/operation-index.md |
 | `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** + **orchestrator-aware (P0 patched)** |
@@ -750,7 +750,7 @@ expanded coverage:
 | **Level 1** — ELB API + CloudWatch | 18 scenarios | Nothing (default ON) | Free |
 | **Level 2** — + CloudTrail Management Events | 5 scenarios | CloudTrail (default ON) | Free |
 | **Level 3** — + Access Logs / Flow Logs | 5 scenarios (optional depth) | S3 / Logs | Minimal |
-| **Orchestrator** — All of the above + Cost Explorer + Compute Optimizer | 47 detection rules + 22 runbooks across 16 patched skills | All P0/P1 downstream skills | Free – Minimal |
+| **Orchestrator** — All of the above + Cost Explorer + Compute Optimizer | 53 detection rules + 22 runbooks across 16 patched skills | All P0/P1 downstream skills | Free – Minimal |
 
 See `aws-elb-ops/references/integration.md` for detailed CloudTrail and AWS Config integration.
 

@@ -1,15 +1,7 @@
 # Threshold Definitions — AWS AIOps Cruise
 
 > Default Warning (W) / Critical (C) thresholds. Override via runbook args when documented.
-
-## General
-
-| Metric | Warning | Critical | Notes |
-|--------|---------|----------|-------|
-| CPUUtilization | > 70% | > 85% | EC2, RDS, ElastiCache |
-| Memory (SSM/agent) | > 80% | > 90% | Requires optional SSM deep mode |
-| Disk / free storage | < 20% free | < 10% free | RDS `FreeStorageSpace` bytes |
-| WoW growth | > 30% | > 50% | vs same window prior week |
+> Thresholds below are per-service; see `inference-rules.md` for cross-signal chain patterns.
 
 ## EC2 (`AWS/EC2`)
 
@@ -17,6 +9,18 @@
 |--------|---|---|
 | CPUUtilization | 70 | 85 |
 | StatusCheckFailed | 0.5 | 1 |
+| Memory % Used (CW Agent) | 80 | 90 |
+| NetworkIn / NetworkOut (% of type limit) | 70 | 85 |
+| NetworkPacketsIn/Out drop rate | 0.5% | 1% |
+
+## EBS (`AWS/EBS`)
+
+| Metric | W | C |
+|--------|---|---|
+| VolumeQueueLength | 32 | 64 |
+| BurstBalance (%) | 50 | 20 |
+| ReadLatency / WriteLatency (ms, p95) | 15 | 25 |
+| VolumeReadOps / VolumeWriteOps (% of IOPS) | 70 | 85 |
 
 ## Application Load Balancer (`AWS/ApplicationELB`)
 
