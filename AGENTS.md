@@ -98,56 +98,61 @@ means the skill is invalid and must be auto-fixed:
 
 ## Self-reflection rule (project policy)
 
-After **any** change to a SKILL.md or its `references/` / `assets/`,
-the agent must run **2 rounds** of self-reflection on the touched skill
-and proactively fix every issue it finds. Do not hand back to the user
-between rounds. Each round runs the same checks; round 2 must report
-"no findings" before completion.
+> **Rule**: After every skill update, auto-run **2 rounds** of self-review
+> and fix all discovered issues. Do not hand back to the user between rounds.
+>
+> Full spec (check tables, verification scripts, dedup procedures,
+> implementation notes) at
+> [`docs/post-update-self-review.md`](docs/post-update-self-review.md)
+
+| Round | Scope | Key Checks |
+|-------|-------|-----------|
+| **R1: Structural** | Frontmatter / Trigger / Variables / Token Efficiency | C1–C6, TE-1…TE-6, **C6 MUST PASS** |
+| **R2: Content** | CLI validation / error codes / safety gates / link integrity / dedup / TODO.md sync | F1–F8, **F5/F6/F8 MUST PASS** |
 
 Each round, for every modified skill:
 
 1. Re-read the modified SKILL.md from disk (do not trust memory).
-2. Verify Charter C1–C6 (see `governance-review.md`). For each failure:
-   report `[CHARTER VIOLATION] C{n}: {reason}` and auto-fix using the
-   template.
-3. Verify Token Efficiency TE-1…TE-6. Fix per the rules in
-   `aws-skill-generator/SKILL.md` §Token Efficiency Requirements.
-4. Verify SKILL.md frontmatter parses (single `---` open + single `---`
-   close, see "frontmatter gotcha" above).
-5. Verify every delegation reference (`aws-<x>-ops` mentioned in
-   SHOULD/SHOULD NOT, cross-skill chains, recovery tables) points to a
-   directory that exists in this repo.
-6. Verify destructive operations (`delete`, `terminate`, `deregister`,
-   `detach`, `revoke`) each have an explicit confirmation step in
-   pre-flight.
-7. Verify JSON paths shown in SKILL.md match the ones in
-   `references/aws-cli-usage.md` and the centralized "Common JSON Paths"
-   block at the top of SKILL.md.
-8. Verify `README.md` and `README_cn.md` "Existing Skills" tables reflect
-   the new state (add/remove/version row).
-9. **Token Efficiency Post-Change Audit** — After ANY change to a skill's
-   references/ or runbooks/, scan for token waste:
-   a. **Deduplication**: If the same metric/threshold/command appears in
-      multiple files (e.g., detection-rules.md + threshold-definitions.md
-      + SKILL.md), keep the canonical definition in ONE location and
-      cross-reference from others. Example: CPUUtilization threshold in
-      threshold-definitions.md should not be redefined in detection-rules.md.
-   b. **Reference over repetition**: Use `> See [§section](file.md#anchor)`
-      instead of duplicating tables/lists. The agent can load the reference
-      on-demand; inline duplication costs tokens every session.
-   c. **Compact tables**: Use minimal column widths. Remove "Notes" columns
-      that repeat the metric name. Merge rows with identical thresholds.
-   d. **Kill dead rules**: If a new rule makes an old rule redundant,
-      remove the old one — do not keep both with a "deprecated" note.
-   e. **Runbook bloat check**: If a runbook grows >150 lines, verify each
-      section adds unique diagnostic value not already covered by
-      another runbook or SKILL.md AIOps section.
+2. **Verify Charter C1–C6** (see `governance-review.md`). Failure →
+   report `[CHARTER VIOLATION] C{n}: {reason}` and auto-fix.
+3. **Verify Token Efficiency TE-1…TE-6** per `aws-skill-generator/SKILL.md`.
+   C6 is a MUST PASS gate — see [post-update-self-review.md](docs/post-update-self-review.md) §TE verification.
+4. **Verify frontmatter** parses (single `---` open + close, see §frontmatter gotcha).
+5. **Verify delegation references** — every `aws-<x>-ops` in SHOULD/SHOULD NOT
+   or recovery tables must point to an existing directory.
+6. **Verify destructive ops** (`delete`, `terminate`, `detach`, `revoke`)
+   each have explicit confirmation in pre-flight.
+7. **Verify JSON paths** match `references/aws-cli-usage.md` and the
+   centralized "Common JSON Paths" block at SKILL.md top.
+8. **Verify README sync** — `README.md` and `README_cn.md` tables reflect state.
+9. **TE Post-Change Audit** — scan references/ for token waste per
+   [post-update-self-review.md](docs/post-update-self-review.md) §Content Deduplication.
 
 After round 2 passes cleanly, report a one-line summary per modified
 skill: `[OK] aws-<service>-ops v<version> — 2 rounds clean`.
 
 If round 2 still finds issues, run additional rounds until clean. Do
 **not** stop after 2 rounds if problems remain.
+
+### Reflexion Memory (cross-session learning)
+
+Failed operations leave structured failure patterns in
+[`docs/failure-patterns.md`](docs/failure-patterns.md). Before executing any
+high-risk operation, the agent MUST check this file for known failure modes
+of the target resource type. Each pattern records:
+
+| Field | Purpose |
+|-------|---------|
+| `resource_type` | Which AWS resource (e.g., `aws-rds-db-instance`) |
+| `failure_mode` | What went wrong (e.g., `final-snapshot-skip-in-prod`) |
+| `root_cause` | Why it happened |
+| `fix` | What the agent should do differently |
+| `severity` | `P0` (block) / `P1` (warn) / `P2` (info) |
+| `added_date` | When the pattern was recorded |
+
+Patterns are appended after every GCL `SAFETY_FAIL` or `MAX_ITER` with
+unresolved safety issues. The agent treats these as **hard constraints** —
+not suggestions — when planning or executing operations.
 
 ## When the user asks for a new AWS skill
 
