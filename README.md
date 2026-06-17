@@ -514,7 +514,6 @@ aws sts get-caller-identity --output json
 | aws-stepfunctions-ops | Step Functions | ✅ Complete v1.1.0 |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
-| aws-opensearch-ops | OpenSearch Service (managed Elasticsearch) | ✅ Complete v1.0.0 |
 | aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
 | aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.0.0 |

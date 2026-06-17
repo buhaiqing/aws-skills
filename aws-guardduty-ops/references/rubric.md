@@ -1,74 +1,45 @@
-# GuardDuty Ops Rubric (GCL)
+# GuardDuty Skill Rubric (v1)
 
-> Concrete instantiation of the **Generator-Critic-Loop** rubric defined in
-> `aws-skill-generator/references/gcl-spec.md` §3 for `aws-guardduty-ops`.
+## 5-Dimension Quality Rubric
 
-## Rubric version
+| Dimension | Weight | Pass Threshold | Description |
+|-----------|--------|----------------|-------------|
+| **Correctness** | 1.0 | ≥0.9 | All operations execute successfully; CLI/SDK paths produce identical results; JSON paths match AWS API docs |
+| **Safety** | 1.0 | ≥1.0 | No destructive operations without explicit confirmation; no credential leaks; region validation enforced |
+| **Idempotency** | 0.8 | ≥0.8 | Create operations are safe to retry; update operations don't break existing resources |
+| **Traceability** | 0.7 | ≥0.7 | All API calls logged with masked credentials; JSON paths centralized; error messages include actionable info |
+| **Spec Compliance** | 1.0 | ≥0.9 | Follows AGENTS.md charter; TE rules applied; no hardcoded static tables |
 
-`v1` — see `aws-skill-generator/references/gcl-spec.md` §11.
+## Total Minimum Pass Score: 4.0/5.0
 
-## Dimensions
+## Operation-Specific Overrides
 
-| # | Dimension | Weight | Threshold | Scale | Notes |
-|---|---|---|---|---|---|
-| 1 | **Correctness** | hard | ≥ 0.5; **= 1.0 required** for `delete-detector`, `delete-filter`, `delete-ip-set`, `delete-threat-intel-set`, `archive-findings`, `delete-publishing-destination` | 0 / 0.5 / 1 | Verifies `DetectorId` / `IpSetId` / `ThreatIntelSetId` / `DestinationId` match user request. Echo back via `list-*` or `get-*` and compare (rule A8). |
-| 2 | **Safety** | hard | = 1 | 0 / 1 | Destructive ops (`delete-detector`, `delete-filter`, `delete-ip-set`, `delete-threat-intel-set`, `archive-findings`, `delete-publishing-destination`) MUST have explicit user confirmation in trace. |
-| 3 | **Idempotency** | soft | ≥ 0.5 | 0 / 0.5 / 1 | `create-detector` returns same `DetectorId` on re-run (one per region). `delete-*` is idempotent at API level. `archive-findings` / `unarchive-findings` are idempotent. |
-| 4 | **Traceability** | soft | ≥ 0.5 | 0 / 0.5 / 1 | Trace MUST contain: full `aws guardduty <op>` command, args, exit code, raw response excerpt (≤ 2 KB), and a final `get-detector` or `list-findings` snapshot. `aws sts get-caller-identity` MUST be the first command (rule A10). |
-| 5 | **Spec Compliance** | soft | ≥ 0.5 | 0 / 0.5 / 1 | Conforms to `core-concepts.md`: one detector per region; IP set / threat intel set format valid; S3 location accessible; member account ID is 12 digits; publishing destination S3 bucket in same region. |
+| Operation | GCL Class | Safety Special Case | Max Iter |
+|-----------|-----------|----------------------|----------|
+| `list-*`, `describe-*`, `get-*` | read-only | None | 1 |
+| `create-*`, `update-*`, `enable-*`, `disable-*` | mutate | Require region validation | 2 |
+| `delete-*`, `revoke-*`, `detach-*` | destructive | Require explicit user confirmation: `confirm=DELETE_GUARDDUTY_<RESOURCE> <NAME>` | 2 |
 
-## Operation-specific overrides
+## Service-Specific Safety Rules
 
-| Operation | Required dimensions = 1.0 | Notes |
-|---|---|---|
-| `create-detector` | Correctness, Spec Compliance | One per region; auto-enable preferred via Organizations |
-| `update-detector` | Correctness | Status change (enable/disable) or frequency change |
-| `delete-detector` | Correctness, Safety, **Traceability** | **Irreversible** — stops all threat monitoring; `confirm=DELETE_DETECTOR <id>` in trace |
-| `list-findings` | Correctness | Routine read-only |
-| `get-findings` | Correctness | Routine read-only |
-| `archive-findings` | Correctness, **Safety** | Hides findings from default views; `confirm=ARCHIVE_FINDINGS <ids>` in trace; pre-flight: verify `FindingIds` exist via `list-findings` |
-| `unarchive-findings` | Correctness | Restores findings to active view |
-| `create-filter` | Correctness, Spec Compliance | `Action` must be `ARCHIVE` or `NOOP`; `Rank` 1-100 |
-| `update-filter` | Correctness | Modify existing filter criteria |
-| `delete-filter` | Correctness, **Safety** | `confirm=DELETE_FILTER <name>` in trace |
-| `create-ip-set` | Correctness, Spec Compliance | Format `TXT`; S3 location must be accessible; max 6 per detector |
-| `update-ip-set` | Correctness | Location or activate/deactivate |
-| `delete-ip-set` | Correctness, **Safety** | `confirm=DELETE_IP_SET <id>` in trace |
-| `create-threat-intel-set` | Correctness, Spec Compliance | Format must be supported; S3 location accessible; max 6 per detector |
-| `update-threat-intel-set` | Correctness | Location or activate/deactivate |
-| `delete-threat-intel-set` | Correctness, **Safety** | `confirm=DELETE_THREAT_INTEL_SET <id>` in trace |
-| `invite-members` | Correctness, Spec Compliance | Account IDs must be 12 digits; max 5000 members |
-| `accept-invitation` | Correctness | Member-side operation |
-| `disassociate-members` | Correctness, **Safety** | Removes finding sharing; pre-flight confirm recommended |
-| `delete-members` | Correctness, **Safety** | `confirm=DELETE_MEMBERS <account-ids>` in trace |
-| `create-publishing-destination` | Correctness, Spec Compliance | S3 bucket must exist; KMS key optional; max 1 per detector |
-| `update-publishing-destination` | Correctness | Modify S3 bucket or KMS key |
-| `delete-publishing-destination` | Correctness, **Safety** | `confirm=DELETE_PUBLISHING_DESTINATION <id>` in trace |
+1. **GuardDuty Detector Deletion**: Must confirm `confirm=DELETE_GUARDDUTY_DETECTOR <detector-id>`
+2. **Filter Deletion**: Must confirm `confirm=DELETE_GUARDDUTY_FILTER <filter-name>`
+3. **IP Set Deletion**: Must confirm `confirm=DELETE_GUARDDUTY_IPSET <ip-set-id>`
+4. **Threat Intel Set Deletion**: Must confirm `confirm=DELETE_GUARDDUTY_THREATINTELSET <threat-intel-set-id>`
+5. **Region Validation**: All operations must specify a valid region matching `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+6. **Credential Masking**: All API responses must mask sensitive data (e.g., secret keys, ARNs with sensitive info)
 
-## Safety special cases (auto-fail)
+## Repo-Wide AWS Rules Compliance
 
-- `delete-detector` called without `confirm=DELETE_DETECTOR <detector-id>` in trace → **Safety = 0 → ABORT**.
-- `delete-filter` called without `confirm=DELETE_FILTER <filter-name>` in trace → **Safety = 0 → ABORT**.
-- `delete-ip-set` called without `confirm=DELETE_IP_SET <ip-set-id>` in trace → **Safety = 0 → ABORT**.
-- `delete-threat-intel-set` called without `confirm=DELETE_THREAT_INTEL_SET <threat-intel-set-id>` in trace → **Safety = 0 → ABORT**.
-- `archive-findings` called without `confirm=ARCHIVE_FINDINGS <finding-ids>` in trace → **Safety = 0 → ABORT**.
-- `delete-publishing-destination` called without `confirm=DELETE_PUBLISHING_DESTINATION <destination-id>` in trace → **Safety = 0 → ABORT**.
-- `archive-findings` with `FindingIds` not echoed from a `list-findings` lookup → **Correctness = 0 → ABORT** (rule A8).
-- `delete-detector` on a detector with `Status=ENABLED` and account tagged `env=prod` (or `environment=production`) without `confirm=DELETE_PROD_DETECTOR <id>` in trace → **Safety = 0 → ABORT**.
-- `--region` does not match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}` → **Correctness = 0 → ABORT** (rule A7).
-- `aws sts get-caller-identity` not run before any mutating op → **Traceability = 0 → ABORT** (rule A10).
-- Any secret (`AWS_SECRET_ACCESS_KEY`, `SessionToken`) appears in trace → **Safety = 0 → ABORT** (rule A9).
+This rubric references the following repo-wide AWS rules from `references/gcl-spec.md`:
+- **A7**: `--region` must match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+- **A9**: Plaintext credentials/secret data must be masked in logs
+- **A10**: `aws sts get-caller-identity` MUST be the first command in trace
 
-## Loop parameters
+## Per-Operation Safety Checks
 
-| Parameter | Value | Source |
-|---|---|---|
-| `max_iterations` | **2** | `gcl-spec.md` §10 (Phase 1 default for destructive skills) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
-| Rubric version | `v1` | this file |
-
-## Changelog
-
-| Version | Date | Change |
-|---|---|---|
-| 1.0.0 | 2026-06-08 | Initial rubric for `aws-guardduty-ops` GCL rollout (required, not pilot) |
+### Delete Operations
+For all delete operations, the following steps are required:
+1. Pre-flight check: Verify resource exists
+2. User confirmation: Explicit match for required confirmation string
+3. Post-execution validation: Verify resource no longer exists

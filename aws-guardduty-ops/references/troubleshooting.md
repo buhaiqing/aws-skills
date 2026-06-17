@@ -1,49 +1,52 @@
-# GuardDuty Troubleshooting
+# AWS GuardDuty Troubleshooting
 
-Common GuardDuty error codes, recovery procedures, and operational troubleshooting.
+## Common Issues & Solutions
 
-## Error Reference
+### Issue: No detectors found in region
+**Error**: `ResourceNotFoundException: The detector is not found.`
+**Cause**: GuardDuty is not enabled in the specified region
+**Resolution**: Enable GuardDuty first with `aws guardduty enable-guardduty --region {{user.region}}`
 
-### Request Errors
-| Error | Resolution |
-|-------|-----------|
-| BadRequestException | HALT — fix request params (invalid detector ID, malformed criteria) |
-| ResourceNotFoundException | Verify detector/set/destination ID exists; check region |
-| AccessDeniedException | HALT — add `guardduty:*` or specific action to IAM policy |
+### Issue: Access denied when listing detectors
+**Error**: `AccessDeniedException: User: arn:aws:iam::123456789012:user/xxx is not authorized to perform: guardduty:ListDetectors`
+**Cause**: Missing IAM permissions for GuardDuty
+**Resolution**: Add IAM policy with permissions: `guardduty:ListDetectors`, `guardduty:DescribeDetector`
 
-### Account / Member Errors
-| Error | Resolution |
-|-------|-----------|
-| InvalidInputException | HALT — verify account ID format (12 digits) |
-| InvitationAlreadyExists | Member already invited; check `list-invitations` |
-| MembershipNotFound | Account not associated; use `invite-members` first |
+### Issue: Filter already exists
+**Error**: `ResourceAlreadyExistsException: The filter already exists.`
+**Cause**: A filter with the same name already exists in the detector
+**Resolution**: Use a different filter name or delete the existing filter first
 
-### Set / Destination Errors
-| Error | Resolution |
-|-------|-----------|
-| InvalidParameterException | HALT — verify S3 URL format, file format, or IP CIDR syntax |
-| PublishingDestinationAlreadyExists | Only 1 destination per detector; use `update-publishing-destination` |
-| UnableToPublish | Check S3 bucket policy, KMS key permissions, or bucket region |
+### Issue: Throttling errors
+**Error**: `ThrottlingException: Rate exceeded`
+**Cause**: Too many requests in a short period
+**Resolution**: Wait and retry with exponential backoff, or request a service quota increase
 
-## Throttling (429)
-Exponential backoff strategy:
-```python
-import time, math
-def exponential_backoff(attempt, base=0.5, max_delay=60):
-    time.sleep(min(base * math.pow(2, attempt), max_delay))
-```
+### Issue: Internal server error
+**Error**: `InternalServerErrorException: An internal error occurred.`
+**Cause**: AWS GuardDuty service issue
+**Resolution**: Retry after some time, or contact AWS support if the issue persists
 
-## Finding Investigation Flow
-| Symptom | Check | Action |
-|---------|-------|--------|
-| Unexpected finding | `get-findings` for full detail | Verify if expected traffic; archive if false positive |
-| High volume of findings | Review filters; add trusted IPs to IP set | Create `ARCHIVE` filter for known-good patterns |
-| No findings after enable | Wait 1-24h; check CloudTrail/DNS/Flow Logs enabled | Verify data sources in detector settings |
-| Member findings not visible | `list-members` → check `RelationshipStatus` | Re-invite or accept invitation |
+### Issue: Cannot delete detector
+**Error**: `ResourceCannotBeDeletedException: The detector cannot be deleted.`
+**Cause**: The detector has active members or is the primary detector in an organization
+**Resolution**: Disable GuardDuty for all member accounts first, then delete the detector
 
-## Recovery Procedures
-**Detector**: Identify error → check state → apply fix (retry once) → HALT if persistent.
-**Findings**: List → get details → investigate → archive/unarchive.
-**Sets**: Verify S3 file accessible → check format → re-upload → update location.
-**Members**: Verify invitation status → re-invite if needed → accept on member side.
-**Destination**: Verify S3 bucket exists → check bucket policy → verify KMS permissions → retry.
+## Error Code Reference
+
+| Error Code | Description |
+|------------|-------------|
+| AccessDeniedException | You don't have permission to perform the action |
+| ResourceNotFoundException | The specified resource doesn't exist |
+| ResourceAlreadyExistsException | The resource already exists |
+| InvalidInputException | The input is invalid |
+| ThrottlingException | The request was throttled |
+| InternalServerErrorException | An internal error occurred |
+| ResourceCannotBeDeletedException | The resource cannot be deleted |
+
+## Debugging Tips
+
+1. **Check GuardDuty status**: `aws guardduty get-detector --detector-id {{user.detector_id}} --region {{user.region}}`
+2. **List current filters**: `aws guardduty list-filters --detector-id {{user.detector_id}} --region {{user.region}}`
+3. **Check IAM permissions**: Use `aws sts get-caller-identity` to verify your current identity
+4. **Verify region**: Ensure you're using the correct region where GuardDuty is enabled

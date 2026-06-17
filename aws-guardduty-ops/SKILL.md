@@ -1,22 +1,24 @@
 ---
 name: aws-guardduty-ops
 description: >-
-  Use when operating AWS GuardDuty detectors, findings, filters, IP sets,
-  threat intel sets, member accounts, or publishing destinations. Covers
-  detector lifecycle, finding archive/unarchive, filter and threat list
-  management, master/member administration, and S3/KMS publishing setup.
-  Keywords: GuardDuty, threat detection, security findings, detector,
-  IP set, threat intel, security account, publishing destination.
+  Use when operating AWS GuardDuty resources via AWS CLI or boto3 SDK;
+  user mentions GuardDuty, GuardDuty detector, GuardDuty filter, GuardDuty IP set, GuardDuty threat intel set, or GuardDuty findings.
 license: MIT
 compatibility: >-
   AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access
-  to GuardDuty endpoints.
+  to AWS endpoints.
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-06-08"
+  last_updated: "2026-06-17"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
+    - AWS_DEFAULT_REGION
+    - AWS_PROFILE
   gcl:
     enabled: true
     class: required
@@ -25,250 +27,228 @@ metadata:
     rubric_ref: references/rubric.md
     prompts_ref: references/prompt-templates.md
     pilot: false
-  environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
-  orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
-  delegate:
-    accepts: ['health-check', 'compliance-scan']
-    produces_facts: ['finding']
-    idempotency_ttl: "PT24H"
-    destructive_ops_require_confirm: true
-
 ---
 
-## Common JSON Paths (Centralized)
+# AWS GuardDuty Operations Skill
 
-```
-# Detectors:       .DetectorIds[]
-# Detector Details:.Status, .ServiceRole, .FindingPublishingFrequency, .DataSources
-# Findings:        .FindingIds[]
-# Finding Details: .Severity, .Type, .Title, .Description, .Resource, .Service
-# IP Sets:         .IpSetIds[]
-# IP Set Details:  .Name, .Format, .Location, .Status
-# Threat Intel:    .ThreatIntelSetIds[]
-# TI Set Details:  .Name, .Format, .Location, .Status
-# Members:         .Members[].{AccountId,DetectorId,MasterId,RelationshipStatus}
-# Filters:         .FilterNames[]
-# Destinations:    .Destinations[].{DestinationId,DestinationType,DestinationProperties}
-```
+## Overview
 
-AWS GuardDuty operational skill for AI Agent automation.
+AWS GuardDuty is a threat detection service that continuously monitors for malicious activity and unauthorized behavior to protect your AWS accounts, workloads, and data stored in Amazon S3. This skill is an **operational runbook** with explicit scope, credential rules, pre-flight checks, dual-path execution (AWS CLI + boto3 SDK), validation, and recovery.
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "GuardDuty", "threat detector", "security findings"
-- Detector create, enable, disable, update, or delete
-- Finding list, filter, archive, or unarchive
-- IP set or threat intel set management
-- Member account invitation/association (master account)
-- Publishing destination (S3/KMS) configuration
-- Keywords: guardduty, detector, finding, threat, ipset, intelset, archive
+- User mentions "AWS GuardDuty" or "GuardDuty"
+- Task involves CRUD on **GuardDuty resources** (detector, filter, IP set, threat intel set, publishing destination, findings, admin account, member account, organization configuration)
+- Keywords: guardduty, detector, filter, ip-set, threat-intel-set, findings, admin, member, organization
 
 ### SHOULD NOT Use When
-- IAM policies → delegate to: `aws-iam-ops`
-- KMS encryption keys → delegate to: `aws-kms-ops`
-- S3 bucket for publishing destination → delegate to: `aws-s3-ops`
-- EventBridge automated response → delegate to: `aws-eventbridge-ops`
-- Security Hub integration → delegate to `aws-securityhub-ops`
+- Billing only → delegate to: `aws-cost-ops`
+- IAM only → delegate to: `aws-iam-ops`
+- Related service → delegate to: `aws-securityhub-ops`
 
 ## Variable Convention
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER log (rule A9) |
+| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile (SSO / AssumeRole); overrides explicit keys |
+| `{{user.region}}` | User input | Ask once; reuse |
 | `{{user.detector_id}}` | User input | Ask once; reuse |
-| `{{user.finding_ids}}` | User input | Comma-separated; ask once |
-| `{{user.filter_name}}` | User input | Ask once; reuse |
-| `{{user.ip_set_id}}` | User input | Ask once; reuse |
-| `{{user.threat_intel_set_id}}` | User input | Ask once; reuse |
-| `{{user.destination_id}}` | User input | Ask once; reuse |
-| `{{output.DetectorId}}` | Last API response | Parse: `.DetectorId` |
+| `{{user.resource_name}}` | User input | Ask once; reuse |
+| `{{output.resource_id}}` | Last API response | Parse per AWS API docs |
 
-## Execution Flow
+## Config File Placeholders
 
-### Pre-flight
+`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
+
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
+| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
+| `{{user.detector_id}}` | User input | Ask once; substitute |
+| `{{user.resource_name}}` | User input | Ask once; substitute |
+
+Before using `example-config.yaml`:
+1. Load `.env` from project root (if present)
+2. Substitute `{{env.*}}` placeholders with loaded values
+3. Collect `{{user.*}}` values from user input
+4. Use rendered config for CLI/SDK commands
+
+## Execution Flow Pattern
+
+Every operation follows: **Pre-flight → Execute → Validate → Recover**
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Pre-flight │ → │   Execute   │ → │   Validate  │ → │   Recover   │
+│   Checks    │    │ CLI/SDK     │    │   Polling   │    │  On Error   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Operation: Describe Detector
+
+#### Pre-flight
+1. Verify CLI availability
+2. Validate AWS credentials
+3. Confirm region is specified
+
+#### Execute — CLI (Primary)
 ```bash
-aws --version && aws sts get-caller-identity --output json
+guardduty list-detectors --region {{user.region}} --output json
 ```
-Log: `[OK] Region={{env.AWS_DEFAULT_REGION}} Credential verified.`
-On failure: `[FAIL] AWS credential verification failed. Action: Check .env`
+
+#### Execute — boto3 (Fallback)
+```python
+import boto3
+client = boto3.client('guardduty', region_name='{{user.region}}')
+response = client.list_detectors()
+```
+
+#### Validate
+Check response contains detector IDs.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| ResourceNotFoundException | No detector found in region |
+| AccessDeniedException | Check IAM permissions for guardduty:ListDetectors |
+
+### Operation: Create Filter
+
+#### Pre-flight
+1. Verify CLI availability
+2. Validate AWS credentials
+3. Confirm region and detector ID
+4. Check filter name doesn't already exist
+
+#### Execute — CLI (Primary)
 ```bash
-aws guardduty list-detectors --region {{env.AWS_DEFAULT_REGION}} --output json
-```
-Log: `[OK] GuardDuty accessible in {{env.AWS_DEFAULT_REGION}}`
-
-### Execute (Primary: CLI)
-See [references/aws-cli-usage.md](references/aws-cli-usage.md) for full command reference.
-
-### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
-
-### Validate
-1. Poll: `aws guardduty get-detector --detector-id {{user.detector_id}}`
-2. Verify state matches intent (`Status=ENABLED|DISABLED`)
-3. For findings: `aws guardduty list-findings` to confirm archive/unarchive
-
-### Recover
-| Error Type | Action |
-|------------|--------|
-| BadRequestException | HALT — fix params |
-| AccessDeniedException | HALT — check IAM permissions |
-| Throttling (429) | Exponential backoff, max 3 retries |
-| 5xx Internal | Retry 3x; HALT |
-
-## Safety Gates
-
-### Detector Deletion
-```
-BEFORE delete-detector:
-1. Display: "Deleting detector {{user.detector_id}} will stop all threat monitoring"
-2. Ask: "Type 'DELETE_DETECTOR {{user.detector_id}}' to confirm"
+guardduty create-filter \
+  --name {{user.resource_name}} \
+  --detector-id {{user.detector_id}} \
+  --description "Filter for GuardDuty findings" \
+  --action ARCHIVE \
+  --rank 1 \
+  --region {{user.region}} \
+  --output json
 ```
 
-### Filter Deletion
-```
-BEFORE delete-filter:
-1. Display: "Deleting filter {{user.filter_name}}"
-2. Ask: "Type 'DELETE_FILTER {{user.filter_name}}' to confirm"
-```
-
-### IP Set / Threat Intel Set Deletion
-```
-BEFORE delete-ip-set / delete-threat-intel-set:
-1. Display: "Deleting set will remove threat intelligence source"
-2. Ask: "Type 'DELETE_IP_SET {{user.ip_set_id}}' or 'DELETE_THREAT_INTEL_SET {{user.threat_intel_set_id}}' to confirm"
-```
-
-### Finding Archive
-```
-BEFORE archive-findings:
-1. Display: "Archiving findings will hide them from default views"
-2. Ask: "Type 'ARCHIVE_FINDINGS {{user.finding_ids}}' to confirm"
+#### Execute — boto3 (Fallback)
+```python
+import boto3
+client = boto3.client('guardduty', region_name='{{user.region}}')
+response = client.create_filter(
+    DetectorId='{{user.detector_id}}',
+    Name='{{user.resource_name}}',
+    Description='Filter for GuardDuty findings',
+    Action='ARCHIVE',
+    Rank=1
+)
 ```
 
-### Publishing Destination Deletion
+#### Validate
+Check response contains filter ARN/ID.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidInputException | Fix filter parameters |
+| ResourceAlreadyExistsException | Filter with this name already exists |
+
+### Operation: Delete Filter
+
+**Safety Gate**: MUST obtain explicit user confirmation before deletion.
+
+#### Pre-flight
+1. Verify CLI availability
+2. Validate AWS credentials
+3. Confirm region, detector ID, and filter name
+4. Get explicit user confirmation: `confirm=DELETE_GUARDDUTY_FILTER {{user.resource_name}}`
+
+#### Execute — CLI (Primary)
+```bash
+guardduty delete-filter \
+  --name {{user.resource_name}} \
+  --detector-id {{user.detector_id}} \
+  --region {{user.region}} \
+  --output json
 ```
-BEFORE delete-publishing-destination:
-1. Display: "Deleting destination will stop finding exports"
-2. Ask: "Type 'DELETE_PUBLISHING_DESTINATION {{user.destination_id}}' to confirm"
+
+#### Execute — boto3 (Fallback)
+```python
+import boto3
+client = boto3.client('guardduty', region_name='{{user.region}}')
+response = client.delete_filter(
+    DetectorId='{{user.detector_id}}',
+    FilterName='{{user.resource_name}}'
+)
 ```
 
-## Output Convention
-All commands use `--output json`. Key JSON paths:
-- `.DetectorIds[0]` (list-detectors)
-- `.Status` (get-detector)
-- `.FindingIds[]` (list-findings)
-- `.IpSetIds[]` (list-ip-sets)
-- `.ThreatIntelSetIds[]` (list-threat-intel-sets)
+#### Validate
+Confirm filter no longer exists.
 
-## Related Skills
-- `aws-iam-ops` — IAM roles/policies | `aws-kms-ops` — Encryption keys
-- `aws-s3-ops` — Publishing destination bucket | `aws-eventbridge-ops` — Automated response
-
-## Cross-Skill Orchestration
-| Scenario | Chain |
-|----------|-------|
-| GuardDuty → EventBridge alert | guardduty → eventbridge (finding notification) |
-| GuardDuty → S3 export | guardduty → s3 (publishing destination) |
-| GuardDuty → IAM remediation | guardduty → iam (compromised credential response) |
-
-## Token Efficiency
-
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded detector configs/finding types — use `list-detectors` / `get-detector`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+#### Recover
+| Error | Action |
+|-------|--------|
+| ResourceNotFoundException | Filter doesn't exist |
+| AccessDeniedException | Check IAM permissions for guardduty:DeleteFilter |
 
 ## Reference Files
-- `references/aws-cli-usage.md` — CLI command reference
-- `references/boto3-sdk-usage.md` — Python SDK patterns
-- `references/core-concepts.md` — GuardDuty architecture, quotas
-- `references/troubleshooting.md` — Error codes, recovery procedures
-- `references/rubric.md` — GCL 5-dimension rubric
-- `references/prompt-templates.md` — G/C/O prompt skeletons
-- `assets/example-config.yaml` — Configuration examples
+
+- [AWS CLI Usage](references/aws-cli-usage.md)
+- [boto3 SDK Usage](references/boto3-sdk-usage.md)
+- [Core Concepts](references/core-concepts.md)
+- [Troubleshooting](references/troubleshooting.md)
+- [Integration Setup](references/integration.md)
 
 ## Quality Gate (GCL)
 
-> Every execution of `aws-guardduty-ops` MUST be wrapped by the
-> Generator-Critic-Loop defined in `aws-skill-generator/references/gcl-spec.md`.
+This skill uses the Generator-Critic-Loop (GCL) adversarial quality gate for destructive operations.
 
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+### Supported Operations & Gating
+| Operation | GCL Class | Gating Required? |
+|-----------|-----------|------------------|
+| list-*, describe-*, get-* | read-only | no |
+| create-*, update-*, enable-*, disable-* | mutate | yes |
+| delete-*, revoke-*, detach-* | destructive | yes |
 
-Destructive ops requiring `{{user.safety_confirm}}` in trace
-(exact format `confirm=<OPERATION> <resource>`):
+### Safety Rules
+1. **A7**: `--region` must match `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}`
+2. **A9**: Plaintext credentials/secret data must be masked in logs
+3. **GuardDuty Specific**: Destructive operations (delete-filter, delete-detector, etc.) require explicit user confirmation
 
-- `delete-detector` — `confirm=DELETE_DETECTOR {{user.detector_id}}`
-- `delete-filter` — `confirm=DELETE_FILTER {{user.filter_name}}`
-- `delete-ip-set` — `confirm=DELETE_IP_SET {{user.ip_set_id}}`
-- `delete-threat-intel-set` — `confirm=DELETE_THREAT_INTEL_SET {{user.threat_intel_set_id}}`
-- `archive-findings` — `confirm=ARCHIVE_FINDINGS {{user.finding_ids}}`
-- `delete-publishing-destination` — `confirm=DELETE_PUBLISHING_DESTINATION {{user.destination_id}}`
+## Token Efficiency Guidelines (P0)
 
-Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource echo-back),
-A9 (no secrets in trace), A10 (sts first command).
+Generated skills MUST follow these 6 rules to minimize Token consumption:
 
-## AIOps Delegate Contract
+### TE-1: API Query > Static Tables
+Use API commands instead of hardcoding version/port/limit tables.
+```markdown
+# DO: minimal table + API fallback
+aws guardduty list-detectors --query "DetectorIds[]" --region {{user.region}}
+```
+### TE-2: No docstrings in boto3 SDK
+```python
+# DO: inline comments only
+def list_filters(client, detector_id):
+    try: return client.list_filters(DetectorId=detector_id)
+    except ClientError as e: handle_error(e)
+```
+### TE-3: Compact error tables
+```markdown
+| Error | Resolution |
+|-------|-----------|
+| ResourceNotFoundException | Resource doesn't exist |
+```
+### TE-4: Centralized JSON paths
+File-top comment block; one per resource type.
+### TE-5: YAML anchors in example-config.yaml
+Use `&dev` / `&prod` anchors to eliminate repeated fields.
+### TE-6: Eliminate cross-file duplicate flows
+SKILL.md already has full flow → no Complete Workflow in config or SDK file.
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+**See**: `aws-skill-generator` SKILL.md §Token Efficiency Requirements for detailed examples.

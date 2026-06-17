@@ -1,83 +1,53 @@
-# GuardDuty Example Configurations
+# AWS GuardDuty Example Configuration
+# Replace {{env.*}} and {{user.*}} placeholders before use
 
-# YAML anchors used for shared defaults:
-x-common: &common
-  enable: true
-  finding_publishing_frequency: "FIFTEEN_MINUTES"
-  tags: [{Key: ManagedBy, Value: ai-agent}]
+# Common environment variables
+x-env: &env
+  AWS_DEFAULT_REGION: {{env.AWS_DEFAULT_REGION}}
+  AWS_ACCESS_KEY_ID: {{env.AWS_ACCESS_KEY_ID}}
+  AWS_SECRET_ACCESS_KEY: {{env.AWS_SECRET_ACCESS_KEY}}
 
-x-trusted-ips: &trusted
-  format: "TXT"
-  activate: true
+# Dev environment config
+x-dev: &dev
+  <<: *env
+  user:
+    region: us-east-1
+    detector_id: "12abc34def567890ghijklmnopqrstuvw"
+    resource_name: "my-guardduty-filter"
 
-x-threats: &threats
-  format: "TXT"
-  activate: true
+# Prod environment config
+x-prod: &prod
+  <<: *env
+  user:
+    region: us-east-1
+    detector_id: "98zyx76wvuts54321tsrqponmlkjihgfedcba"
+    resource_name: "prod-guardduty-filter"
 
-## Detector — Standard
-detector:
-  <<: *common
-  region: "{{env.AWS_DEFAULT_REGION}}"
-
-## IP Sets
-ip_sets:
-  - <<: *trusted
-    name: "trusted-office-ips"
-    location: "https://s3.amazonaws.com/{{user.bucket}}/trusted_ips.txt"
-  - <<: *trusted
-    name: "trusted-vpn-ips"
-    location: "https://s3.amazonaws.com/{{user.bucket}}/vpn_ips.txt"
-
-## Threat Intel Sets
-threat_intel_sets:
-  - <<: *threats
-    name: "custom-threat-list"
-    location: "https://s3.amazonaws.com/{{user.bucket}}/threats.txt"
-
-## Filters
-filters:
-  - name: "archive-low-severity"
-    action: "ARCHIVE"
+# Example: Create Filter
+create-filter:
+  <<: *dev
+  filter:
+    name: {{user.resource_name}}
+    description: "Archive low-severity findings"
+    action: ARCHIVE
     rank: 1
-    criteria:
-      Criterion:
-        severity:
-          LessThan: 4.0
-  - name: "archive-known-good-ssh"
-    action: "ARCHIVE"
-    rank: 2
-    criteria:
-      Criterion:
-        type:
-          Equals: ["Reconnaissance:EC2/PortProbeUnprotectedPort"]
-        resource.instanceDetails.tags.Name:
-          Equals: ["bastion"]
 
-## Member Accounts
-members:
-  master_detector_id: "{{user.detector_id}}"
-  accounts:
-    - account_id: "123456789012"
-      email: "security@example.com"
-    - account_id: "123456789013"
-      email: "devops@example.com"
+# Example: Delete Filter
+delete-filter:
+  <<: *dev
+  filter:
+    name: {{user.resource_name}}
 
-## Publishing Destination
-publishing_destination:
-  detector_id: "{{user.detector_id}}"
-  destination_type: "S3"
-  destination_properties:
-    DestinationArn: "arn:aws:s3:::{{user.bucket}}"
-    KmsKeyArn: "arn:aws:kms:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:key/{{user.kms_key_id}}"
+# Example: List Findings
+list-findings:
+  <<: *dev
+  finding:
+    max_results: 50
 
-## Deletion Configurations
-deletion:
-  - operation: "delete-detector"
-    detector_id: "{{user.detector_id}}"
-    confirmation_required: true
-    confirmation_string: "DELETE_DETECTOR {{user.detector_id}}"
-  - operation: "archive-findings"
-    detector_id: "{{user.detector_id}}"
-    finding_ids: ["{{user.finding_ids}}"]
-    confirmation_required: true
-    confirmation_string: "ARCHIVE_FINDINGS {{user.finding_ids}}"
+# Example: Create IP Set
+create-ip-set:
+  <<: *dev
+  ip_set:
+    name: "trusted-ip-list"
+    location: "s3://my-bucket/ip-list.txt"
+    activate: true
