@@ -41,37 +41,28 @@ metadata:
 ---
 # AWS VPC Ops Skill
 
-AWS VPC operational skill for AI Agent automation.
-
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "VPC", "subnet", "security group", "route table", "NAT Gateway", "Internet Gateway"
-- Task involves creating, deleting, or modifying VPC networking resources
-- User requests VPC Peering connection setup
-- Keywords: vpc, subnet, cidr, security-group, route, gateway, peering
+- VPC/subnet/SG/route table/NAT Gateway/IGW tasks
+- VPC Peering setup or teardown
 - Network connectivity troubleshooting within VPC scope
-- **(AIOps)** Network anomaly detection for LB health check failures
-- **(AIOps)** VPC Flow Log analysis for connection timeout RCA
-- **(AIOps)** Security group drift detection
-- **(AIOps)** NAT Gateway connection saturation monitoring
-- **(AIOps)** Cross-AZ traffic flow analysis for load balancer performance
-- Keywords: flow-logs, vpc-diagnostics, sg-drift, nat-monitor, reachability
+- **(AIOps)** Network anomaly detection, VPC Flow Log RCA, SG drift, NAT saturation, cross-AZ traffic analysis
+- Keywords: vpc, subnet, cidr, security-group, route, gateway, peering, flow-logs, vpc-diagnostics, sg-drift, nat-monitor, reachability
 
 ### SHOULD NOT Use When
-- EC2 instance ops → delegate to: `aws-ec2-ops`
-- IAM → delegate to: `aws-iam-ops`
-- Load Balancer → delegate to: `aws-elb-ops`
-- Route53 DNS → delegate to: `aws-route53-ops`
-- Direct Connect/VPN → managed within this skill (VPC infrastructure)
+- EC2 instance ops → `aws-ec2-ops`
+- IAM → `aws-iam-ops`
+- Load Balancer → `aws-elb-ops`
+- Route53 DNS → `aws-route53-ops`
 
 ## Scope & Quick Reference
 
-| Resource | CLI | Safety Gate |
-|----------|-----|-------------|
+| Resource | CLI | Gate |
+|----------|-----|------|
 | VPC | `aws ec2 create-vpc --cidr-block {{cidr}}` | Delete: confirm + deps check |
 | Subnet | `aws ec2 create-subnet --vpc-id {{id}} --cidr-block {{cidr}}` | Delete: confirm |
-| Security Group | `aws ec2 create-security-group --group-name {{name}} --description {{desc}} --vpc-id {{id}}` | Delete: confirm |
+| Security Group | `aws ec2 create-security-group --group-name {{name}} --description {{desc}} --vpc-id {{id}}` | Delete: confirm + ENI check |
 | Route Table | `aws ec2 create-route-table --vpc-id {{id}}` | Delete: disassociate first |
 | IGW | `aws ec2 create-internet-gateway` | Delete: detach first |
 | NAT Gateway | `aws ec2 create-nat-gateway --subnet-id {{id}} --allocation-id {{eip}}` | Delete: confirm |
@@ -79,14 +70,13 @@ AWS VPC operational skill for AI Agent automation.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
+| Placeholder | Source | Action |
+|-------------|--------|--------|
 | `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
 | `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
-| `{{user.vpc_cidr}}` | User input | Ask once; reuse |
-| `{{user.vpc_name}}` | User input | Ask once; reuse |
+| `{{user.vpc_cidr}}` / `{{user.vpc_name}}` | User input | Ask once; reuse |
 | `{{user.subnet_cidr}}` | User input | Ask once; reuse |
 | `{{output.vpc_id}}` | Last API response | Parse: `.Vpc.VpcId` |
 | `{{output.subnet_id}}` | Last API response | Parse: `.Subnet.SubnetId` |
@@ -97,19 +87,14 @@ AWS VPC operational skill for AI Agent automation.
 ### Pre-flight
 ```bash
 aws --version && aws sts get-caller-identity --output json
-```
-Log: `[OK] Region={{env.AWS_DEFAULT_REGION}} Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx`
-```bash
 # Quota check
-aws service-quotas get-service-quota --service-code ec2 --quota-code L-F678F1CE  # VPCs per region
-aws service-quotas get-service-quota --service-code ec2 --quota-code L-3633C6E3  # NAT Gateways per AZ
+aws service-quotas get-service-quota --service-code ec2 --quota-code L-F678F1CE  # VPCs/region
+aws service-quotas get-service-quota --service-code ec2 --quota-code L-3633C6E3  # NAT GWs/AZ
 ```
 
-### Execute (Primary: CLI)
-See [references/aws-cli-usage.md](references/aws-cli-usage.md).
-
-### Execute (Fallback: boto3)
-After 3 CLI failures — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
+### Execute
+- **Primary**: CLI — see [references/aws-cli-usage.md](references/aws-cli-usage.md)
+- **Fallback**: boto3 (after 3 CLI failures) — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md)
 
 ### Validate
 | Operation | Max Wait |
@@ -122,42 +107,38 @@ After 3 CLI failures — see [references/boto3-sdk-usage.md](references/boto3-sd
 | Error | Action |
 |-------|--------|
 | InvalidParameter / CIDR Conflict | HALT — fix params |
-| QuotaExceeded (VpcLimitExceeded) | HALT — request increase |
-| ResourceDependencyViolation | HALT — cleanup dependencies |
-| Throttling | Backoff, retry 3x |
-| 5xx | Retry 3x; HALT |
+| QuotaExceeded | HALT — request increase |
+| ResourceDependencyViolation | HALT — cleanup deps |
+| Throttling / 5xx | Retry 3x (backoff); then HALT |
 
 ## Safety Gates
 
 ### VPC Deletion
 ```
-⚠️ VPC deletion is irreversible. Dependencies must be removed in order:
-1. EC2 instances → 2. NAT Gateways → 3. Detach/Delete IGW →
-4. Delete Route Tables (except main) → 5. Delete Subnets → 6. Delete VPC
+⚠️ Irreversible. Dependencies must be removed in order:
+Instances → NAT GWs → Detach/Delete IGW → Delete RTs (skip main) → Delete Subnets → Delete VPC
 ```
-Confirm deletion: Type `DELETE {{user.vpc_id}}` to proceed.
+Confirm: `DELETE {{user.vpc_id}}`
 
-### Dependency Cleanup Sequence
+### Dependency Cleanup
 ```bash
-aws ec2 describe-instances --filters Name=vpc-id,Values={{id}}  # Check instances
-aws ec2 describe-nat-gateways --filter Name=vpc-id,Values={{id}}  # Check NAT GWs
-aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values={{id}}  # Check IGWs
-aws ec2 describe-route-tables --filters Name=vpc-id,Values={{id}}  # Check RTs (skip main)
-aws ec2 describe-subnets --filters Name=vpc-id,Values={{id}}  # Check subnets
+aws ec2 describe-instances --filters Name=vpc-id,Values={{id}}      # instances
+aws ec2 describe-nat-gateways --filter Name=vpc-id,Values={{id}}    # NAT GWs
+aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values={{id}}  # IGWs
+aws ec2 describe-route-tables --filters Name=vpc-id,Values={{id}}   # RTs (skip main)
+aws ec2 describe-subnets --filters Name=vpc-id,Values={{id}}        # subnets
 ```
 
 ## Output Convention
 
-All commands use `--output json`. Key JSON paths (centralized):
+All commands use `--output json`. Key JSON paths:
 ```
-# Create/Describe VPC:    .Vpc.{VpcId,CidrBlock,State}
-# Create Subnet:          .Subnet.{SubnetId,CidrBlock,VpcId,State,AvailabilityZone}
-# Create SG:              .GroupId
-# Create Route Table:     .RouteTable.RouteTableId
-# Create IGW:             .InternetGateway.InternetGatewayId
-# Create NATGW:           .NatGateway.{NatGatewayId,State}
-# Create Peering:         .VpcPeeringConnection.{VpcPeeringConnectionId,Status.Code}
-# Describe (list):        .Vpcs[].{VpcId,CidrBlock,State}  / .Subnets[]  / .SecurityGroups[]  / .RouteTables[] / .NatGateways[]
+Create:       .Vpc.{VpcId,CidrBlock,State}  /  .Subnet.{SubnetId,CidrBlock,VpcId,State,AvailabilityZone}
+              .GroupId  /  .RouteTable.RouteTableId  /  .InternetGateway.InternetGatewayId
+              .NatGateway.{NatGatewayId,State}  /  .VpcPeeringConnection.{VpcPeeringConnectionId,Status.Code}
+Describe:     .Vpcs[].{VpcId,CidrBlock,State,Tags}  /  .Subnets[]  /  .SecurityGroups[].{GroupId,GroupName,IpPermissions}
+              .RouteTables[].{RouteTableId,Routes,Associations}  /  .NatGateways[].{NatGatewayId,State,SubnetId}
+              .InternetGateways[].{InternetGatewayId,Attachments}  /  .VpcPeeringConnections[].{VpcPeeringConnectionId,Status}
 ```
 
 ## Delegation
@@ -170,13 +151,13 @@ All commands use `--output json`. Key JSON paths (centralized):
 
 ## Token Efficiency
 
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded CIDR ranges/limits — use `describe-vpcs` / `describe-subnets` / `get-service-quota`
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md). Key points:
+- TE-1: No hardcoded CIDR/limits — use `describe-*` / `get-service-quota`
 - TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths declared inline (no centralized block in this skill)
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+- TE-3: Compact error tables
+- TE-4: JSON paths centralized in Output Convention (above)
+- TE-5: YAML anchors in `assets/example-config.yaml`
+- TE-6: Flows only in SKILL.md (no duplicates in references/)
 
 ## Reference Files
 - `references/aws-cli-usage.md` — CLI commands
@@ -190,100 +171,52 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 ## AIOps: Network Diagnostics for Load Balancer Integration
 
 ### AIOps Data Collection
-
-| Data Source | Namespace / Source | AIOps Use |
-|------------|--------------------|-----------|
-| NAT Gateway `ActiveConnectionCount` | AWS/NATGateway | Connection saturation detecting → ELB connection timeout |
-| NAT Gateway `PacketsDropCount` | AWS/NATGateway | Packet loss detection → ELB latency spike |
-| VPC Flow Logs (S3/CloudWatch) | S3 / Logs | Connection timeout RCA, traffic pattern analysis |
-| Security Group changes | CloudTrail | SG drift detection → ELB health check failure |
-| Network ACL changes | CloudTrail | NACL drift detection → connectivity issues |
+| Data Source | Namespace | AIOps Use |
+|-------------|-----------|-----------|
+| NAT GW `ActiveConnectionCount` / `PacketsDropCount` | AWS/NATGateway | Connection saturation → ELB timeout; packet loss → latency |
+| VPC Flow Logs | S3 / CloudWatch Logs | Connection timeout RCA, traffic pattern analysis |
+| SG / NACL changes | CloudTrail | Drift detection → health check failure |
 | VPC Reachability Analyzer | EC2 API | Path validation between LB and targets |
 
 ### AIOps Diagnostic Flows
 
 #### NF-01: NLB Connection Timeout Network RCA
+1. **Check NAT Gateway metrics** — `get-metric-statistics ActiveConnectionCount` > 80% → saturation; `PacketsDropCount` > 0 → drops
+2. **VPC Flow Log REJECT analysis** — query `action = "REJECT"` between LB subnet and target subnet
+3. **Check SG/NACL changes** — `cloudtrail lookup-events SecurityGroup` (last 60 min)
+4. **Action**: NAT saturated → [AI_ASSIST] Add NAT GW or redistribute subnets; Flow Log REJECT → check SG/NACL; SG changed → [MANUAL] review
 
-```
-Trigger: NLB reports connection timeouts
-┌─────────────────────────────────────────────────────────────────────┐
-│ Step 1 — Check NAT Gateway Metrics                                  │
-│ aws cloudwatch get-metric-statistics --namespace AWS/NATGateway     │
-│   --metric-name ActiveConnectionCount                               │
-│   --dimensions Name=NatGatewayId,Value={{nat_id}}                   │
-│   --statistics Maximum --period 60                                  │
-│ # > 80% of limit → possible saturation                              │
-│                                                                     │
-│ Step 2 — Check NAT Packet Drops                                     │
-│ aws cloudwatch get-metric-statistics --namespace AWS/NATGateway     │
-│   --metric-name PacketsDropCount                                    │
-│   --statistics Sum --period 300                                     │
-│ # > 0 → packets being dropped due to connection exhaustion          │
-│                                                                     │
-│ Step 3 — VPC Flow Log Analysis                                      │
-│ # Look for REJECT records between LB subnet and target subnet       │
-│ aws logs start-query ... --query-string '                           │
-│   filter action = "REJECT"                                          │
-│   | stats count() by dstaddr, dstport                               │
-│   | sort count desc | limit 20'                                     │
-│                                                                     │
-│ Step 4 — Check SG and NACL Changes                                  │
-│ aws cloudtrail lookup-events                                        │
-│   --lookup-attributes AttributeKey=ResourceType,                    │
-│     AttributeValue=AWS::EC2::SecurityGroup                          │
-│   --start-time "{{T0-60m}}"                                         │
-│                                                                     │
-│ Step 5 — Action                                                     │
-│ → NAT saturated → [AI_ASSIST] Add NAT GW or distribute subnets      │
-│ → Flow Log REJECT → [AI_ASSIST] Check SG/NACL rules                │
-│ → SG changed → [MANUAL] Review and revert if needed                │
-└─────────────────────────────────────────────────────────────────────┘
+```bash
+aws cloudwatch get-metric-statistics --namespace AWS/NATGateway --metric-name ActiveConnectionCount --dimensions Name=NatGatewayId,Value={{nat_id}} --statistics Maximum --period 60
+aws cloudwatch get-metric-statistics --namespace AWS/NATGateway --metric-name PacketsDropCount --statistics Sum --period 300
+aws logs start-query --log-group-name /aws/vpc/flow-logs/{{name}} --query-string 'filter action = "REJECT" | stats count() by dstaddr, dstport | sort count desc | limit 20' --start-time "{{T0-60m}}"
 ```
 
 #### NF-02: Security Group Drift Detection [AI_ASSIST]
-
 ```bash
-# Capture SG baseline
-aws ec2 describe-security-groups --group-ids {{sg_id}} \
-  --query "SecurityGroups[0].{GroupId:GroupId, IpPermissions:IpPermissions, IpPermissionsEgress:IpPermissionsEgress}" \
-  > /tmp/sg_baseline.json
-
-# Compare with current state (later)
-aws ec2 describe-security-groups --group-ids {{sg_id}} \
-  --query "SecurityGroups[0].{GroupId:GroupId, IpPermissions:IpPermissions, IpPermissionsEgress:IpPermissionsEgress}" \
-  > /tmp/sg_current.json
-
-diff /tmp/sg_baseline.json /tmp/sg_current.json && echo "No drift" || echo "SG drift detected"
+aws ec2 describe-security-groups --group-ids {{sg_id}} --query "SecurityGroups[0].{GroupId:GroupId,IpPermissions:IpPermissions,IpPermissionsEgress:IpPermissionsEgress}" > /tmp/sg_baseline.json
+# Later: same cmd > /tmp/sg_current.json; diff /tmp/sg_baseline.json /tmp/sg_current.json
 ```
 
 #### NF-03: VPC Reachability Analysis
-
 ```bash
-# Create path analysis between LB subnet and target
-aws ec2 create-network-insights-path \
-  --source "{{lb_eni}}" \
-  --destination "{{target_eni}}" \
-  --protocol TCP \
-  --destination-port {{health_check_port}}
-
-# Analyze
-aws ec2 start-network-insights-analysis \
-  --network-insights-path-id {{path_id}}
+aws ec2 create-network-insights-path --source {{lb_eni}} --destination {{target_eni}} --protocol TCP --destination-port {{health_check_port}}
+aws ec2 start-network-insights-analysis --network-insights-path-id {{path_id}}
 ```
 
 ### Cross-Module Integration
-
 | Condition | Delegate To |
 |-----------|-------------|
 | ELB connection timeout diagnosis | `aws-elb-ops` (RCA coordination) |
 | EC2 instance-level network check | `aws-ec2-ops` (SSM diagnostics) |
 | CloudWatch metrics setup | `aws-cloudwatch-ops` (alarms) |
 | CloudTrail audit | `aws-cloudtrail-ops` (event analysis) |
+
 ## Quality Gate (GCL)
 
 > Phase 1 GCL rollout (2026-06-04, required). Every execution of
 > `aws-vpc-ops` MUST be wrapped by the Generator-Critic-Loop defined in
-> `aws-skill-generator/references/gcl-spec.md`.
+> `gcl-spec.md`.
 
 | Setting | Value |
 |---|---|
@@ -293,75 +226,31 @@ aws ec2 start-network-insights-analysis \
 | Prompts | `references/prompt-templates.md` (v1) |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
 
-Destructive ops requiring `{{user.safety_confirm}}` in trace:
-
-- `delete-vpc` — **HIGH BLAST RADIUS**; pre-flight MUST run **8
-  describe-\*** commands (subnets / IGWs / NATs / RTs / SGs / endpoints /
-  peering / NACLs) and refuse if any non-empty
-- `delete-security-group` — must not be referenced by ENI; default SG
-  cannot be deleted while VPC has any instance
+Destructive ops requiring `{{user.safety_confirm}}`:
+- `delete-vpc` — **HIGH BLAST RADIUS**; pre-flight runs **8 describe-\*** (subnets/IGWs/NATs/RTs/SGs/endpoints/peering/NACLs); refuse if any non-empty
+- `delete-security-group` — ENI check; default SG undeletable while VPC has instances
 - `delete-subnet` — must have no ENI
-- `delete-route-table` — main route table is undeletable; custom RT
-  must have no associations
-- `delete-internet-gateway` — must be `detached` first
-- `delete-nat-gateway` — captures released EIP allocation id
+- `delete-route-table` — main RT undeletable; custom RT must have no associations
+- `delete-internet-gateway` — must be detached first
+- `delete-nat-gateway` — capture released EIP allocation id
 - `delete-vpc-endpoint` / `delete-vpc-peering-connection`
-- `authorize-security-group-ingress` adding `0.0.0.0/0` on sensitive
-  ports (22, 3389, 5432, 3306, 27017, 6379, 9200, 11211, 25) —
-  same family as IAM `*:*` policy guard
+- `authorize-security-group-ingress` adding `0.0.0.0/0` on sensitive ports (22, 3389, 5432, 3306, 27017, 6379, 9200, 11211, 25)
 
-Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource
-echo-back), A9 (no env-var values in trace; here the VPC equivalent is
-no UserData / metadata responses in trace), A10 (sts first command).
-
-See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.
+AWS rules: A7 (region), A8 (resource echo-back), A9 (no secrets in trace), A10 (sts first).
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
+This skill is orchestrator-aware. When invoked by `aws-aiops-orchestrator`, honor the delegate contract.
 
 ### Recognition
+Parse `aiops_delegate:` block fields: `request_id` (non-empty), `parent_intent` (health-check | rca | self-heal | cost-forecast | capacity-forecast | change-impact | compliance-scan | forensic), `action_mode` (observe | recommend | auto-heal | manual), `decision_tier` (AUTO_HEAL | AI_ASSIST | MANUAL), `scope.resource_ids`.
 
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
+### Behavior Rules
+1. **Idempotency**: write ops accept `idempotency_key`; same key within 24h returns cached result with `aiops_context.facts[*].deduplicated: true`
+2. **Confirmation gate**: destructive ops require `confirmation_token`; if absent, refuse with `status: "failed"`
+3. **Decision tier**: `MANUAL` → recommendations only; `AI_ASSIST` → execute only with `confirmation_token`; `AUTO_HEAL` → execute non-destructive writes directly
+4. **Trace propagation**: every AWS CLI/boto3 call includes `User-Agent: aiops-orchestrator/<trace_id>`
+5. **Output**: always include `aiops_context:` JSON block
 
 ### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+See [aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md) for runbooks invoking this skill.
