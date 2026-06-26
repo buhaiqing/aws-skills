@@ -16,8 +16,8 @@ compatibility: >-
   to RDS endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.2.0"
+  last_updated: "2026-06-26"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -43,6 +43,17 @@ metadata:
 ---
 
 AWS Relational Database Service (RDS) operational skill for AI Agent automation.
+
+## Common JSON Paths (Centralized)
+
+```
+# Describe:     .DBInstances[0].{DBInstanceStatus,Endpoint.Address,Endpoint.Port,DBInstanceClass,Engine,EngineVersion,DBInstanceArn,PerformanceInsightsEnabled,DbiResourceId}
+# Create:       .DBInstance.{DBInstanceArn,DBInstanceStatus}
+# Snapshot:     .DBSnapshot.{DBSnapshotIdentifier,Status}
+# Cluster:      .DBClusters[0].{Status,Endpoint,ReaderEndpoint,DBClusterMembers[*].DBInstanceIdentifier}
+# PI (top SQL): .MetricList[0].DataPoints[*].{Timestamp,Value}
+# Versions:     .DBEngineVersions[0].{Engine,EngineVersion,DBParameterGroupFamily}
+```
 
 ## Trigger & Scope
 
@@ -150,267 +161,70 @@ BEFORE delete-db-snapshot / delete-db-parameter-group:
 
 ## SQL Slow Query Diagnosis
 
-Full workflow to **detect → analyze → optimize** SQL slow queries on RDS.
+Workflow: detect → analyze → optimize SQL slow queries on RDS.
+Detailed commands in [references/aws-cli-usage.md](references/aws-cli-usage.md) (CLI) and [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md) (SDK).
 
-### Overview
+### Quick Reference
 
-```
-User reports slow DB
-  → 1. Check Performance Insights (top SQL by DB load)
-  → 2. Query slow query log (CloudWatch Logs)
-  → 3. Analyze patterns (missing indexes, full scans, lock waits)
-  → 4. Recommend optimization (index, query rewrite, parameter tuning)
-  → 5. Validate improvement
-```
-
-### Step 1: Pre-flight — Check Capabilities
-
-**Check Performance Insights (PI) is enabled:**
+**1. Pre-flight:** Check PI enabled + slow query log published to CloudWatch.
 ```bash
-aws rds describe-db-instances \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
+aws rds describe-db-instances --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
   --region "{{env.AWS_DEFAULT_REGION}}" --output json \
-  | jq '{PI: .DBInstances[0].PerformanceInsightsEnabled, Retention: .DBInstances[0].PerformanceInsightsRetentionPeriod}'
-```
-If PI not enabled → enable it (requires reboot):
+  | jq '{PI: .DBInstances[0].PerformanceInsightsEnabled, CW_Logs: .DBInstances[0].EnabledCloudwatchLogsExports}'```
+If not enabled: `modify-db-instance --enable-performance-insights --performance-insights-retention-period 7`
+If slow log not published: `modify-db-instance --cloudwatch-logs-export-configuration '{"EnableLogTypes":["slowquery"]}'`
+
+**2. Get DbiResourceId** (required for PI API):
 ```bash
-aws rds modify-db-instance \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
-  --enable-performance-insights \
-  --performance-insights-retention-period 7 \
-  --apply-immediately \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
-
-**Check slow query log is published to CloudWatch:**
-```bash
-aws rds describe-db-instances \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json \
-  | jq '.DBInstances[0].EnabledCloudwatchLogsExports'
-```
-If `slowquery` (MySQL) or `postgresql` (PG) not in list → enable:
-```bash
-aws rds modify-db-instance \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
-  --cloudwatch-logs-export-configuration '{"EnableLogTypes":["slowquery"]}' \
-  --apply-immediately \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
-
-**Log results:**
-```
-[OK]   Performance Insights: Enabled (7 days retention)
-[OK]   Slow query log publish: enabled
-[INFO] If PI just enabled, wait 5-15 min for data to populate.
-```
-
-### Step 2: Analyze via Performance Insights
-
-Performance Insights (via `aws pi` CLI) provides the **top SQL by DB load**,
-**wait events**, and **dimension breakdown**.
-
-> Note: `aws pi` requires the DB instance identifier as `--identifier` in
-> the form `db-<resource-id>` (not the DB name). Find it via
-> `describe-db-instances` → `.DBInstances[0].DbiResourceId`.
-
-**Get DbiResourceId:**
-```bash
-aws rds describe-db-instances \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json \
-  | jq -r '.DBInstances[0].DbiResourceId'
-```
+aws rds describe-db-instances --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
+  --region "{{env.AWS_DEFAULT_REGION}}" --output json | jq -r '.DBInstances[0].DbiResourceId'```
 Save as `{{output.dbi_resource_id}}`.
 
-**Top SQL by DB Load (last 1 hour):**
+**3. PI: Top SQL + Wait Events (last 1h):**
 ```bash
-aws pi get-resource-metrics \
-  --service-type RDS \
-  --identifier "{{output.dbi_resource_id}}" \
-  --start-time $(date -u -d '-1 hour' +%s) \
-  --end-time $(date -u +%s) \
-  --period-in-seconds 60 \
-  --metric-queries '[{"Metric": "db.sproc_execution_time", "GroupBy": {"Group": "db.sql_tokenized", "Limit": 10}}]' \
+# Top SQL by DB load
+aws pi get-resource-metrics --service-type RDS --identifier "{{output.dbi_resource_id}}" \
+  --start-time $(date -u -d '-1 hour' +%s) --end-time $(date -u +%s) --period-in-seconds 60 \
+  --metric-queries '[{"Metric":"db.sproc_execution_time","GroupBy":{"Group":"db.sql_tokenized","Limit":10}}]' \
   --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
+# Wait events: same command with Group="db.wait_event"```
 
-**Dimension breakdown by wait event:**
+**4. Query slow query log from CloudWatch:**
 ```bash
-aws pi get-resource-metrics \
-  --service-type RDS \
-  --identifier "{{output.dbi_resource_id}}" \
-  --start-time $(date -u -d '-1 hour' +%s) \
-  --end-time $(date -u +%s) \
-  --period-in-seconds 60 \
-  --metric-queries '[{"Metric": "db.sproc_execution_time", "GroupBy": {"Group": "db.wait_event", "Limit": 10}}]' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
+LOG_GROUP="/aws/rds/instance/{{user.DBInstanceIdentifier}}/slowquery"  # MySQL
+# For PostgreSQL: LOG_GROUP="/aws/rds/instance/{{user.DBInstanceIdentifier}}/postgresql"
+aws logs start-query --log-group-name "$LOG_GROUP" \
+  --start-time $(date -u -d '-1 hour' +%s) --end-time $(date -u +%s) \
+  --query-string 'fields @timestamp, @message | filter @message like /(?i)(Query_time|# User@Host)/ | parse @message /Query_time: (?<query_time>\S+).*Lock_time: (?<lock_time>\S+).*Rows_sent: (?<rows_sent>\d+).*Rows_examined: (?<rows_examined>\d+)/ | sort query_time desc | limit 50'
 ```
+Wait 5-30s, then `aws logs get-query-results --query-id "$QUERY_ID"`.
 
-**Analyze dimensions (e.g., host, user, database):**
-```bash
-aws pi list-available-resource-dimensions \
-  --service-type RDS \
-  --identifier "{{output.dbi_resource_id}}" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
+**5. Pattern analysis:**
 
-**Detailed SQL digest for top query:**
-```bash
-aws pi get-resource-metadata \
-  --service-type RDS \
-  --identifier "{{output.dbi_resource_id}}" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
+| PI Signal | Log Pattern | Likely Root Cause | Fix |
+|-----------|-------------|-------------------|-----|
+| CPU high | `rows_examined >> rows_sent` | Missing index | `CREATE INDEX` |
+| `Lock:RowLockWait` | High `Lock_time` | Lock contention | Shorten transactions; use NOWAIT |
+| `IO:DataFileRead` | Buffer pool miss | Memory pressure | Increase `innodb_buffer_pool_size` |
+| `IO:XactSync` | High commit time | Sync binlog | Batch commits |
+| `tcp:connection` | `max_connections` hit | Connection leak | Increase max_connections; fix pool |
+| Temp tables | `Created_tmp_disk_tables` > 0 | Sort exceeds tmp_table | Increase `tmp_table_size` |
 
-### Step 3: Query Slow Query Log from CloudWatch
+**6. Apply fix & validate:
+- Parameter tuning: `modify-db-parameter-group` (see [references/aws-cli-usage.md](references/aws-cli-usage.md))
+- Re-run PI `get-resource-metrics` with `db.sproc_execution_time`, `db.cpu`, `db.io` — compare before/after.
 
-For MySQL / Aurora MySQL (log type: `slowquery`):
-```bash
-# Start query
-LOG_GROUP="/aws/rds/instance/{{user.DBInstanceIdentifier}}/slowquery"
-QUERY_ID=$(aws logs start-query \
-  --log-group-name "$LOG_GROUP" \
-  --start-time $(date -u -d '-1 hour' +%s) \
-  --end-time $(date -u +%s) \
-  --query-string 'fields @timestamp, @message
-    | filter @message like /(?i)(Query_time|# User@Host|# Query_time:)/
-    | parse @message /Query_time: (?<query_time>\S+).*Lock_time: (?<lock_time>\S+).*Rows_sent: (?<rows_sent>\d+).*Rows_examined: (?<rows_examined>\d+)/
-    | sort query_time desc
-    | limit 50' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json | jq -r '.queryId')
-
-# Poll until complete (wait 5-30s)
-sleep 10
-aws logs get-query-results --query-id "$QUERY_ID" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json | jq '.results[:20][]'
-```
-
-For PostgreSQL / Aurora PostgreSQL (log type: `postgresql`):
-```bash
-LOG_GROUP="/aws/rds/instance/{{user.DBInstanceIdentifier}}/postgresql"
-QUERY_ID=$(aws logs start-query \
-  --log-group-name "$LOG_GROUP" \
-  --start-time $(date -u -d '-1 hour' +%s) \
-  --end-time $(date -u +%s) \
-  --query-string 'fields @timestamp, @message
-    | filter @message like /(?i)(duration:\s+\d+\.\d+\s+ms|LOG:\s+duration)/
-    | parse @message /duration: (?<duration_ms>[\d.]+) ms/
-    | sort duration_ms desc
-    | limit 50' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json | jq -r '.queryId')
-
-sleep 10
-aws logs get-query-results --query-id "$QUERY_ID" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json | jq '.results[:20][]'
-```
-
-### Step 4: Pattern Analysis & Diagnosis
-
-Cross-reference PI top SQL with slow query log entries to identify:
-
-| Pattern | Symptom | Likely Root Cause |
-|---------|---------|-------------------|
-| High CPU + high rows_examined | Full table scan | Missing index → recommend CREATE INDEX |
-| High Lock_time | Lock contention | Inefficient transaction design → optimize transaction scope |
-| High disk IO (avg queue len) | IOPS saturation | Insufficient storage IOPS → scale gp3 IOPS or switch to io2 |
-| Buffer pool hit ratio < 99% | Memory pressure | Insufficient innodb_buffer_pool → increase instance size |
-| Wait: `IO:XactSync` | Storage commit latency | Multi-AZ synchronous commit → adjust sync_binlog / commit params |
-| Wait: `CPU` | Compute bottleneck | Insufficient vCPU → scale instance class |
-| Wait: `tcp:connection` | Connection storm | max_connections too low or connection pool exhausted |
-| Rows_examined >> Rows_sent | Poor query selectivity | Missing composite index or wrong join order |
-| temp_table / temp_file created | Sort on disk | Increase tmp_table_size / sort_buffer_size |
-
-### Step 5: Generate Optimization Recommendations
-
-**Index recommendations:**
-```sql
--- MySQL: Check missing indexes via Performance Schema
-SELECT * FROM sys.schema_unused_indexes;
--- Check full table scans
-SELECT * FROM sys.statements_with_full_table_scans;
-
--- Recommended pattern (customize per slow query)
-CREATE INDEX idx_{{table}}_{{column}} ON {{schema}}.{{table}}({{column}});
-```
-
-**Parameter tuning recommendations (via custom parameter group):**
-```bash
-# Check current parameter values
-aws rds describe-db-parameters \
-  --db-parameter-group-name "{{user.DBParameterGroup}}" \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json \
-  | jq '.Parameters[] | select(.ParameterName | IN("slow_query_log","long_query_time","max_connections","innodb_buffer_pool_size","tmp_table_size","sort_buffer_size","join_buffer_size")) | {ParameterName, ParameterValue, Description}'
-
-# MySQL: enable slow query log + set threshold
-aws rds modify-db-parameter-group \
-  --db-parameter-group-name "{{user.DBParameterGroup}}" \
-  --parameters '[
-    {"ParameterName":"slow_query_log","ParameterValue":"1","ApplyMethod":"immediate"},
-    {"ParameterName":"long_query_time","ParameterValue":"{{user.query_duration_threshold}}","ApplyMethod":"immediate"},
-    {"ParameterName":"log_queries_not_using_indexes","ParameterValue":"1","ApplyMethod":"immediate"}
-  ]' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-
-# Apply parameter group to instance
-aws rds modify-db-instance \
-  --db-instance-identifier "{{user.DBInstanceIdentifier}}" \
-  --db-parameter-group-name "{{user.DBParameterGroup}}" \
-  --apply-immediately \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
-
-**PostgreSQL parameter tuning:**
-```bash
-aws rds modify-db-parameter-group \
-  --db-parameter-group-name "{{user.DBParameterGroup}}" \
-  --parameters '[
-    {"ParameterName":"log_min_duration_statement","ParameterValue":"{{user.query_duration_threshold}}000","ApplyMethod":"immediate"},
-    {"ParameterName":"shared_buffers","ParameterValue":"{DBInstanceClassMemory/32768}","ApplyMethod":"pending-reboot"},
-    {"ParameterName":"work_mem","ParameterValue":"{DBInstanceClassMemory/32768}","ApplyMethod":"immediate"}
-  ]' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
-
-### Step 6: Validate Improvement
-
-```bash
-# Re-run PI after tuning
-aws pi get-resource-metrics \
-  --service-type RDS \
-  --identifier "{{output.dbi_resource_id}}" \
-  --start-time $(date -u -d '-1 hour' +%s) \
-  --end-time $(date -u +%s) \
-  --period-in-seconds 300 \
-  --metric-queries '[
-    {"Metric": "db.sproc_execution_time"},
-    {"Metric": "db.cpu"},
-    {"Metric": "db.io"}
-  ]' \
-  --region "{{env.AWS_DEFAULT_REGION}}" --output json
-```
-Compare before/after metrics. Log summary:
-```
-[OK] Top SQL avg execution time reduced by ~XX%
-[OK] IO wait reduced from XX% to YY%
-[INFO] Still slow? Consider: scale instance class, add read replica, or partition large tables.
-```
-
-### Step 7: Escalate If Needed
+**7. Escalate if no improvement:**
 
 | Condition | Action |
 |-----------|--------|
-| No improvement after tuning | Scale up instance class (`aws rds modify-db-instance --db-instance-class`) |
-| IOPS consistently at max | Switch to io2 storage type with higher IOPS |
-| Read-heavy workload | Add read replica (`aws rds create-db-instance-read-replica`) |
-| Large table with slow DDL | Use pt-online-schema-change or gh-ost for zero-downtime DDL |
-| Query pattern unfixable by tuning | Rewrite application query; consider caching layer (ElastiCache) |
+| No improvement | Scale instance class |
+| IOPS saturated | io2 storage or scale |
+| Read-heavy | Add read replica |
+| Query unfixable | Rewrite query; add ElastiCache |
 
-## Output Convention
-All commands use `--output json`. Key JSON paths:
-- `.DBInstances[0].{DBInstanceStatus,Endpoint.Address,Endpoint.Port,DBInstanceArn,PerformanceInsightsEnabled,PerformanceInsightsRetentionPeriod}`
-- `.DBSnapshot.{DBSnapshotIdentifier,Status}`
-- `.DBClusters[0].{Status,Endpoint,ReaderEndpoint}`
+Full diagnoses tables in [references/troubleshooting.md](references/troubleshooting.md).
+
 
 ## Related Skills
 - `aws-ec2-ops` — Security groups | `aws-iam-ops` — IAM roles | `aws-kms-ops` — Encryption
@@ -439,7 +253,7 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 - TE-1: No hardcoded engine versions/instance classes — use `describe-db-engine-versions` / `describe-orderable-db-instance-options`
 - TE-2: Inline comments only in boto3 code (no docstrings)
 - TE-3: Compact error tables throughout
-- TE-4: JSON paths declared inline (no centralized block in this skill)
+- TE-4: JSON paths centralized in `## Common JSON Paths` block at file top
 - TE-5: YAML anchors in `assets/example-config.yaml` where applicable
 - TE-6: Flows only in SKILL.md (no duplicate in references/)
 

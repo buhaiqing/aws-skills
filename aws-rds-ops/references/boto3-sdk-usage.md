@@ -166,7 +166,7 @@ pi = boto3.client('pi')
 logs = boto3.client('logs')
 
 def get_dbi_resource_id(identifier):
-    """Get the DbiResourceId needed for PI API calls"""
+    # Get the DbiResourceId needed for PI API calls
     resp = rds.describe_db_instances(DBInstanceIdentifier=identifier)
     return resp['DBInstances'][0]['DbiResourceId']
 
@@ -249,7 +249,7 @@ def get_slow_query_logs_cw(identifier, hours=1, engine='mysql', region='us-east-
 
 def get_pi_dimension_breakdown(dbi_resource_id, metric='db.sproc_execution_time',
                                 group='db.user', limit=10):
-    """Get metric breakdown by dimension (user, host, database, etc.)"""
+    # Get metric breakdown by dimension (user, host, database, etc.)
     end = datetime.utcnow()
     start = end - timedelta(hours=1)
     return pi.get_resource_metrics(

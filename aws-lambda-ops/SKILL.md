@@ -16,8 +16,8 @@ compatibility: >-
   to Lambda endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-06-04"
+  version: "1.2.0"
+  last_updated: "2026-06-26"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:

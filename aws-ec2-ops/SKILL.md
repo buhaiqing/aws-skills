@@ -14,8 +14,8 @@ compatibility: >-
   to EC2 endpoints.
 metadata:
   author: aws
-  version: "1.3.0"
-  last_updated: "2026-06-04"
+  version: "1.4.0"
+  last_updated: "2026-06-26"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -29,7 +29,9 @@ metadata:
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
+    - AWS_PROFILE
   cross_skill_deps:
     - aws-elb-ops             # LB target health diagnostics
     - aws-cloudwatch-ops      # EC2 metrics monitoring & FORECAST
@@ -87,7 +89,9 @@ Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. Thi
 |-------------|--------|--------------|
 | `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default `us-east-1` if unset |
+| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile (SSO / AssumeRole); overrides explicit keys |
 | `{{user.region}}` | User input | Ask once; reuse |
 | `{{user.instance_name}}` | User input | Ask once; reuse |
 | `{{user.ami_id}}` | User input | Ask once; reuse |
@@ -109,49 +113,72 @@ Amazon EC2 (Elastic Compute Cloud) provides scalable virtual servers in AWS. Thi
 | `{{output.image_id}}` | API response | Parse: `.ImageId` after CreateImage |
 | `{{output.key_material}}` | API response | Parse: `.KeyMaterial` (private key, save once) |
 
+## Config File Placeholders
+
+`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
+
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
+| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
+| `{{user.instance_id}}` | User input | Ask once; substitute |
+| `{{user.instance_type}}` | User input | Ask once; substitute |
+
+Before using `example-config.yaml`:
+1. Load `.env` from project root (if present)
+2. Substitute `{{env.*}}` placeholders with loaded values
+3. Collect `{{user.*}}` values from user input
+4. Use rendered config for CLI/SDK commands
+
 ## Execution Flow Pattern
 
-Every operation: **Pre-flight → Execute → Validate → Recover**
+Every operation follows: **Pre-flight → Execute → Validate → Recover**
 
 ```
-Pre-flight → Execute (CLI/SDK) → Validate (Poll) → Recover (On Error)
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Pre-flight │ → │   Execute   │ → │   Validate  │ → │   Recover   │
+│   Checks    │    │ CLI/SDK     │    │   Polling   │    │  On Error   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
-### Operation: Run Instance (Launch)
+### Common Pre-flight Steps (all ops)
 
-#### Pre-flight
-
-**Step 1: Check CLI**
+#### Step 1: Check CLI
 ```bash
 aws --version
 ```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: uv pip install awscli`
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: pip install awscli`
 
-**Step 2: Load & Verify Credentials**
+#### Step 2: Load & Verify Credentials
 ```bash
 aws sts get-caller-identity --output json
 ```
-
 Log format:
 ```
 [SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from .env)
-[OK]   AWS_ACCESS_KEY_ID=**** (from .env, masked)
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from env)
+[OK]   AWS_ACCESS_KEY_ID=**** (masked)
 [OK]   Credential verification passed
 [OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
 ```
-
 On failure:
 ```
 [FAIL] AWS credential verification failed.
 AWS Error: <exact error message>
-Action: See references/integration.md → Error Messages for diagnosis.
+Action: See references/troubleshooting.md for diagnosis.
 ```
 
 | Check | Method | On Failure |
 |-------|--------|------------|
 | CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide user to integration.md |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide to troubleshooting.md |
+| Region valid | `aws ec2 describe-instances --region {{user.region}}` | Suggest valid region |
+
+### Operation: Run Instance (Launch)
+
+#### Pre-flight
+| Check | Method | On Failure |
+|-------|--------|------------|
 | AMI exists | `aws ec2 describe-images --image-ids {{user.ami_id}}` | Suggest valid AMI |
 | KeyPair exists | `aws ec2 describe-key-pairs --key-names {{user.key_name}}` | Create or suggest |
 | Security Group | `aws ec2 describe-security-groups --group-ids {{user.sg_id}}` | Verify or create |
@@ -208,13 +235,19 @@ done
 
 ### Operation: Stop Instance
 
-#### Pre-flight (Safety Gate)
+#### Pre-flight
 - Describe instance to verify it exists and is `running` state
-- **MUST** obtain confirmation: "Stop instance {{user.instance_id}}? This will shut down the instance. Confirm with exact instance ID."
+- **Safety Gate**: MUST obtain confirmation: "Stop instance {{user.instance_id}}? This will shut down the instance. Confirm with exact instance ID."
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 stop-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.stop_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Stopping: {response['StoppingInstances'][0]['InstanceId']}")
 ```
 
 #### Validate
@@ -227,11 +260,12 @@ for i in $(seq 1 24); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.stop_instances(InstanceIds=['{{user.instance_id}}'])
-print(f"Stopping: {response['StoppingInstances'][0]['InstanceId']}")
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| IncorrectInstanceState | HALT — instance must be running |
+| InvalidInstanceID.NotFound | HALT — verify instance ID |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Start Instance
 
@@ -239,9 +273,15 @@ print(f"Stopping: {response['StoppingInstances'][0]['InstanceId']}")
 - Describe instance to verify it exists and is `stopped` state
 - If already `running`: inform user that instance is already running; no action needed
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 start-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.start_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Starting: {response['StartingInstances'][0]['InstanceId']}")
 ```
 
 #### Validate
@@ -254,11 +294,12 @@ for i in $(seq 1 24); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.start_instances(InstanceIds=['{{user.instance_id}}'])
-print(f"Starting: {response['StartingInstances'][0]['InstanceId']}")
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| IncorrectInstanceState | HALT — instance must be stopped |
+| InvalidInstanceID.NotFound | HALT — verify instance ID |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Terminate Instance (Destructive)
 
@@ -267,9 +308,15 @@ print(f"Starting: {response['StartingInstances'][0]['InstanceId']}")
 - **MUST** obtain explicit confirmation:
 > "Terminate {{user.instance_id}}? This action is IRREVERSIBLE — all associated data will be lost. Confirm with exact instance ID."
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 terminate-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.terminate_instances(InstanceIds=['{{user.instance_id}}'])
+print(f"Terminating: {response['TerminatingInstances'][0]['InstanceId']}")
 ```
 
 #### Validate
@@ -282,90 +329,84 @@ for i in $(seq 1 12); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.terminate_instances(InstanceIds=['{{user.instance_id}}'])
-print(f"Terminating: {response['TerminatingInstances'][0]['InstanceId']}")
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| IncorrectInstanceState | HALT — instance already terminating/terminated |
+| InvalidInstanceID.NotFound | HALT — verify instance ID |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Describe Instance
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json
 ```
 
-#### Present to User
-| Field | JSON Path | Notes |
-|-------|-----------|-------|
-| Instance ID | `.Reservations[0].Instances[0].InstanceId` | Primary identifier |
-| State | `.Reservations[0].Instances[0].State.Name` | running/stopped/terminated |
-| Instance Type | `.Reservations[0].Instances[0].InstanceType` | e.g., t3.micro |
-| Private IP | `.Reservations[0].Instances[0].PrivateIpAddress` | Internal IP |
-| Public IP | `.Reservations[0].Instances[0].PublicIpAddress` | External IP (if assigned) |
-| Launch Time | `.Reservations[0].Instances[0].LaunchTime` | ISO 8601 |
-| VPC ID | `.Reservations[0].Instances[0].VpcId` | Network |
-| Subnet ID | `.Reservations[0].Instances[0].SubnetId` | Network |
+#### Execute — boto3 (Fallback)
+```python
+response = client.describe_instances(InstanceIds=['{{user.instance_id}}'])
+instance = response['Reservations'][0]['Instances'][0]
+print(f"{instance['InstanceId']}: {instance['State']['Name']} ({instance['InstanceType']})")
+```
+
+#### Validate
+Verify response contains the requested instance.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidInstanceID.NotFound | HALT — verify instance ID |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Describe Instances (List/Filter)
 
-#### Execute — CLI
-
-List all instances:
+#### Execute — CLI (Primary)
 ```bash
+# All instances
 aws ec2 describe-instances --region "{{user.region}}" --output json
-```
 
-Filter by state (e.g., running):
-```bash
+# Filter by state
 aws ec2 describe-instances --region "{{user.region}}" --filters Name=instance-state-name,Values=running --output json
-```
 
-Filter by tag:
-```bash
+# Filter by tag
 aws ec2 describe-instances --region "{{user.region}}" --filters Name=tag:Name,Values="{{user.instance_name}}" --output json
-```
-
-#### Present to User
-Summarize each instance: ID, state, type, tags.
-```bash
-aws ec2 describe-instances --region "{{user.region}}" --output json | jq -r '.Reservations[].Instances[] | [.InstanceId, .State.Name, .InstanceType, (.Tags // [] | from_entries.Name // "-")] | @tsv'
 ```
 
 #### Execute — boto3 (Fallback)
 ```python
 paginator = client.get_paginator('describe_instances')
-filters = [{'Name': 'tag:Name', 'Values': ['{{user.instance_name}}']}]  # optional
+filters = [{'Name': 'tag:Name', 'Values': ['{{user.instance_name}}']}]
 for page in paginator.paginate(Filters=filters):
     for r in page['Reservations']:
         for i in r['Instances']:
             print(f"{i['InstanceId']}: {i['State']['Name']} ({i['InstanceType']})")
 ```
 
+#### Validate
+Verify response returns expected instances.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidParameterValue | Fix filter expression; retry once |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Create KeyPair
 
 #### Pre-flight
-- Check if key name already exists:
-  ```bash
-  aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}"
-  ```
-  If no error → name exists, suggest a different name.
+Check if key name already exists:
+```bash
+aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}" --output json || echo "KeyPair does not exist"
+```
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 RESULT=$(aws ec2 create-key-pair --key-name "{{user.key_name}}" --key-type ed25519 --region "{{user.region}}" --output json)
 PRIVATE_KEY=$(echo "$RESULT" | jq -r '.KeyMaterial')
 ```
 **CRITICAL**: Save private key immediately — AWS will NOT return it again.
-```
-[IMPORTANT] Private key saved to {{user.key_name}}.pem. Set permissions: chmod 400 {{user.key_name}}.pem
-```
 Set `{{output.key_material}}` = `$PRIVATE_KEY`
-
-#### Validate
-```bash
-aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}" --output json
-```
 
 #### Execute — boto3 (Fallback)
 ```python
@@ -374,15 +415,26 @@ print(f"KeyPair: {response['KeyName']}")
 print(f"Private key:\n{response['KeyMaterial']}")
 ```
 
+#### Validate
+```bash
+aws ec2 describe-key-pairs --key-names "{{user.key_name}}" --region "{{user.region}}" --output json
+```
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidKeyPair.Duplicate | HALT — name already exists; suggest different name |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Delete KeyPair
 
 #### Safety Gate (Destructive)
 - **MUST** confirm: "Delete key pair {{user.key_name}}? Instances using this key will lose SSH access for new connections."
 - Verify keypair exists first
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
-aws ec2 delete-key-pair --key-name "{{user.key_name}}" --region "{{user.region}}"
+aws ec2 delete-key-pair --key-name "{{user.key_name}}" --region "{{user.region}}" --output json
 ```
 
 #### Execute — boto3 (Fallback)
@@ -390,12 +442,21 @@ aws ec2 delete-key-pair --key-name "{{user.key_name}}" --region "{{user.region}}
 client.delete_key_pair(KeyName='{{user.key_name}}')
 ```
 
+#### Validate
+`aws ec2 describe-key-pairs --key-names "{{user.key_name}}"` → key pair not found.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidKeyPair.NotFound | HALT — key pair does not exist |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Create Volume (EBS)
 
 #### Pre-flight
-- Verify availability zone: `{{user.region}}`a (or user-specified AZ)
+- Verify availability zone: `{{user.region}}a` (or user-specified AZ)
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 VOLUME_ID=$(aws ec2 create-volume \
   --availability-zone "{{user.region}}a" \
@@ -407,16 +468,6 @@ VOLUME_ID=$(aws ec2 create-volume \
 Log: `[OK] Volume created: $VOLUME_ID`
 Set `{{output.volume_id}}` = `$VOLUME_ID`
 
-#### Validate
-Wait until `available` state (max 30s, interval 5s):
-```bash
-for i in $(seq 1 6); do
-  STATUS=$(aws ec2 describe-volumes --volume-ids "{{output.volume_id}}" --region "{{user.region}}" --output json | jq -r '.Volumes[0].State')
-  [ "$STATUS" = "available" ] && break
-  sleep 5
-done
-```
-
 #### Execute — boto3 (Fallback)
 ```python
 response = client.create_volume(
@@ -427,13 +478,30 @@ response = client.create_volume(
 volume_id = response['VolumeId']
 ```
 
+#### Validate
+Wait until `available` state (max 30s, interval 5s):
+```bash
+for i in $(seq 1 6); do
+  STATUS=$(aws ec2 describe-volumes --volume-ids "{{output.volume_id}}" --region "{{user.region}}" --output json | jq -r '.Volumes[0].State')
+  [ "$STATUS" = "available" ] && break
+  sleep 5
+done
+```
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| VolumeLimitExceeded | HALT — request quota increase |
+| InsufficientFreeAddressesInSubnet | HALT — choose different AZ |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Attach Volume
 
 #### Pre-flight
 - Verify volume exists and state is `available`
 - Verify instance exists and state is `running`
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 attach-volume \
   --volume-id "{{user.volume_id|output.volume_id}}" \
@@ -441,6 +509,15 @@ aws ec2 attach-volume \
   --device "{{user.device:/dev/sdf}}" \
   --region "{{user.region}}" \
   --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.attach_volume(
+    VolumeId='{{user.volume_id|output.volume_id}}',
+    InstanceId='{{user.instance_id}}',
+    Device='{{user.device:/dev/sdf}}'
+)
 ```
 
 #### Validate
@@ -453,14 +530,13 @@ for i in $(seq 1 6); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.attach_volume(
-    VolumeId='{{user.volume_id|output.volume_id}}',
-    InstanceId='{{user.instance_id}}',
-    Device='{{user.device:/dev/sdf}}'
-)
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidVolume.NotFound | HALT — volume does not exist |
+| InvalidInstanceID.NotFound | HALT — instance does not exist |
+| IncorrectState | HALT — volume must be `available` |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Detach Volume
 
@@ -468,9 +544,14 @@ response = client.attach_volume(
 - Verify volume is attached to instance
 - **MUST** confirm: "Detach volume {{user.volume_id}} from instance {{user.instance_id}}?"
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 aws ec2 detach-volume --volume-id "{{user.volume_id}}" --region "{{user.region}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.detach_volume(VolumeId='{{user.volume_id}}')
 ```
 
 #### Validate
@@ -483,14 +564,16 @@ for i in $(seq 1 12); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.detach_volume(VolumeId='{{user.volume_id}}')
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidVolume.NotFound | HALT — volume does not exist |
+| IncorrectState | HALT — volume must be `in-use` |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Describe Volumes
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 # All volumes
 aws ec2 describe-volumes --region "{{user.region}}" --output json
@@ -502,16 +585,6 @@ aws ec2 describe-volumes --region "{{user.region}}" --filters Name=attachment.in
 aws ec2 describe-volumes --volume-ids "{{user.volume_id}}" --region "{{user.region}}" --output json
 ```
 
-#### Present to User
-| Field | JSON Path | Notes |
-|-------|-----------|-------|
-| Volume ID | `.Volumes[0].VolumeId` | Primary identifier |
-| Size (GB) | `.Volumes[0].Size` | Storage capacity |
-| Type | `.Volumes[0].VolumeType` | gp3/io1/standard |
-| State | `.Volumes[0].State` | available/in-use |
-| Attached to | `.Volumes[0].Attachments[0].InstanceId` | If in-use |
-| Device | `.Volumes[0].Attachments[0].Device` | e.g., /dev/sdf |
-
 #### Execute — boto3 (Fallback)
 ```python
 response = client.describe_volumes(
@@ -521,12 +594,21 @@ for v in response['Volumes']:
     print(f"{v['VolumeId']}: {v['Size']}GB {v['VolumeType']} ({v['State']})")
 ```
 
+#### Validate
+Verify response contains volumes matching the filter.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidVolume.NotFound | HALT — volume does not exist |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Create Snapshot
 
 #### Pre-flight
 - Verify volume exists (describe volume)
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 SNAPSHOT_ID=$(aws ec2 create-snapshot \
   --volume-id "{{user.volume_id}}" \
@@ -535,6 +617,15 @@ SNAPSHOT_ID=$(aws ec2 create-snapshot \
   --output json | jq -r '.SnapshotId')
 ```
 Set `{{output.snapshot_id}}` = `$SNAPSHOT_ID`
+
+#### Execute — boto3 (Fallback)
+```python
+response = client.create_snapshot(
+    VolumeId='{{user.volume_id}}',
+    Description='{{user.snapshot_description:Snapshot of volume}}'
+)
+snapshot_id = response['SnapshotId']
+```
 
 #### Validate
 Poll until `completed` state (max 300s, interval 10s):
@@ -546,23 +637,20 @@ for i in $(seq 1 30); do
 done
 ```
 
-#### Execute — boto3 (Fallback)
-```python
-response = client.create_snapshot(
-    VolumeId='{{user.volume_id}}',
-    Description='{{user.snapshot_description:Snapshot of volume}}'
-)
-snapshot_id = response['SnapshotId']
-```
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidVolume.NotFound | HALT — volume does not exist |
+| SnapshotCreationPerVolumeRateExceeded | HALT — too many concurrent snapshots |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Create Image (AMI)
 
 #### Pre-flight
 - Verify instance exists
-- **Recommend** stopping instance first for data consistency:
-  "Stop instance {{user.instance_id}} first? (Recommended for consistent AMI)"
+- **Recommend** stopping instance first for data consistency: "Stop instance {{user.instance_id}} first? (Recommended for consistent AMI)"
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
 IMAGE_ID=$(aws ec2 create-image \
   --instance-id "{{user.instance_id}}" \
@@ -572,16 +660,6 @@ IMAGE_ID=$(aws ec2 create-image \
   --output json | jq -r '.ImageId')
 ```
 Set `{{output.image_id}}` = `$IMAGE_ID`
-
-#### Validate
-Poll until `available` state (max 600s, interval 30s):
-```bash
-for i in $(seq 1 20); do
-  STATUS=$(aws ec2 describe-images --image-ids "{{output.image_id}}" --region "{{user.region}}" --output json | jq -r '.Images[0].State')
-  [ "$STATUS" = "available" ] && break
-  sleep 30
-done
-```
 
 #### Execute — boto3 (Fallback)
 ```python
@@ -594,15 +672,47 @@ response = client.create_image(
 image_id = response['ImageId']
 ```
 
+#### Validate
+Poll until `available` state (max 600s, interval 30s):
+```bash
+for i in $(seq 1 20); do
+  STATUS=$(aws ec2 describe-images --image-ids "{{output.image_id}}" --region "{{user.region}}" --output json | jq -r '.Images[0].State')
+  [ "$STATUS" = "available" ] && break
+  sleep 30
+done
+```
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidInstanceID.NotFound | HALT — instance does not exist |
+| IncorrectInstanceState | HALT — stop instance first for consistent AMI |
+| ThrottlingException | Backoff; retry 3x |
+
 ### Operation: Deregister Image (AMI)
 
 #### Safety Gate (Destructive)
 - **MUST** confirm: "Deregister AMI {{user.image_id}}? This removes the AMI. Existing instances continue running, but new instances cannot be launched from this AMI."
 
-#### Execute — CLI
+#### Execute — CLI (Primary)
 ```bash
-aws ec2 deregister-image --image-id "{{user.image_id}}" --region "{{user.region}}"
+aws ec2 deregister-image --image-id "{{user.image_id}}" --region "{{user.region}}" --output json
 ```
+
+#### Execute — boto3 (Fallback)
+```python
+client.deregister_image(ImageId='{{user.image_id}}')
+```
+
+#### Validate
+`aws ec2 describe-images --image-ids "{{user.image_id}}"` → image not found (error expected).
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidAMIID.NotFound | HALT — AMI does not exist |
+| AMIWithSnapshotsInUse | HALT — AMI has dependent snapshots in use |
+| ThrottlingException | Backoff; retry 3x |
 
 ### Operation: Modify Instance Attribute
 
@@ -610,26 +720,20 @@ aws ec2 deregister-image --image-id "{{user.image_id}}" --region "{{user.region}
 - For instance type change: instance **must** be `stopped`
 - Verify the target attribute is valid
 
-#### Execute — CLI: Change Instance Type
+#### Execute — CLI (Primary) — Change Instance Type
 ```bash
 aws ec2 modify-instance-attribute \
   --instance-id "{{user.instance_id}}" \
   --instance-type "{\"Value\":\"{{user.new_instance_type}}\"}" \
-  --region "{{user.region}}"
+  --region "{{user.region}}" --output json
 ```
 
-#### Execute — CLI: Change Security Groups
+#### Execute — CLI (Primary) — Change Security Groups
 ```bash
 aws ec2 modify-instance-attribute \
   --instance-id "{{user.instance_id}}" \
   --groups "{{user.new_sg_id}}" \
-  --region "{{user.region}}"
-```
-
-#### Validate
-Describe and verify the attribute changed:
-```bash
-aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq '.Reservations[0].Instances[0].InstanceType'
+  --region "{{user.region}}" --output json
 ```
 
 #### Execute — boto3 (Fallback)
@@ -640,15 +744,47 @@ client.modify_instance_attribute(
 )
 ```
 
-## Token Efficiency
+#### Validate
+```bash
+aws ec2 describe-instances --instance-ids "{{user.instance_id}}" --region "{{user.region}}" --output json | jq '.Reservations[0].Instances[0].InstanceType'
+```
 
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded instance types/AMIs — use `describe-instance-types` / `describe-images`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+#### Recover
+| Error | Action |
+|-------|--------|
+| IncorrectInstanceState | HALT — instance must be stopped for type change |
+| InvalidParameterValue | Fix attribute value; retry once |
+| ThrottlingException | Backoff; retry 3x |
+
+## Token Efficiency Guidelines (P0)
+
+The following 6 rules minimize Token consumption:
+
+### TE-1: API Query > Static Tables
+Use API commands instead of hardcoding instance type or AMI tables.
+```markdown
+# DO: describe-instance-types to discover
+aws ec2 describe-instance-types --filters "Name=current-generation,Values=true" --query "InstanceTypes[].InstanceType"
+```
+### TE-2: No docstrings in boto3 SDK
+```python
+# DO: inline comments only
+def run_instance(client, ami, type):
+    try: return client.run_instances(ImageId=ami, InstanceType=type)
+    except ClientError as e: handle_error(e)
+```
+### TE-3: Compact error tables
+```markdown
+| Error | Resolution |
+|-------|-----------|
+| InvalidAMIID.NotFound | HALT — suggest valid AMI |
+```
+### TE-4: Centralized JSON paths
+File-top `## Common JSON Paths` block; one path per resource type.
+### TE-5: YAML anchors in example-config.yaml
+Use `&defaults` anchors in `assets/example-config.yaml`.
+### TE-6: Eliminate cross-file duplicate flows
+SKILL.md already has full flow → no Complete Workflow in reference files.
 
 ## Reference Files
 
@@ -877,4 +1013,3 @@ parse and validate:
 This skill participates in the orchestrator's runbook library. See
 [aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
 for which runbooks invoke this skill.
-

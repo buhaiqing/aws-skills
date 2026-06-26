@@ -1,19 +1,19 @@
 # Troubleshooting — S3
 
-## Common Error Codes
+## Common Error Codes & Recovery
 
-| Error | Agent Action |
-|-------|-------------|
-| BucketAlreadyExists (409) | Use different name |
-| InvalidBucketName (400) | Fix naming (3-63 chars, lowercase, no special chars) |
-| NoSuchBucket (404) | Verify bucket name and region |
-| NoSuchKey (404) | Verify object key |
-| AccessDenied (403) | Add S3 permissions to IAM role |
-| EntityTooLarge (400) | Use multipart upload for large files |
-| KeyTooLong (400) | Shorten object key |
-| InvalidRequest (400) | Review API docs |
-| ThrottlingException (429) | Backoff; retry 3x |
-| InternalError (500) | Retry 3x; HALT if persists |
+| Error | HTTP | Agent Action | Max Retries |
+|-------|------|-------------|-------------|
+| BucketAlreadyExists | 409 | Use different name | 0 — HALT |
+| InvalidBucketName | 400 | Fix naming (3-63 chars, lowercase, no special chars) | 1 — fix and retry |
+| NoSuchBucket | 404 | Verify bucket name and region | 0 — HALT |
+| NoSuchKey | 404 | Verify object key | 0 — HALT |
+| AccessDenied | 403 | Add S3 permissions to IAM role | 0 — HALT |
+| EntityTooLarge | 400 | Use multipart upload for large files | 1 — fix and retry |
+| KeyTooLong | 400 | Shorten object key | 1 — fix and retry |
+| InvalidRequest | 400 | Review API docs | 1 — fix and retry |
+| ThrottlingException | 429 | Exponential backoff | 3 — HALT |
+| InternalError | 500 | Backoff and retry | 3 — HALT |
 
 ## Diagnostic Order
 
@@ -62,16 +62,6 @@
 | InvalidObjectState | Object archived | Restore first: `aws s3api restore-object` |
 | AccessDenied on restore | Need restore permission | Add `s3:RestoreObject` |
 
-## CloudWatch Logs Integration
-
-Check S3 access logs:
-```bash
-aws logs filter-log-events \
-  --log-group-name aws/s3/my-bucket/access-logs \
-  --start-time $(date -u -d '-1 hour' +%s)000 \
-  --output json
-```
-
 ## Performance Issues
 
 | Symptom | Resolution |
@@ -79,13 +69,3 @@ aws logs filter-log-events \
 | Slow list operations | Use prefix filtering; avoid listing entire bucket |
 | High request costs | Use S3 Inventory; reduce LIST calls |
 | Latency | Check region; use S3 Transfer Acceleration |
-
-## Recovery Actions
-
-| Error | Max Retries | Action |
-|-------|-------------|--------|
-| 5xx Internal | 3 | Backoff; retry; HALT after 3 |
-| 429 Throttling | 3 | Exponential backoff |
-| 400 InvalidParameter | 1 | Fix; retry once |
-| 409 BucketAlreadyExists | 0 | HALT; use different name |
-| 404 NoSuchBucket/Key | 0 | HALT; verify name |

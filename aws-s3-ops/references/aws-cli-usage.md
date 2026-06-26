@@ -1,15 +1,6 @@
 # AWS CLI Usage — S3
 
-## Common JSON Paths (Centralized)
-
-```
-# Create:  .Location  (bucket ARN)
-# List:    .Buckets[].{Name,CreationDate}
-# Head:    Empty (204 — check via HTTP response)
-# Put/Get/Copy:  .ETag
-# Delete:  Empty (success — verify via head-object or list)
-# List Objects:  .Contents[].{Key,Size,LastModified} / .IsTruncated
-```
+JSON paths centralized in `SKILL.md` → `## Common JSON Paths`. This file lists CLI syntax only.
 
 ## Command Map
 

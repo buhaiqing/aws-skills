@@ -1,110 +1,49 @@
 # Core Concepts — S3
 
-## What is Amazon S3
+## Overview
 
-- **Purpose**: Object storage with scalability, availability, and security
-- **Category**: Storage
-- **Console**: https://console.aws.amazon.com/s3/
+Amazon S3 is object storage with global namespace and regional data placement.
 - **Docs**: https://docs.aws.amazon.com/s3/
 
-## Primary Resources
+## Resource Model
 
-| Resource | Description | Console Path |
-|----------|-------------|--------------|
-| Bucket | Storage container | /s3/home?region=us-east-1#/buckets |
-| Object | File stored in bucket | Bucket → Objects tab |
-| Prefix | Folder-like path | Object key path |
-| Version | Object version (if enabled) | Bucket → Properties → Versioning |
+| Resource | Description |
+|----------|-------------|
+| Bucket | Storage container (global namespace, regional API) |
+| Object | File stored in bucket (max 5TB, min 0B) |
+| Prefix | Folder-like key prefix |
+| Version | Object version (if versioning enabled) |
 
-## Storage Classes
+## Storage Classes (Summary)
 
-| Class | Use Case | Cost | Access |
-|-------|----------|------|--------|
-| STANDARD | General purpose | Higher | Immediate |
-| STANDARD_IA | Infrequent access | Lower | Immediate |
-| ONEZONE_IA | Infrequent, single AZ | Lowest IA | Immediate |
-| GLACIER | Archive | Low | Minutes-hours |
-| DEEP_ARCHIVE | Long archive | Lowest | Hours |
-| INTELLIGENT_TIERING | Auto optimization | Medium | Immediate |
+- **STANDARD** — general purpose, immediate access
+- **STANDARD_IA / ONEZONE_IA** — infrequent access, lower cost
+- **GLACIER / DEEP_ARCHIVE** — archive, minutes-to-hours restore
+- **INTELLIGENT_TIERING** — auto-optimizes between tiers
 
 ## Bucket Naming Rules
 
-- 3-63 characters
-- Lowercase letters, numbers, hyphens, periods
-- Must start with letter or number
-- No uppercase
-- No underscore
-- No consecutive periods
-- Cannot be IP address format (e.g., 192.168.1.1)
-- Global namespace (unique across all AWS accounts)
+3–63 chars, lowercase + numbers + hyphens + periods, start with letter/number, no IP format, global uniqueness.
 
-## Quotas
+## Key Quotas
 
-| Quota | Default | Adjustable |
-|-------|---------|------------|
-| Buckets per account | 100 | Yes (up to 1000 via support) |
-| Objects per bucket | Unlimited | No |
-| Object size max | 5TB | No |
-| Multipart upload parts max | 10,000 | No |
-| List operations (requests/sec) | 100-800 | No |
+| Quota | Default |
+|-------|---------|
+| Buckets per account | 100 (up to 1000 via support) |
+| Object size max | 5TB |
+| Multipart upload parts max | 10,000 |
+| Min multipart part size | 5MB (recommended) |
 
-## Object Limits
+## Region Handling
 
-| Limit | Value |
-|-------|-------|
-| Maximum object size | 5TB |
-| Minimum object size | 0 bytes |
-| Multipart upload threshold | 100MB (recommended) |
-| Minimum multipart part size | 5MB |
-| Maximum multipart part size | 5GB |
-
-## Lifecycle States
-
-| State | Description | Allowed Operations |
-|-------|-------------|-------------------|
-| Active | Normal state | All operations |
-| Archived | Glacier storage | Restore before access |
-| Transitioning | Moving between classes | Limited |
-| Deleted | Removed | N/A |
+- `us-east-1`: no `LocationConstraint` needed
+- Other regions: `LocationConstraint=<region>` required
 
 ## Dependencies
 
 | Dependency | Required | Skill |
 |------------|----------|-------|
 | IAM Policy | Yes | `aws-iam-ops` |
-| VPC Endpoint (optional) | No | `aws-vpc-ops` |
 | KMS Key (encryption) | Optional | `aws-kms-ops` |
+| VPC Endpoint | No | `aws-vpc-ops` |
 | SNS Topic (notifications) | Optional | `aws-sns-ops` |
-
-## Region Handling
-
-S3 buckets are regional but namespace is global:
-- `us-east-1`: No LocationConstraint needed for create
-- Other regions: Must specify LocationConstraint
-- Buckets accessible from any region after creation
-
-## Pricing Model
-
-- **Storage**: Per GB/month per class
-- **Requests**: PUT/GET/LIST per 1000 requests
-- **Data transfer**: Outbound per GB
-- **Free tier**: 5GB storage, 20,000 GET, 2,000 PUT for 12 months
-
-## Best Practices
-
-### Security
-- Block public access by default
-- Enable bucket policy for access control
-- Use SSE-S3, SSE-KMS, or SSE-C encryption
-- Enable MFA delete for sensitive buckets
-- Enable object lock for compliance
-
-### Availability
-- Use multiple AZs (default)
-- Cross-region replication for DR
-- Versioning for protection
-
-### Cost
-- Lifecycle policies to transition/archive
-- Intelligent-tiering for variable access
-- Delete incomplete multipart uploads

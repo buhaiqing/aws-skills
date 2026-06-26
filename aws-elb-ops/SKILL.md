@@ -17,11 +17,11 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, netw
   AIOps scenarios.
 metadata:
   author: aws
-  version: "2.3.0"
   last_updated: '2026-06-26'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   aiops_level: full-chain
+  version: "2.4.0"
   environment:
   - AWS_ACCESS_KEY_ID
   - AWS_SECRET_ACCESS_KEY
@@ -135,6 +135,125 @@ Poll until `.State.Code` == "active" (max 5 min).
 | QuotaExceeded | HALT; request quota increase |
 | Throttling (429) | Backoff, retry 3x |
 
+## Legacy Operations: CLB (Deprecated)
+
+> ⚠️ **Classic Load Balancer** is a legacy service **deprecated by AWS**. Use ALB or NLB for new workloads. CLB commands use the `aws elb` CLI service (not `elbv2`).
+
+### Operation: Create CLB
+
+#### Pre-flight
+CLB shares the same pre-flight checks as ALB (CLI version, credentials, VPC, subnets).
+
+#### Execute — CLI (Primary)
+```bash
+aws elb create-load-balancer \
+  --load-balancer-name "{{user.lb_name}}" \
+  --listeners Protocol=HTTP,LoadBalancerPort=80,InstanceProtocol=HTTP,InstancePort=80 \
+  --subnets "{{user.subnet_ids}}" \
+  --security-groups "{{user.security_group_ids}}" \
+  --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+clb_client = boto3.client('elb')
+response = clb_client.create_load_balancer(
+    LoadBalancerName='{{user.lb_name}}',
+    Listeners=[
+        {'Protocol': 'HTTP', 'LoadBalancerPort': 80,
+         'InstanceProtocol': 'HTTP', 'InstancePort': 80}
+    ],
+    Subnets=['{{user.subnet_ids}}'],
+    SecurityGroups=['{{user.security_group_ids}}']
+)
+```
+See `references/boto3-sdk-usage.md` for full patterns.
+
+#### Validate
+```bash
+aws elb describe-load-balancers \
+  --load-balancer-names "{{user.lb_name}}" --output json
+```
+Check `.LoadBalancerDescriptions[0].HealthCheck.Target` is set.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| DuplicateLoadBalancerName | Use different name |
+| CertificateNotFound | Verify SSL cert ARN |
+| InvalidSubnet | HALT; verify subnet IDs |
+| Throttling | Backoff, retry 3x |
+
+### Operation: Configure Health Check
+
+#### Execute — CLI (Primary)
+```bash
+aws elb configure-health-check \
+  --load-balancer-name "{{user.lb_name}}" \
+  --health-check Target=HTTP:80/health,Interval=30,Timeout=5,UnhealthyThreshold=2,HealthyThreshold=10 \
+  --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+clb_client.configure_health_check(
+    LoadBalancerName='{{user.lb_name}}',
+    HealthCheck={
+        'Target': 'HTTP:80/health',
+        'Interval': 30, 'Timeout': 5,
+        'UnhealthyThreshold': 2, 'HealthyThreshold': 10
+    }
+)
+```
+See `references/boto3-sdk-usage.md` for full patterns.
+
+#### Validate
+```bash
+aws elb describe-load-balancers \
+  --load-balancer-names "{{user.lb_name}}" --output json \
+  --query ".LoadBalancerDescriptions[0].HealthCheck"
+```
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| AccessPointNotFound | HALT — verify CLB name exists |
+| InvalidConfigurationRequest | Check health check target format (Protocol:Port/Path) |
+| Throttling | Backoff, retry 3x |
+
+### Operation: Delete CLB
+**Safety Gate**: must obtain explicit `confirm=DELETE_CLB {{user.lb_name}}` before execution.
+
+#### Pre-flight
+```bash
+aws elb describe-load-balancers --load-balancer-names "{{user.lb_name}}" --output json
+```
+Check if instances are registered; warn if any exist.
+
+#### Execute — CLI (Primary)
+```bash
+aws elb delete-load-balancer --load-balancer-name "{{user.lb_name}}" --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+clb_client.delete_load_balancer(LoadBalancerName='{{user.lb_name}}')
+```
+See `references/boto3-sdk-usage.md` for full patterns.
+
+#### Validate
+```bash
+aws elb describe-load-balancers --load-balancer-names "{{user.lb_name}}" --output json
+```
+Expect `LoadBalancerNotFound` error — confirmed deleted.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| AccessPointNotFound | Already deleted — OK |
+| DependencyThrottle | Backoff, retry 3x |
+| OperationNotPermitted | HALT — check if CLB has registered instances |
+
 ## Quality Gate (GCL)
 
 | Setting | Value |
@@ -147,7 +266,8 @@ Poll until `.State.Code` == "active" (max 5 min).
 
 Destructive ops require `{{user.safety_confirm}}`:
 - `deregister-targets` — ratio < 50%: `confirm=DEREGISTER`; ≥ 50%: `confirm=DEREGISTER_DRAIN`; 100%: `confirm=DEREGISTER_ALL`
-- `delete-load-balancer` — must have no listeners; `confirm=DELETE_LB`
+- `delete-load-balancer` — ALB/NLB: must have no listeners; `confirm=DELETE_LB`
+- `delete-load-balancer` — CLB: `confirm=DELETE_CLB <name>`
 - `delete-rule` (default rule is **undeletable**)
 - `modify-load-balancer-attributes` disabling deletion protection — `confirm=DISABLE_DELETION_PROTECTION`
 
