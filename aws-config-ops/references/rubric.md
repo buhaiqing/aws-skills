@@ -35,11 +35,11 @@
 | `put-config-rule` (Custom Rule) | Correctness, Spec Compliance, **Safety** | SourceDetails Lambda ARN must exist; verify Lambda has `config:Put*` permissions |
 | `delete-config-rule` | Correctness, Safety | `confirm=DELETE_RULE <name>` required; verify rule exists via `describe-config-rules` |
 | `start-config-rules-evaluation` | Correctness | Rule must be in ACTIVE state; verify via `describe-config-rule-evaluation-status` |
-| `put-conformance-pack` (Create/Update) | Correctness, Spec Compliance | Template URI must be accessible S3 URI or valid YAML/JSON body; pack name must be unique |
+| `deploy-conformance-pack` | Correctness, Spec Compliance | Template URI must be accessible S3 URI or valid YAML/JSON body; pack name must be unique |
 | `delete-conformance-pack` | Correctness, Safety | `confirm=DELETE_PACK <name>` required; deletes all pack rules and evaluations |
 | `put-configuration-aggregator` (Create/Update) | Correctness, Spec Compliance | Account IDs must be valid 12-digit AWS account IDs; Organization source requires Organizations trusted access |
 | `delete-configuration-aggregator` | Correctness, Safety | `confirm=DELETE_AGGREGATOR <name>` required; removes multi-account aggregation |
-| `put-organization-config-rule` | Correctness, Spec Compliance | Requires Organizations master account; rule parameters must be valid JSON |
+| `deploy-organization-config-rule` | Correctness, Spec Compliance | Requires Organizations master account; rule parameters must be valid JSON |
 | `delete-organization-config-rule` | Correctness, Safety | `confirm=DELETE_ORG_RULE <name>` required; affects all member accounts |
 | `put-retention-configuration` | Correctness, **Safety** | RetentionPeriodInDays < 2557 (7 years) should confirm; affects compliance history deletion |
 | `delete-retention-configuration` | Correctness, Safety | `confirm=DELETE_RETENTION` required; reverts to default 7 years |

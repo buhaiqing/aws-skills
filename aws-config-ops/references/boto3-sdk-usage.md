@@ -124,6 +124,35 @@ client.put_config_rule(
 )
 ```
 
+### Compliance Summary
+```python
+summary = client.get_compliance_summary_by_config_rule()
+for rule_summary in summary['ComplianceSummaryByConfigRule']:
+    print(rule_summary['ConfigRuleName'], rule_summary['Compliance'])
+```
+
+### Resource History
+```python
+history = client.get_resource_config_history(
+    resourceType='AWS::EC2::Instance',
+    resourceId='i-1234567890abcdef0',
+    limit=10
+)
+for item in history['configurationItems']:
+    print(item['configurationItemCaptureTime'], item['configurationStateId'])
+```
+
+### Batch Get Resource Config
+```python
+result = client.batch_get_resource_config(
+    resourceKeys=[
+        {'resourceType': 'AWS::EC2::Instance', 'resourceId': 'i-1234567890abcdef0'}
+    ]
+)
+for resource in result['resourceConfigs']:
+    print(resource['resourceId'], resource.get('configuration', {}).get('instanceType'))
+```
+
 ### Conformance Pack
 ```python
 response = client.put_conformance_pack(
@@ -200,6 +229,26 @@ client.delete_configuration_recorder(ConfigurationRecorderName='default')
 
 # Delete delivery channel
 client.delete_delivery_channel(DeliveryChannelName='default')
+
+# Delete conformance pack
+client.delete_conformance_pack(ConformancePackName='my-pack')
+
+# Delete aggregator
+client.delete_configuration_aggregator(ConfigurationAggregatorName='my-aggregator')
+
+# Delete org rule
+client.delete_organization_config_rule(OrganizationConfigRuleName='org-s3-public-read-prohibited')
+
+# Delete aggregation authorization
+client.delete_aggregation_authorization(
+    AuthorizedAccountId='123456789012',
+    ConfigurationAggregatorName='my-aggregator'
+)
+
+# Retention config
+client.put_retention_configuration(RetentionPeriodInDays=365)
+client.describe_retention_configuration()
+client.delete_retention_configuration()
 ```
 
 ## Error Handling

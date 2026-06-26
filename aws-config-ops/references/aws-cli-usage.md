@@ -3,16 +3,20 @@
 ## Common JSON Paths (Centralized)
 
 ```
-# Recorder:         .ConfigurationRecorders[0].{name,roleARN,recordingGroup.{allSupported,includeGlobalResourceTypes,resourceTypes}}
-# Recording Status: .ConfigurationRecorderStatus{name,lastStatus,lastStartTime,recording}
-# Delivery:         .DeliveryChannels[0].{name,s3BucketName,s3KeyPrefix,snsTopicARN,snapshotDeliveryProperties.deliveryFrequency}
-# Rules:            .ConfigRules[].{ConfigRuleName,ConfigRuleId,ConfigRuleState,Source.{Owner,SourceIdentifier},Scope.ComplianceResourceTypes,MaximumExecutionFrequency}
-# Rule Status:      .ConfigRuleEvaluationStatus[].{ConfigRuleName,FirstActivatedTime,LastErrorCode,LastFailedEvaluationTime}
-# Compliance:       .EvaluationResults[].{ComplianceResourceType,ComplianceResourceId,ComplianceType,Annotation}
-# Aggregator:       .ConfigurationAggregators[].{ConfigurationAggregatorName,ConfigurationAggregatorArn}
-# Pack:             .ConformancePackDetails[].{ConformancePackName,ConformancePackId,TemplateSSMUri}
-# Org Rule:         .OrganizationConfigRules[].{OrganizationConfigRuleName,OrganizationConfigRuleId}
-# Discovered:       .resourceIdentifiers[].{resourceType,resourceId,resourceName}
+# Recorder:             .ConfigurationRecorders[0].{name,roleARN,recordingGroup.{allSupported,includeGlobalResourceTypes,resourceTypes}}
+# Recorder Status:      .ConfigurationRecordersStatus[0].{name,lastStatus,lastStartTime,recording}
+# Delivery:             .DeliveryChannels[0].{name,s3BucketName,s3KeyPrefix,snsTopicARN,configSnapshotDeliveryProperties.{deliveryFrequency}}
+# Rules:                .ConfigRules[].{ConfigRuleName,ConfigRuleId,ConfigRuleState,Source.{Owner,SourceIdentifier},Scope.{ComplianceResourceTypes},MaximumExecutionFrequency}
+# Rule Status:          .ConfigRuleEvaluationStatus[].{ConfigRuleName,FirstActivatedTime,LastSuccessfulEvaluationTime,LastFailedEvaluationTime,LastErrorCode}
+# Compliance:           .EvaluationResults[].{ComplianceResourceType,ComplianceResourceId,ComplianceType,Annotation}
+# Compliance Summary:   .ComplianceSummaryByConfigRule[].{ConfigRuleName,ConfigRuleId,Compliance.{CompliantCount,NonCompliantCount,NotApplicableCount,InsufficientDataCount}}
+# Aggregator:           .ConfigurationAggregators[].{ConfigurationAggregatorName,ConfigurationAggregatorArn,ConfigurationStatus}
+# Agg Auth:             .AuthorizedAccountAggregators[].{AuthorizedAccountId,CreationTimestamp}
+# Pack:                 .ConformancePackDetails[].{ConformancePackName,ConformancePackId,ConformancePackArn,ConformancePackStatus}
+# Org Rule:             .OrganizationConfigRules[].{OrganizationConfigRuleName,OrganizationConfigRuleId,OrganizationConfigRuleStatus}
+# Retention Config:     .RetentionConfiguration.{name,retentionPeriodInDays}
+# Discovered:           .resourceIdentifiers[].{resourceType,resourceId,resourceName}
+# Resource History:     .configurationItems[].{configurationItemCaptureTime,configurationStateId,resourceType,resourceId}
 ```
 
 ## Command Map
@@ -46,6 +50,10 @@
 | Get resource config history | `aws configservice get-resource-config-history` |
 | Select resources (SQL) | `aws configservice select-resource-config` |
 | Put retention configuration | `aws configservice put-retention-configuration` |
+| Delete retention configuration | `aws configservice delete-retention-configuration` |
+| Describe retention configuration | `aws configservice describe-retention-configuration` |
+| List aggregation authorizations | `aws configservice list-aggregation-authorizations` |
+| Delete aggregation authorization | `aws configservice delete-aggregation-authorization` |
 
 ## Common Patterns
 
@@ -120,6 +128,78 @@ aws configservice select-resource-config \
 ```bash
 aws configservice batch-get-resource-config \
   --resource-keys '[{"resourceType":"AWS::EC2::Instance","resourceId":"i-1234567890abcdef0"}]' \
+  --region us-east-1 \
+  --output json
+```
+
+### Compliance Summary
+```bash
+aws configservice get-compliance-summary-by-config-rule \
+  --config-rule-name s3-public-read-prohibited \
+  --region us-east-1 \
+  --output json
+```
+
+### Set/Modify Retention Configuration
+```bash
+aws configservice put-retention-configuration \
+  --retention-period-in-days 365 \
+  --region us-east-1 \
+  --output json
+aws configservice describe-retention-configuration \
+  --region us-east-1 \
+  --output json
+aws configservice delete-retention-configuration \
+  --region us-east-1 \
+  --output json
+```
+
+### Delete Delivery Channel
+```bash
+aws configservice delete-delivery-channel \
+  --delivery-channel-name default \
+  --region us-east-1 \
+  --output json
+```
+
+### Delete Configuration Aggregator
+```bash
+aws configservice delete-configuration-aggregator \
+  --configuration-aggregator-name my-aggregator \
+  --region us-east-1 \
+  --output json
+```
+
+### Put Organization Config Rule
+```bash
+aws configservice put-organization-config-rule \
+  --organization-config-rule-name 'org-s3-public-read-prohibited' \
+  --organization-managed-rule-metadata '{"RuleIdentifier":"S3_BUCKET_PUBLIC_READ_PROHIBITED","MaximumExecutionFrequency":"TwentyFourHours"}' \
+  --region us-east-1 \
+  --output json
+```
+
+### Delete Organization Config Rule
+```bash
+aws configservice delete-organization-config-rule \
+  --organization-config-rule-name 'org-s3-public-read-prohibited' \
+  --region us-east-1 \
+  --output json
+```
+
+### List Aggregation Authorizations
+```bash
+aws configservice list-aggregation-authorizations \
+  --configuration-aggregator-name my-aggregator \
+  --region us-east-1 \
+  --output json
+```
+
+### Delete Aggregation Authorization
+```bash
+aws configservice delete-aggregation-authorization \
+  --authorized-account-id '123456789012' \
+  --configuration-aggregator-name my-aggregator \
   --region us-east-1 \
   --output json
 ```

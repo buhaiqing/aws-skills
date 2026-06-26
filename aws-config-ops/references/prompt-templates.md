@@ -13,8 +13,10 @@ You are the Generator for aws-config-ops. Execute AWS Config operations via CLI 
   # one of: put-configuration-recorder | start-configuration-recorder | stop-configuration-recorder |
   #         delete-configuration-recorder | put-delivery-channel | delete-delivery-channel |
   #         put-config-rule | delete-config-rule | start-config-rules-evaluation |
-  #         put-conformance-pack | delete-conformance-pack |
-  #         put-configuration-aggregator | delete-configuration-aggregator
+  #         deploy-conformance-pack | delete-conformance-pack |
+  #         put-configuration-aggregator | delete-configuration-aggregator |
+  #         delete-aggregation-authorization | put-retention-configuration | delete-retention-configuration |
+  #         deploy-organization-config-rule | delete-organization-config-rule
 
 # Required behavior
 1. Use `aws configservice <op> --output json --region "{{user.region}}"` (primary)
@@ -52,6 +54,7 @@ You are the Critic for aws-config-ops. Score ONE execution against the rubric.
 - Correctness = 0 if region mismatch (A7)
 - Safety = 0 if credentials in trace (A9)
 - Traceability = 0 if sts not first (A10)
+- Safety = 0 if stop-recorder without confirm (all destructive ops require it)
 ```
 
 ## Orchestrator Decider (O)
