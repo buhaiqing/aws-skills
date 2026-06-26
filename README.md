@@ -488,20 +488,20 @@ aws sts get-caller-identity --output json
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
 | aws-skill-generator | Meta Skill | ✅ Complete v1.0.0 |
-| aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.3.0 |
+| aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.0.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
 | aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.0.0 |
 | aws-s3-ops | S3 (Object Storage) | ✅ Complete v1.1.0 |
-| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.4.0 |
+| aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.5.0 |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete v1.1.0 |
-| aws-elb-ops | ELB (Load Balancing) | ✅ Complete v2.2.0 |
+| aws-elb-ops | ELB (Load Balancing) | ✅ Complete v2.4.0 |
 | aws-eks-ops | EKS (Kubernetes) | ✅ Complete v1.0.0 |
-| aws-lambda-ops | Lambda (Function Compute) | ✅ Complete v1.1.0 |
+| aws-lambda-ops | Lambda (Function Compute) | ✅ Complete v1.2.0 |
 | aws-vpc-ops | VPC (Network) | ✅ Complete v1.3.0 |
-| aws-rds-ops | RDS (Database) | ✅ Complete v1.1.0 |
+| aws-rds-ops | RDS (Database) | ✅ Complete v1.2.0 |
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL clusters) | ✅ Complete v1.2.0 |
-| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.0.0 |
+| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.1.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.1.0 |
 | aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.0.0 |
 | aws-kms-ops | KMS (Encryption) | ✅ Complete v2.1.0 |
@@ -517,7 +517,7 @@ aws sts get-caller-identity --output json
 | aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
 | aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.0.0 |
-| aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.1.0 |
+| aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.2.0 |
 | aws-topo-discovery | Cross-product Topology Discovery | ✅ Complete v1.1.0 |
 | aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.0.0** — see [§AIOps Cruise](#aiops-cruise) |
 
@@ -719,10 +719,10 @@ expanded coverage:
 |--------|-----------------|----------------|-------------|
 | `aws-aiops-orchestrator` | — | **v0.1.0 (new)** | **Cross-service orchestrator**: 53 detection rules, 22 runbooks, 16 downstream skills patched with delegate contract; bridges single-service AIOps into end-to-end RCA + coordinated remediation |
 | `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps scenarios, self-healing, RCA, cost optimization, change management; **orchestrator-aware (P0 patched)** |
-| `aws-cloudwatch-ops` | v2.3.0 | **v2.4.0** | SKILL极致瘦身 (610→~145 lines); Operation Index → references/operation-index.md |
-| `aws-ec2-ops` | v1.1.0 | **v1.3.0** | LB-target diagnostics, auto-reboot, capacity prediction; **GCL pilot** + **orchestrator-aware (P0 patched)** |
+| `aws-cloudwatch-ops` | v2.3.0 | **v2.5.0** | 模板对齐重构: 20个 Operation 块, Config File Placeholders, 拆分 Pre-flight, ASCII 图, TE 章节, AIOps 内容保留 |
+| `aws-ec2-ops` | v1.1.0 | **v1.4.0** | 模板对齐重构: Config File Placeholders, 拆分 Pre-flight, ASCII 图, 补齐 boto3/Validate/Recover, TE 章节; **GCL pilot** + **orchestrator-aware** |
 | `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log analysis, SG drift detection, network RCA; **orchestrator-aware (P0 patched)** |
-| `aws-rds-ops` | v1.1.0 | **v1.1.0+** | DB diagnostics, RDS connections; **orchestrator-aware (P0 patched)** |
+| `aws-rds-ops` | v1.2.0 | **v1.2.0+** | DB diagnostics, RDS connections; **orchestrator-aware (P0 patched)** |
 | `aws-acm-ops` | — | **v1.0.0 (new)** | Certificate lifecycle, expiry monitoring, auto-renewal; **orchestrator-aware (P0 patched)** |
 | `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS failover automation, health check ELB integration; **orchestrator-aware (P0 patched)** |
 | `aws-waf-ops` | — | **v1.0.0 (new)** | WAF AIOps: traffic anomaly, rate limiting, Managed Rules, rule audit; **orchestrator-aware (P0 patched)** |

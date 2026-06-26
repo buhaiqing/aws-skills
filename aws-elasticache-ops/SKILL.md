@@ -13,8 +13,8 @@ compatibility: >-
   to AWS endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-06-26"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   environment:
@@ -153,26 +153,15 @@ aws elasticache delete-cache-cluster \
   --final-snapshot-identifier "{{user.snapshot_id}}"
 ```
 
-## Redis vs Memcached
+## Redis vs Memcached (Key Differences)
 
 | Feature | Redis | Memcached |
 |---------|-------|-----------|
-| Data Structures | Strings, Lists, Sets, Hashes | Strings only |
-| Persistence | Yes (AOF, RDB) | No |
-| Replication | Yes (Primary/Replicas) | No |
-| Clustering | Yes (Sharding) | No |
-| Multi-thread | No | Yes |
-| Transactions/Pub/Sub | Yes | No |
-
-## Token Efficiency
-
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded engine versions/node types — use `describe-cache-engine-versions` / `describe-reserved-cache-nodes-offerings`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+| Data Structures | Rich (Strings, Lists, Sets, Hashes, Sorted Sets) | Strings only |
+| Persistence | Yes (AOF/RDB) | No |
+| Replication | Yes (Primary+Replicas) | No |
+| Clustering/Sharding | Yes | No |
+| Use `describe-cache-engine-versions` for latest engine versions. | | |
 
 ## Quality Gate (GCL)
 

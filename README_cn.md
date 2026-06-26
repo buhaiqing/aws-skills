@@ -488,20 +488,20 @@ aws sts get-caller-identity --output json
 |------|------|------|
 | aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
 | aws-skill-generator | Meta Skill | ✅ 完成 v1.0.0 |
-| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.3.0 |
+| aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.4.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.0.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
 | aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.0.0 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 v1.1.0 |
-| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.4.0 |
+| aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.5.0 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 v1.1.0 |
-| aws-elb-ops | ELB (负载均衡) | ✅ 完成 v2.2.0 |
+| aws-elb-ops | ELB (负载均衡) | ✅ 完成 v2.4.0 |
 | aws-eks-ops | EKS (Kubernetes) | ✅ 完成 v1.0.0 |
-| aws-lambda-ops | Lambda (函数计算) | ✅ 完成 v1.1.0 |
+| aws-lambda-ops | Lambda (函数计算) | ✅ 完成 v1.2.0 |
 | aws-vpc-ops | VPC (网络) | ✅ 完成 v1.3.0 |
-| aws-rds-ops | RDS (数据库) | ✅ 完成 v1.1.0 |
+| aws-rds-ops | RDS (数据库) | ✅ 完成 v1.2.0 |
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL 集群) | ✅ 完成 v1.2.0 |
-| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.0.0 |
+| aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.1.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.1.0 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.0.0 |
 | aws-kms-ops | KMS (加密) | ✅ 完成 v2.1.0 |
@@ -518,7 +518,7 @@ aws sts get-caller-identity --output json
 | aws-guardduty-ops | GuardDuty (威胁检测) | ✅ 完成 v1.0.0 |
 | aws-securityhub-ops | Security Hub (安全发现/合规) | ✅ 完成 v1.0.0 |
 | aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.0.0 |
-| aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.1.0 |
+| aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.2.0 |
 | aws-topo-discovery | 跨产品拓扑发现 | ✅ 完成 v1.1.0 |
 | aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.0.0** — 见 [§AIOps 巡检](#aiops-巡检) |
 
@@ -612,6 +612,29 @@ aws-aiops-orchestrator/
 | **P2**（可选）| lambda、stepfunctions、eventbridge、sns、sqs、ssm、secretsmanager、elasticache、opensearch、dynamodb、cloudfront、eks、athena、ram | ⏳ 待办（按需） |
 
 批量应用：使用 `scripts/apply_aiops_adapter_patch.py`（幂等）。
+
+### 版本历史
+
+| 技能 | 旧版 | 新版 | 变更说明 |
+|------|------|------|----------|
+| `aws-aiops-orchestrator` | — | **v0.1.0（新增）** | **跨服务编排器**：53 条检测规则、22 个 runbook、16 个已打补丁的下游技能；桥接单服务 AIOps 为端到端 RCA + 协同修复 |
+| `aws-elb-ops` | v1.0.0 | **v2.2.0** | AIOps 场景、自愈、RCA、成本优化、变更管理；**已适配编排器（P0）** |
+| `aws-cloudwatch-ops` | v2.3.0 | **v2.5.0** | 模板对齐重构: 20 个 Operation 块、Config File Placeholders、拆分 Pre-flight、ASCII 图、TE 章节、保留 AIOps 内容 |
+| `aws-ec2-ops` | v1.1.0 | **v1.4.0** | 模板对齐重构；**GCL 试点** + **已适配编排器** |
+| `aws-vpc-ops` | v1.1.0 | **v1.1.0+** | Flow Log 分析、SG 漂移检测、网络 RCA；**已适配编排器（P0）** |
+| `aws-rds-ops` | v1.2.0 | **v1.2.0+** | DB 诊断、RDS 连接；**已适配编排器（P0）** |
+| `aws-acm-ops` | — | **v1.0.0（新增）** | 证书生命周期、到期监控、自动续期；**已适配编排器（P0）** |
+| `aws-route53-ops` | v1.0.0 | **v1.0.0+** | DNS 故障转移自动化、健康检查 ELB 集成；**已适配编排器（P0）** |
+| `aws-waf-ops` | — | **v1.0.0（新增）** | WAF AIOps：流量异常、速率限制、托管规则、规则审计；**已适配编排器（P0）** |
+| `aws-autoscaling-ops` | — | **v1.0.0（新增）** | ASG 管理、扩缩策略、实例刷新、生命周期钩子、容量治理；**GCL** + **已适配编排器（P1）** |
+| `aws-config-ops` | — | **v1.0.0（新增）** | 配置记录器、投递通道、托管/自定义规则、合规包、聚合器、合规评估；**GCL** + **已适配编排器（P1）** |
+| `aws-eventbridge-ops` | — | **v1.0.0（新增）** | 事件总线、规则/目标、API 目标、连接、归档/重放、调度器、管道；**GCL** + **已适配编排器（P2 待办）** |
+| `aws-cloudtrail-ops` | v1.0.0 | **v1.0.0+** | API 事件关联、变更时间线；**已适配编排器（P1）** |
+| `aws-s3-ops` | v1.0.0 | **v1.1.0** | 生命周期缺口检测、公开访问审计、成本优化；**GCL 试点** + **已适配编排器（P1）** |
+| `aws-iam-ops` | v1.0.0 | **v1.1.0** | 凭据泄露响应、IAM 附加追踪；**GCL 试点** + **已适配编排器（P1）** |
+| `aws-kms-ops` | v1.0.0 | **v2.1.0** | 密钥合规性、轮换、删除保护；**GCL 试点** + **已适配编排器（P1）** |
+| `aws-guardduty-ops` | — | **v1.0.0（新增）** | 威胁检测、发现关联；**已适配编排器（P1）** |
+| `aws-securityhub-ops` | — | **v1.0.0（新增）** | 安全评分、合规标准聚合；**已适配编排器（P1）** |
 
 ### 完整覆盖统计
 

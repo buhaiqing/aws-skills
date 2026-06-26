@@ -1,231 +1,88 @@
 # Core Concepts — ElastiCache
 
-## What is AWS ElastiCache
+## Overview
 
-- **Purpose**: Managed in-memory caching service for Redis and Memcached
-- **Category**: Database & Caching
-- **Console**: https://console.aws.amazon.com/elasticache/home
-- **Docs**: https://docs.aws.amazon.com/AmazonElastiCache/
+AWS ElastiCache is a managed in-memory caching service for Redis and Memcached.
 
-## Engine Comparison
+## Engine Comparison (Core Decisions Only)
 
-| Feature | Redis | Memcached |
-|---------|-------|-----------|
-| Data Structures | Strings, Lists, Sets, Hashes, Sorted Sets | Strings only |
-| Persistence | Yes (RDB, AOF) | No |
-| Replication | Yes (Primary + Replicas) | No |
-| Clustering/Sharding | Yes (Cluster Mode) | No |
-| Multi-thread | No (single-threaded) | Yes (multi-threaded) |
-| Transactions | Yes (MULTI/EXEC) | No |
-| Pub/Sub | Yes | No |
-| Lua Scripts | Yes | No |
-| Sorted Sets | Yes | No |
-| TTL | Per-key | Per-item (slabs) |
-| Auth | Yes (AUTH token) | No |
+| Aspect | Redis | Memcached |
+|--------|-------|-----------|
+| Data Structures | Rich: Strings, Lists, Sets, Sorted Sets, Hashes, Streams | Strings only |
+| Persistence | Yes (RDB snapshot, AOF log) | No |
+| Replication | Yes (Primary + Replicas, auto-failover) | No |
+| Clustering/Sharding | Yes (Cluster Mode: up to 500 shards) | No (manual client-side sharding) |
+| Auth & Encryption | AUTH token, TLS, at-rest encryption, IAM auth | No |
+| Best for | Caching + durable state, pub/sub, rate limiting | Simple key-value cache, high concurrency |
 
-## Architecture
+Use `aws elasticache describe-cache-engine-versions --engine redis|memcached` for latest versions.
 
-### Redis Architecture
-
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| Single Node | One Redis instance | Dev/Test, small cache |
-| Cluster Mode Disabled | Primary + Read Replicas | High read throughput |
-| Cluster Mode Enabled | Sharded across node groups | Large datasets, high throughput |
-
-### Memcached Architecture
-
-| Mode | Description |
-|------|-------------|
-| Single Node | One Memcached instance |
-| Multi-Node | Multiple nodes with distributed hashing |
-
-## Replication Group Components (Redis)
+## Replication Group Architecture (Redis)
 
 | Component | Description |
 |-----------|-------------|
-| Primary Cluster | Write endpoint, leader |
-| Read Replicas | Read-only copies, followers |
-| Node Group | Shard (Cluster Mode enabled) |
-| Primary Endpoint | Write endpoint address |
-| Reader Endpoint | Read endpoint address |
+| Cluster Mode Disabled | Primary + up to 5 Replicas; read scaling |
+| Cluster Mode Enabled | Up to 500 shards × 5 replicas each; data partitioning |
+| Primary Endpoint | Write endpoint (DNS, auto-failover-aware) |
+| Reader Endpoint | Round-robin read endpoint for replicas |
 
-## Cache Cluster Components
+## Cache Cluster (Memcached / Single-Node Redis)
 
-| Component | Description |
+Simple multi-node group. Each node independent; data distributed by client hashing strategy.
+
+## Key Operations
+
+| Resource | Creates via | Describes via | Deletes via |
+|----------|-------------|---------------|-------------|
+| Replication Group | `create-replication-group` | `describe-replication-groups` | `delete-replication-group` |
+| Cache Cluster | `create-cache-cluster` | `describe-cache-clusters` | `delete-cache-cluster` |
+| Snapshot (Redis) | `create-snapshot` | `describe-snapshots` | `delete-snapshot` |
+| Subnet Group | `create-cache-subnet-group` | `describe-cache-subnet-groups` | `delete-cache-subnet-group` |
+| Parameter Group | `create-cache-parameter-group` | `describe-cache-parameters` | `delete-cache-parameter-group` |
+
+## Node Types
+
+- **Burstable (T3/T4g)**: Dev/test, small workloads
+- **General Purpose (M5/M6g)**: Balanced compute/memory
+- **Memory Optimized (R5/R6g)**: Memory-intensive workloads
+
+Use `aws elasticache list-allowed-node-type-modifications --replication-group-id <id>` for upgrade paths.
+Use `describe-reserved-cache-nodes-offerings` for pricing info.
+
+## Networking
+
+| Component | Requirement |
 |-----------|-------------|
-| Cache Node | Individual instance |
-| Cache Cluster | Collection of nodes (Memcached) |
-| Endpoint | Connection address |
-| Port | Redis: 6379, Memcached: 11211 |
+| Subnet group | ≥ 2 subnets across different AZs for HA |
+| SG ingress | Port 6379 (Redis) or 11211 (Memcached) |
+| Encryption | TLS for transit, KMS for at-rest (Redis only) |
 
-## Cache Node Types
+## Security
 
-### General Purpose (M5/M6G)
-| Node Type | vCPU | Memory | Network |
-|-----------|------|--------|---------|
-| cache.m5.large | 2 | 6.4 GB | Up to 5 Gbps |
-| cache.m5.xlarge | 4 | 13 GB | Up to 10 Gbps |
-| cache.m5.2xlarge | 8 | 26 GB | Up to 10 Gbps |
-| cache.m5.4xlarge | 16 | 52 GB | Up to 10 Gbps |
-| cache.m6g.large | 2 | 6.4 GB | Up to 5 Gbps (Graviton) |
-| cache.m6g.xlarge | 4 | 13 GB | Up to 10 Gbps |
+- Redis AUTH token (set at creation)
+- IAM auth for Redis (token-based, supported in redis7+)
+- At-rest encryption (KMS, Redis only)
+- In-transit encryption (TLS, Redis only)
 
-### Memory Optimized (R5/R6G)
-| Node Type | vCPU | Memory | Network |
-|-----------|------|--------|---------|
-| cache.r5.large | 2 | 13 GB | Up to 5 Gbps |
-| cache.r5.xlarge | 4 | 27 GB | Up to 10 Gbps |
-| cache.r5.2xlarge | 8 | 54 GB | Up to 10 Gbps |
-| cache.r5.4xlarge | 16 | 108 GB | Up to 10 Gbps |
-| cache.r6g.large | 2 | 13 GB | Up to 5 Gbps (Graviton) |
-| cache.r6g.xlarge | 4 | 27 GB | Up to 10 Gbps |
+## Parameter Groups
 
-### Burstable (T3/T4G)
-| Node Type | vCPU | Memory | Use Case |
-|-----------|------|--------|----------|
-| cache.t3.micro | 1 | 0.5 GB | Dev/Test |
-| cache.t3.small | 1 | 1.4 GB | Dev/Test |
-| cache.t3.medium | 2 | 3.1 GB | Small prod |
-| cache.t4g.micro | 1 | 0.5 GB | Dev/Test (Graviton) |
-
-## Cluster Mode Enabled (Redis Sharding)
-
-| Parameter | Description |
-|-----------|-------------|
-| NumNodeGroups | Number of shards (1-500) |
-| ReplicasPerNodeGroup | Replicas per shard (0-5) |
-| Slot Allocation | 16384 hash slots distributed |
-| Each Node Group | Primary + replicas |
-
-Example: 3 shards × 2 replicas = 9 nodes total
-
-## Automatic Failover (Redis)
-
-| Feature | Description |
-|---------|-------------|
-| Multi-AZ | Replicas in different AZs |
-| Automatic Failover | Replica promoted on primary failure |
-| Detection Time | 30-60 seconds |
-| Failover Time | 1-2 minutes |
-
-## Encryption & Security
-
-| Feature | Redis | Memcached |
-|---------|-------|-----------|
-| At-Rest Encryption | Yes (optional) | No |
-| Transit Encryption | Yes (TLS) | No |
-| Auth Token | Yes (Redis AUTH) | No |
-| IAM Authentication | Yes (optional) | No |
-
-## Persistence (Redis Only)
-
-| Type | Description | Trade-off |
-|------|-------------|-----------|
-| RDB (Snapshot) | Point-in-time snapshots | Good for backup, may lose recent data |
-| AOF (Append Only) | Log every write | More durable, larger files |
-| Both | RDB + AOF | Best durability |
-
-## Cache Parameter Groups
-
-| Parameter Family | Engine |
-|------------------|--------|
+| Family | Engine |
+|--------|--------|
 | redis7 | Redis 7.x |
 | redis6x | Redis 6.x |
 | memcached1.6 | Memcached 1.6.x |
 
-### Common Redis Parameters
+Key Redis params: `maxmemory-policy` (eviction), `timeout` (client idle), `appendonly` (persistence).
+Use `aws elasticache describe-cache-parameters` to inspect.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| maxmemory-policy | volatile-lru | Eviction policy |
-| timeout | 0 | Client timeout (seconds) |
-| tcp-keepalive | 300 | TCP keepalive |
-| cluster-enabled | yes | Cluster mode |
-| appendonly | no | AOF persistence |
+## Service Quotas
 
-## Subnet Groups
+| Resource | Default | API to check |
+|----------|---------|-------------|
+| Clusters per region | 100 | `describe-cache-clusters` |
+| Replication groups per region | 50 | `describe-replication-groups` |
+| Max replicas per RG | 5 | Fixed |
+| Max shards (Cluster Mode) | 500 | Fixed |
 
-| Component | Requirement |
-|-----------|-------------|
-| Subnets | At least 2 AZs recommended |
-| CIDR | Enough IPs for all nodes |
-| VPC | Same VPC for all subnets |
+Use `aws service-quotas get-service-quota` or AWS Console for current limits.
 
-## Quotas
-
-| Quota | Default | Adjustable |
-|-------|---------|------------|
-| Clusters per Region | 100 | Yes |
-| Nodes per Cluster (Memcached) | 20 | Yes |
-| Nodes per Region | 500 | Yes |
-| Replication Groups per Region | 50 | Yes |
-| Node Groups per Cluster | 500 | No |
-| Replicas per Node Group | 5 | No |
-| Parameter Groups | 50 | Yes |
-| Subnet Groups | 50 | Yes |
-| Snapshots | 100 per cluster | No |
-
-## Best Practices
-
-### Redis
-- Use Multi-AZ for production
-- Enable automatic failover
-- Use Cluster Mode for large datasets
-- Enable encryption for sensitive data
-- Set appropriate maxmemory-policy
-- Monitor replication lag
-
-### Memcached
-- Use multiple nodes for throughput
-- Distribute across AZs
-- Monitor connection count
-- Set appropriate slab sizes
-
-### General
-- Deploy in private subnets
-- Use security groups to restrict access
-- Monitor cache hit rate
-- Set appropriate TTL values
-- Scale based on memory usage
-
-## Pricing
-
-| Component | Cost |
-|-----------|------|
-| Cache Nodes | Per-node hourly rate |
-| Data Transfer | VPC data transfer rates |
-| Snapshots | Backup storage charges |
-| Reserved Nodes | Discounted rate (1-3 year) |
-
-Example pricing (us-east-1):
-- cache.t3.micro: ~$0.026/hour
-- cache.m5.large: ~$0.125/hour
-- cache.r5.large: ~$0.175/hour
-
-## Monitoring Metrics
-
-| Metric | Redis | Memcached |
-|--------|-------|-----------|
-| CacheHits | Yes | Yes |
-| CacheMisses | Yes | Yes |
-| Evictions | Yes | Yes |
-| BytesUsedForCache | Yes | Yes |
-| CPUUtilization | Yes | Yes |
-| SwapUsage | Yes | Yes |
-| CurrentConnections | Yes | Yes |
-| NewConnections | Yes | Yes |
-| Get/Set Commands | Yes | No |
-| ReplicationLag | Yes | No |
-
-## Related Services
-
-| Service | Integration |
-|---------|-------------|
-| EC2 | Application instances |
-| VPC | Network, subnets, SG |
-| CloudWatch | Monitoring |
-| Lambda | Event-driven scaling |
-| Route 53 | DNS endpoints |
-| S3 | Backup storage (manual) |
-| IAM | Authentication (Redis) |
