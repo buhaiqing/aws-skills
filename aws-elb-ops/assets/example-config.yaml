@@ -1,5 +1,104 @@
 # ELB Example Configurations
 
+## YAML Anchors — Reusable Definitions
+
+### Health Check Profiles
+
+```yaml
+# Default HTTP health check (ALB)
+_health_check_http: &health_check_http
+  protocol: HTTP
+  port: 80
+  path: /health
+  interval_seconds: 30
+  timeout_seconds: 5
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+  matcher:
+    http_code: "200"
+
+# Default TCP health check (NLB)
+_health_check_tcp: &health_check_tcp
+  protocol: TCP
+  port: 8080
+  interval_seconds: 30
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+
+# HTTPS health check with 10s timeout
+_health_check_https: &health_check_https
+  protocol: HTTPS
+  port: 443
+  path: /health
+  interval_seconds: 30
+  timeout_seconds: 10
+  healthy_threshold: 5
+  unhealthy_threshold: 2
+  matcher:
+    http_code: "200-299"
+
+# Custom port health check (15s interval, 3s timeout)
+_health_check_custom: &health_check_custom
+  protocol: HTTP
+  port: traffic_port
+  path: /healthcheck
+  interval_seconds: 15
+  timeout_seconds: 3
+  healthy_threshold: 3
+  unhealthy_threshold: 3
+  matcher:
+    http_code: "200,202"
+```
+
+### Load Balancer Attributes
+
+```yaml
+# Common ALB attributes (deletion protection, cross-zone, access logs)
+_alb_attributes: &alb_attributes
+  - key: deletion_protection.enabled
+    value: true
+  - key: idle_timeout.timeout_seconds
+    value: 60
+  - key: routing.http2.enabled
+    value: true
+  - key: routing.http.drop_invalid_header_fields.enabled
+    value: true
+  - key: load_balancing.cross_zone.enabled
+    value: true
+  - key: access_logs.s3.enabled
+    value: true
+  - key: access_logs.s3.bucket
+    value: my-alb-logs
+  - key: access_logs.s3.prefix
+    value: alb-logs
+
+# Common NLB attributes (deletion protection, cross-zone, access logs)
+_nlb_attributes: &nlb_attributes
+  - key: deletion_protection.enabled
+    value: true
+  - key: load_balancing.cross_zone.enabled
+    value: true
+  - key: access_logs.s3.enabled
+    value: true
+  - key: access_logs.s3.bucket
+    value: my-nlb-logs
+```
+
+### Common Tags
+
+```yaml
+# Standard AIOps tags for all resources
+_common_tags: &common_tags
+  - Key: AIOps
+    Value: "true"
+  - Key: AIOpsModule
+    Value: "aws-elb-ops"
+  - Key: Environment
+    Value: "{{environment}}"
+```
+
+---
+
 ## Application Load Balancer (ALB)
 
 ### Basic ALB Setup
@@ -18,11 +117,7 @@ load_balancer:
   security_groups:
     - sg-web  # Allow HTTP/HTTPS inbound
 
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: Application
-      Value: web-service
+  tags: *common_tags
 
 target_group:
   name: web-servers
@@ -30,22 +125,11 @@ target_group:
   port: 80
   vpc_id: vpc-xxx
   target_type: instance
-
-  health_check:
-    protocol: HTTP
-    path: /health
-    port: 80
-    interval_seconds: 30
-    timeout_seconds: 5
-    healthy_threshold: 5
-    unhealthy_threshold: 2
-    matcher:
-      http_code: "200"
+  health_check: *health_check_http
 
 listener:
   protocol: HTTP
   port: 80
-
   default_action:
     type: forward
     target_group_arn: "{{output.target_group_arn}}"
@@ -66,12 +150,9 @@ load_balancer:
 listener:
   protocol: HTTPS
   port: 443
-
   certificates:
     - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
-
   ssl_policy: ELBSecurityPolicy-2016-08
-
   default_action:
     type: forward
     target_group_arn: "{{output.target_group_arn}}"
@@ -85,7 +166,6 @@ listener:
   port: 443
   certificates:
     - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
-
   default_action:
     type: forward
     target_group_arn: arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/default/xxx
@@ -198,6 +278,8 @@ rule:
       target_group_arn: "{{output.target_group_arn}}"
 ```
 
+---
+
 ## Network Load Balancer (NLB)
 
 ### Basic NLB Setup
@@ -221,18 +303,11 @@ target_group:
   port: 8080
   vpc_id: vpc-xxx
   target_type: instance
-
-  health_check:
-    protocol: TCP
-    port: 8080
-    interval_seconds: 30
-    healthy_threshold: 5
-    unhealthy_threshold: 2
+  health_check: *health_check_tcp
 
 listener:
   protocol: TCP
   port: 80
-
   default_action:
     type: forward
     target_group_arn: "{{output.target_group_arn}}"
@@ -254,7 +329,6 @@ target_group:
   port: 443
   vpc_id: vpc-xxx
   target_type: instance
-
   health_check:
     protocol: TCP
     port: 443
@@ -262,12 +336,9 @@ target_group:
 listener:
   protocol: TLS
   port: 443
-
   certificates:
     - certificate_arn: arn:aws:acm:us-east-1:123456789:certificate/abc-123
-
   ssl_policy: ELBSecurityPolicy-2016-08
-
   default_action:
     type: forward
     target_group_arn: "{{output.target_group_arn}}"
@@ -328,6 +399,8 @@ listener:
     target_group_arn: "{{output.target_group_arn}}"
 ```
 
+---
+
 ## Classic Load Balancer (CLB - Legacy)
 
 ### Basic CLB Setup
@@ -380,101 +453,51 @@ instances:
   - i-bbb
 ```
 
+---
+
 ## Load Balancer Attributes
 
 ### ALB Attributes
 
 ```yaml
-attributes:
-  - key: deletion_protection.enabled
-    value: true
-  - key: idle_timeout.timeout_seconds
-    value: 60
-  - key: routing.http2.enabled
-    value: true
-  - key: routing.http.drop_invalid_header_fields.enabled
-    value: true
-  - key: load_balancing.cross_zone.enabled
-    value: true
-  - key: access_logs.s3.enabled
-    value: true
-  - key: access_logs.s3.bucket
-    value: my-alb-logs
-  - key: access_logs.s3.prefix
-    value: alb-logs
+attributes: *alb_attributes
 ```
 
 ### NLB Attributes
 
 ```yaml
-attributes:
-  - key: deletion_protection.enabled
-    value: true
-  - key: load_balancing.cross_zone.enabled
-    value: true
-  - key: access_logs.s3.enabled
-    value: true
-  - key: access_logs.s3.bucket
-    value: my-nlb-logs
+attributes: *nlb_attributes
 ```
+
+---
 
 ## Health Check Variations
 
 ### HTTP Health Check
 
 ```yaml
-health_check:
-  protocol: HTTP
-  port: 80
-  path: /health
-  interval_seconds: 30
-  timeout_seconds: 5
-  healthy_threshold: 5
-  unhealthy_threshold: 2
-  matcher:
-    http_code: "200"
+health_check: *health_check_http
 ```
 
 ### HTTPS Health Check
 
 ```yaml
-health_check:
-  protocol: HTTPS
-  port: 443
-  path: /health
-  interval_seconds: 30
-  timeout_seconds: 10
-  healthy_threshold: 5
-  unhealthy_threshold: 2
-  matcher:
-    http_code: "200-299"
+health_check: *health_check_https
 ```
 
 ### TCP Health Check (NLB)
 
 ```yaml
-health_check:
-  protocol: TCP
-  port: 8080
-  interval_seconds: 30
-  healthy_threshold: 5
-  unhealthy_threshold: 2
+health_check: *health_check_tcp
 ```
 
 ### Custom Port Health Check
 
 ```yaml
-health_check:
-  protocol: HTTP
-  port: traffic_port  # Use same port as traffic
-  path: /healthcheck
-  interval_seconds: 15
-  timeout_seconds: 3
-  healthy_threshold: 3
-  unhealthy_threshold: 3
-  matcher:
-    http_code: "200,202"
+health_check: *health_check_custom
 ```
+
+---
 
 ## Target Registration Examples
 
@@ -665,13 +688,5 @@ health_check_profiles:
 
 ```yaml
 # All resources must include these tags for automated lifecycle management
-tags:
-  - Key: AIOps
-    Value: "true"
-  - Key: AIOpsModule
-    Value: "aws-elb-ops"
-  - Key: AIOpsVersion
-    Value: "2.0.0"
-  - Key: Environment
-    Value: "{{environment}}"  # production / staging / dev
+tags: *common_tags
 ```
