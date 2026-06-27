@@ -1,516 +1,59 @@
-# CloudTrail Example Configurations
+# CloudTrail Configuration Examples (YAML Anchors)
+# ===============================================
+# Template: Replace {{user.*}} placeholders at runtime.
+# Use YAML anchors to avoid repeating common settings.
 
-Configuration examples for AWS CloudTrail operations.
+# --- Shared Anchors ---
+x-trail-basic: &trail-basic
+  Name: "{{user.TrailName}}"
+  S3BucketName: "{{user.S3BucketName}}"
+  IsMultiRegionTrail: "{{user.IsMultiRegionTrail:false}}"
+  EnableLogFileValidation: true
+  Tags:
+    - Key: "ManagedBy"; Value: "AI-Agent"
 
-## Basic Trail
+x-event-sel-all: &event-sel-all
+  ReadWriteType: "All"
+  IncludeManagementEvents: true
+  DataResources: []
 
-### Simple Regional Trail
-```yaml
-trail:
-  name: "regional-audit-trail"
-  s3_bucket_name: "my-cloudtrail-logs"
-  s3_key_prefix: "audit/regional/"
-  
-  # Regional scope only
-  is_multi_region_trail: false
-  
-  # Security features
-  enable_log_file_validation: true
-  kms_key_id: "alias/cloudtrail"  # Optional - uses SSE-S3 if not specified
-  
-  # Event configuration
-  event_selectors:
-    include_management_events: true
-    read_write_type: "All"  # All, ReadOnly, WriteOnly
-  
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: Purpose
-      Value: audit
-```
+x-event-sel-mgmt: &event-sel-mgmt
+  ReadWriteType: "All"
+  IncludeManagementEvents: true
 
-### Multi-Region Security Trail
-```yaml
-trail:
-  name: "security-trail-global"
-  s3_bucket_name: "security-cloudtrail-logs"
-  s3_key_prefix: "security/"
-  
-  # Multi-region coverage
-  is_multi_region_trail: true
-  
-  # Global services (IAM, Route53, etc.)
-  include_global_service_events: true
-  
-  # Security features
-  enable_log_file_validation: true
-  kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/abcd-1234"
-  
-  # Event selectors - management events only
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-      data_resources: []  # No data events (cost savings)
-  
-  # SNS notification for SIEM
-  sns_topic_name: "cloudtrail-security-alerts"
-  
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: Criticality
-      Value: high
-    - Key: Compliance
-      Value: required
-```
+x-insights-api-rate: &insights-api-rate
+  InsightType: "ApiCallRateInsight"
 
-## Organization Trail
+x-insights-api-error: &insights-api-error
+  InsightType: "ApiErrorRateInsight"
 
-### Enterprise Organization Trail
-```yaml
-trail:
-  name: "org-security-trail"
-  s3_bucket_name: "org-cloudtrail-logs"
-  s3_key_prefix: "organization/security/"
-  
-  # Organization scope
-  is_multi_region_trail: true
-  is_organization_trail: true
-  
-  # KMS with cross-account access
-  kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/org-cloudtrail-key"
-  
-  # Management events + critical data events
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-      data_resources:
-        - type: "AWS::S3::Object"
-          values:
-            - "arn:aws:s3:::sensitive-bucket-1/*"
-            - "arn:aws:s3:::sensitive-bucket-2/*"
-    
-    - read_write_type: "WriteOnly"
-      include_management_events: false
-      data_resources:
-        - type: "AWS::Lambda::Function"
-          values:
-            - "arn:aws:lambda:*:*:function:critical-*"
-  
-  # CloudWatch Logs for real-time
-  cloud_watch_logs:
-    log_group_name: "/aws/cloudtrail/org-security"
-    role_arn: "arn:aws:iam::123456789012:role/CloudTrail-CloudWatch-Role"
-  
-  # SNS for real-time alerts
-  sns_topic_arn: "arn:aws:sns:us-east-1:123456789012:org-security-alerts"
-  
-  tags:
-    - Key: Organization
-      Value: "my-org"
-    - Key: ManagedBy
-      Value: security-team
-```
+# --- Example: Basic Regional Trail ---
+basic-regional: &basic-regional
+  <<: *trail-basic
+  IsMultiRegionTrail: false
+  S3KeyPrefix: "{{user.S3KeyPrefix:audit/}}"
+  EventSelectors:
+    - *event-sel-all
 
-## CloudWatch Logs Integration
+# --- Example: Multi-Region Security Trail ---
+multi-region-security: &multi-region-security
+  <<: *trail-basic
+  IsMultiRegionTrail: true
+  IncludeGlobalServiceEvents: true
+  S3KeyPrefix: "{{user.S3KeyPrefix:security/}}"
+  KmsKeyId: "{{user.KmsKeyId}}"
+  EventSelectors:
+    - *event-sel-all
+  InsightSelectors:
+    - *insights-api-rate
+    - *insights-api-error
 
-### Trail with Real-Time Monitoring
-```yaml
-trail:
-  name: "realtime-audit-trail"
-  s3_bucket_name: "cloudtrail-archive"
-  s3_key_prefix: "archive/"
-  
-  is_multi_region_trail: true
-  enable_log_file_validation: true
-  
-  # CloudWatch Logs for real-time processing
-  cloud_watch_logs:
-    log_group_name: "/aws/cloudtrail/realtime"
-    role_arn: "arn:aws:iam::123456789012:role/CloudTrail-CloudWatch-Role"
-    
-    # CloudWatch Logs configuration
-    retention_in_days: 90
-    
-    # Metric filters for alerting
-    metric_filters:
-      - name: "RootAccountUsage"
-        pattern: '{ $.userIdentity.type = "Root" }'
-        metric_namespace: "CloudTrail/Security"
-        metric_name: "RootAccountEvents"
-        metric_value: "1"
-        default_value: 0
-      
-      - name: "IAMPolicyChanges"
-        pattern: '{ $.eventName = "PutUserPolicy" || $.eventName = "PutGroupPolicy" || $.eventName = "PutRolePolicy" }'
-        metric_namespace: "CloudTrail/Security"
-        metric_name: "IAMPolicyChanges"
-        metric_value: "1"
-  
-  # Event selectors
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-  
-  # Alarms based on metrics
-  alarms:
-    - name: "RootAccountUsage"
-      metric_name: "RootAccountEvents"
-      threshold: 1
-      evaluation_periods: 1
-      comparison_operator: "GreaterThanOrEqualToThreshold"
-      alarm_actions:
-        - "arn:aws:sns:us-east-1:123456789012:security-alerts"
-    
-    - name: "IAMPolicyChanges"
-      metric_name: "IAMPolicyChanges"
-      threshold: 5
-      evaluation_periods: 1
-      comparison_operator: "GreaterThanOrEqualToThreshold"
-      alarm_actions:
-        - "arn:aws:sns:us-east-1:123456789012:security-alerts"
-```
-
-## Data Events Configuration
-
-### S3 Data Events Trail
-```yaml
-trail:
-  name: "s3-data-events-trail"
-  s3_bucket_name: "data-events-cloudtrail"
-  s3_key_prefix: "data-events/"
-  
-  is_multi_region_trail: false  # S3 data events are regional
-  
-  # Specific buckets for data events
-  event_selectors:
-    # Management events
-    - read_write_type: "All"
-      include_management_events: true
-    
-    # S3 data events - specific buckets
-    - read_write_type: "All"
-      include_management_events: false
-      data_resources:
-        - type: "AWS::S3::Object"
-          values:
-            - "arn:aws:s3:::customer-data-bucket/*"
-            - "arn:aws:s3:::financial-records/*"
-            - "arn:aws:s3:::pii-storage/*"
-    
-    # Lambda data events
-    - read_write_type: "WriteOnly"  # Only function invocations
-      include_management_events: false
-      data_resources:
-        - type: "AWS::Lambda::Function"
-          values:
-            - "arn:aws:lambda:us-east-1:123456789012:function:critical-*"
-  
-  enable_log_file_validation: true
-  
-  tags:
-    - Key: DataEvents
-      Value: "true"
-    - Key: Purpose
-      Value: "compliance"
-```
-
-### Lambda Invocation Tracking
-```yaml
-trail:
-  name: "lambda-invocations-trail"
-  s3_bucket_name: "lambda-audit-logs"
-  s3_key_prefix: "lambda/"
-  
-  event_selectors:
-    # Only Lambda data events (write = invocations)
-    - read_write_type: "WriteOnly"
-      include_management_events: false
-      data_resources:
-        - type: "AWS::Lambda::Function"
-          values:
-            - "arn:aws:lambda:us-east-1:123456789012:function:*"  # All functions
-  
-  # Cost note: Charged per 100k Lambda invocations logged
-  # Consider filtering specific functions for cost control
-  
-  tags:
-    - Key: Service
-      Value: "Lambda"
-    - Key: Purpose
-      Value: "cost-tracking"
-```
-
-## Insights Configuration
-
-### Trail with CloudTrail Insights
-```yaml
-trail:
-  name: "insights-enabled-trail"
-  s3_bucket_name: "insights-cloudtrail-logs"
-  s3_key_prefix: "insights/"
-  
-  is_multi_region_trail: true
-  enable_log_file_validation: true
-  kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/insights-key"
-  
-  # Insights selectors
-  insights_selectors:
-    - insight_type: "ApiCallRateInsight"      # Detect unusual API volume
-    - insight_type: "ApiErrorRateInsight"      # Detect unusual error rates
-  
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-  
-  # Insights events are separate from management/data events
-  # Charged separately: $0.35 per 100k insights events
-  
-  tags:
-    - Key: Insights
-      Value: "enabled"
-    - Key: AnomalyDetection
-      Value: "true"
-```
-
-## Cost-Optimized Trail
-
-### Minimal Free Tier Trail
-```yaml
-trail:
-  name: "free-tier-management-trail"
-  s3_bucket_name: "minimal-cloudtrail"
-  s3_key_prefix: "logs/"
-  
-  # First trail per region is FREE for management events
-  # No data events to avoid charges
-  
-  is_multi_region_trail: false  # Regional for cost control
-  
-  # Security features
-  enable_log_file_validation: true
-  # No KMS - uses SSE-S3 (no extra cost)
-  
-  # Event selectors - management events only
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-      data_resources: []  # NO data events
-  
-  # No CloudWatch Logs (avoids ingestion costs)
-  # No SNS (avoids notification costs)
-  
-  # S3 lifecycle for cost optimization
-  s3_lifecycle:
-    - id: "ArchiveToGlacier"
-      status: Enabled
-      transition:
-        - days: 90
-          storage_class: GLACIER
-      expiration:
-        days: 2555  # 7 years retention
-  
-  tags:
-    - Key: CostCenter
-      Value: "security"
-    - Key: Optimization
-      Value: "free-tier"
-```
-
-## Compliance Trail
-
-### PCI DSS Compliant Trail
-```yaml
-trail:
-  name: "pci-compliance-trail"
-  s3_bucket_name: "pci-cloudtrail-logs"
-  s3_key_prefix: "pci-audit/"
-  
-  is_multi_region_trail: true
-  is_organization_trail: true
-  
-  # Encryption
-  enable_log_file_validation: true
-  kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/pci-key"
-  
-  # Comprehensive logging
-  event_selectors:
-    - read_write_type: "All"
-      include_management_events: true
-    
-    # Cardholder data environment S3 buckets
-    - read_write_type: "All"
-      include_management_events: false
-      data_resources:
-        - type: "AWS::S3::Object"
-          values:
-            - "arn:aws:s3:::cde-bucket-1/*"
-            - "arn:aws:s3:::cde-bucket-2/*"
-  
-  # CloudWatch Logs for real-time monitoring
-  cloud_watch_logs:
-    log_group_name: "/aws/cloudtrail/pci"
-    role_arn: "arn:aws:iam::123456789012:role/CloudTrail-Role"
-  
-  # S3 bucket security
-  s3_bucket_policy:
-    block_public_access:
-      block_public_acls: true
-      ignore_public_acls: true
-      block_public_policy: true
-      restrict_public_buckets: true
-    
-    versioning: Enabled
-    
-    object_lock:
-      enabled: true
-      mode: GOVERNANCE  # or COMPLIANCE
-      retention_days: 2555  # 7 years
-  
-  # Cross-region replication for DR
-  s3_replication:
-    enabled: true
-    destination_bucket: "pci-cloudtrail-logs-dr"
-    destination_region: "us-west-2"
-  
-  tags:
-    - Key: Compliance
-      Value: "PCI-DSS"
-    - Key: Retention
-      Value: "7-years"
-```
-
-## Complete Workflow
-
-### Create Production Trail
-```yaml
-workflow:
-  name: "create-production-trail"
-  
-  steps:
-    # 1. Pre-flight
-    - step: "preflight"
-      actions:
-        - "Verify AWS credentials"
-        - "Check CloudTrail service quotas"
-        - "Validate S3 bucket exists or create"
-    
-    # 2. Create S3 bucket
-    - step: "create_s3_bucket"
-      config:
-        bucket_name: "{{user.S3BucketName}}"
-        versioning: true
-        encryption: "AES256"  # SSE-S3
-      
-      # Apply bucket policy
-      policy:
-        - sid: "AWSCloudTrailAclCheck"
-          effect: "Allow"
-          principal: {"Service": "cloudtrail.amazonaws.com"}
-          action: "s3:GetBucketAcl"
-          resource: "arn:aws:s3:::{{user.S3BucketName}}"
-        
-        - sid: "AWSCloudTrailWrite"
-          effect: "Allow"
-          principal: {"Service": "cloudtrail.amazonaws.com"}
-          action: "s3:PutObject"
-          resource: "arn:aws:s3:::{{user.S3BucketName}}/AWSLogs/{{user.AccountId}}/*"
-          condition:
-            string_equals:
-              s3:x-amz-acl: "bucket-owner-full-control"
-    
-    # 3. Create CloudWatch Logs group (optional)
-    - step: "create_cloudwatch_logs"
-      config:
-        log_group_name: "/aws/cloudtrail/{{user.TrailName}}"
-        retention: 90
-    
-    # 4. Create IAM role for CloudWatch Logs
-    - step: "create_iam_role"
-      config:
-        role_name: "CloudTrail-CloudWatchLogs-Role"
-        trust_policy:
-          service: "cloudtrail.amazonaws.com"
-        policy:
-          version: "2012-10-17"
-          statement:
-            - effect: "Allow"
-              actions:
-                - "logs:CreateLogStream"
-                - "logs:PutLogEvents"
-              resources:
-                - "arn:aws:logs:{{user.Region}}:{{user.AccountId}}:log-group:/aws/cloudtrail/{{user.TrailName}}:*"
-    
-    # 5. Create trail
-    - step: "create_trail"
-      config:
-        name: "{{user.TrailName}}"
-        s3_bucket: "{{user.S3BucketName}}"
-        s3_prefix: "{{user.S3KeyPrefix}}"
-        is_multi_region: true
-        enable_log_validation: true
-        cloud_watch_logs_group: "/aws/cloudtrail/{{user.TrailName}}"
-        cloud_watch_logs_role: "arn:aws:iam::{{user.AccountId}}:role/CloudTrail-CloudWatchLogs-Role"
-    
-    # 6. Configure event selectors
-    - step: "put_event_selectors"
-      config:
-        trail_name: "{{user.TrailName}}"
-        selectors:
-          - read_write_type: "All"
-            include_management_events: true
-    
-    # 7. Start logging
-    - step: "start_logging"
-      trail_name: "{{user.TrailName}}"
-    
-    # 8. Verify
-    - step: "verify"
-      actions:
-        - "Check trail status (IsLogging=true)"
-        - "Verify S3 bucket has test log file"
-        - "Validate CloudWatch Logs stream created"
-    
-    # 9. Output trail ARN
-    - step: "output"
-      fields:
-        - "trail_arn"
-        - "s3_bucket"
-        - "status"
-```
-
-## Event Lookup Examples
-
-### Recent Root Account Activity
-```yaml
-lookup:
-  attribute_key: "Username"
-  attribute_value: "root"
-  max_results: 50
-  
-  # Filter for last 24 hours in code
-  time_range: "1d"
-```
-
-### Failed API Calls
-```yaml
-lookup:
-  attribute_key: "EventName"
-  attribute_value: "PutBucketPolicy"
-  
-  # Post-processing to filter errors
-  filter:
-    error_code_not_null: true
-```
-
-### Resource Creation Events
-```yaml
-lookup:
-  attribute_key: "EventName"
-  attribute_value: "CreateTrail"
-  
-  time_range:
-    start: "2024-01-01T00:00:00Z"
-    end: "2024-01-31T23:59:59Z"
-```
+# --- Example: Trail with CloudWatch Logs ---
+trail-with-cw: &trail-with-cw
+  <<: *trail-basic
+  IsMultiRegionTrail: true
+  S3KeyPrefix: "{{user.S3KeyPrefix:cloudtrail/}}"
+  CloudWatchLogsLogGroup: "/aws/cloudtrail/{{user.TrailName}}"
+  CloudWatchLogsRoleArn: "{{user.CloudWatchLogsRoleArn}}"
+  EventSelectors:
+    - *event-sel-mgmt

@@ -16,7 +16,7 @@ dynamodb = boto3.client('dynamodb', region_name='{{env.AWS_DEFAULT_REGION}}')
 config = Config(
     retries={
         'max_attempts': 10,
-        'mode': 'adaptive'  # Adaptive retry for throttling
+        'mode': 'adaptive'
     }
 )
 dynamodb = boto3.client('dynamodb', region_name='{{env.AWS_DEFAULT_REGION}}', config=config)
@@ -39,31 +39,15 @@ def create_table(
     wcu: int = 5,
     billing_mode: str = 'PROVISIONED'
 ):
-    """
-    Create a new DynamoDB table.
-    
-    Args:
-        table_name: Table name (unique within region/account)
-        partition_key: Partition key attribute name
-        partition_key_type: Attribute type (S, N, B)
-        sort_key: Optional sort key attribute name
-        sort_key_type: Sort key attribute type
-        rcu: Read capacity units (for PROVISIONED mode)
-        wcu: Write capacity units (for PROVISIONED mode)
-        billing_mode: 'PROVISIONED' or 'PAY_PER_REQUEST'
-    
-    Returns:
-        dict: Table details
-    """
+    # Provisioned or on-demand based on billing_mode
     try:
         attribute_definitions = [
             {'AttributeName': partition_key, 'AttributeType': partition_key_type}
         ]
-        
         key_schema = [
             {'AttributeName': partition_key, 'KeyType': 'HASH'}
         ]
-        
+
         if sort_key:
             attribute_definitions.append(
                 {'AttributeName': sort_key, 'AttributeType': sort_key_type}
@@ -71,13 +55,13 @@ def create_table(
             key_schema.append(
                 {'AttributeName': sort_key, 'KeyType': 'RANGE'}
             )
-        
+
         params = {
             'TableName': table_name,
             'AttributeDefinitions': attribute_definitions,
             'KeySchema': key_schema
         }
-        
+
         if billing_mode == 'PROVISIONED':
             params['BillingMode'] = 'PROVISIONED'
             params['ProvisionedThroughput'] = {
@@ -86,10 +70,10 @@ def create_table(
             }
         else:
             params['BillingMode'] = 'PAY_PER_REQUEST'
-        
+
         response = dynamodb.create_table(**params)
         return response['TableDescription']
-    
+
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -97,15 +81,7 @@ def create_table(
 ### Describe Table
 ```python
 def describe_table(table_name: str) -> dict:
-    """
-    Get table details including status, schema, and capacity.
-    
-    Args:
-        table_name: Table name
-    
-    Returns:
-        dict: Table details
-    """
+    # Returns full Table description dict
     try:
         response = dynamodb.describe_table(TableName=table_name)
         return response['Table']
@@ -113,23 +89,16 @@ def describe_table(table_name: str) -> dict:
         handle_dynamodb_error(e)
 
 def get_table_status(table_name: str) -> str:
-    """Get current table status."""
+    # Returns TableStatus string (CREATING/ACTIVE/UPDATING/DELETING)
     table = describe_table(table_name)
     return table['TableStatus']
 
 def get_table_capacity(table_name: str) -> tuple:
-    """
-    Get provisioned capacity.
-    
-    Returns:
-        tuple: (rcu, wcu) or None for on-demand
-    """
+    # Returns (rcu, wcu) or None for on-demand
     table = describe_table(table_name)
     billing_mode = table.get('BillingModeSummary', {}).get('BillingMode', 'PROVISIONED')
-    
     if billing_mode == 'PAY_PER_REQUEST':
         return None
-    
     throughput = table['ProvisionedThroughput']
     return (throughput['ReadCapacityUnits'], throughput['WriteCapacityUnits'])
 ```
@@ -137,17 +106,7 @@ def get_table_capacity(table_name: str) -> tuple:
 ### Update Table Capacity
 ```python
 def update_table_capacity(table_name: str, rcu: int, wcu: int) -> dict:
-    """
-    Update provisioned throughput.
-    
-    Args:
-        table_name: Table name
-        rcu: New read capacity units
-        wcu: New write capacity units
-    
-    Returns:
-        dict: Update response
-    """
+    # Update provisioned throughput
     try:
         response = dynamodb.update_table(
             TableName=table_name,
@@ -161,7 +120,7 @@ def update_table_capacity(table_name: str, rcu: int, wcu: int) -> dict:
         handle_dynamodb_error(e)
 
 def switch_to_on_demand(table_name: str) -> dict:
-    """Switch table to on-demand billing mode."""
+    # Switch table to PAY_PER_REQUEST billing mode
     try:
         response = dynamodb.update_table(
             TableName=table_name,
@@ -175,17 +134,7 @@ def switch_to_on_demand(table_name: str) -> dict:
 ### Delete Table
 ```python
 def delete_table(table_name: str) -> dict:
-    """
-    Delete a DynamoDB table.
-    
-    SAFETY: All data will be permanently lost.
-    
-    Args:
-        table_name: Table name
-    
-    Returns:
-        dict: Deletion response
-    """
+    # SAFETY: All data permanently lost. Requires confirmation token.
     try:
         response = dynamodb.delete_table(TableName=table_name)
         return response['TableDescription']
@@ -198,27 +147,14 @@ def delete_table(table_name: str) -> dict:
 ### Put Item
 ```python
 def put_item(table_name: str, item: dict, condition_expression: str = None) -> dict:
-    """
-    Put item into table.
-    
-    Args:
-        table_name: Table name
-        item: Item dict with DynamoDB types
-            {'id': {'S': 'user123'}, 'name': {'S': 'John'}}
-        condition_expression: Optional condition (e.g., 'attribute_not_exists(id)')
-    
-    Returns:
-        dict: Response
-    """
+    # item = {'id': {'S': 'user123'}, 'name': {'S': 'John'}}
+    # condition_expression e.g. 'attribute_not_exists(id)'
     try:
         params = {'TableName': table_name, 'Item': item}
-        
         if condition_expression:
             params['ConditionExpression'] = condition_expression
-        
         response = dynamodb.put_item(**params)
         return response
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -226,17 +162,7 @@ def put_item(table_name: str, item: dict, condition_expression: str = None) -> d
 ### Get Item
 ```python
 def get_item(table_name: str, key: dict, consistent_read: bool = False) -> dict:
-    """
-    Get item from table.
-    
-    Args:
-        table_name: Table name
-        key: Key dict {'id': {'S': 'user123'}}
-        consistent_read: Use strong consistency (default: eventual)
-    
-    Returns:
-        dict: Item or None if not found
-    """
+    # key = {'id': {'S': 'user123'}}; consistent_read=True for strong consistency
     try:
         response = dynamodb.get_item(
             TableName=table_name,
@@ -244,7 +170,6 @@ def get_item(table_name: str, key: dict, consistent_read: bool = False) -> dict:
             ConsistentRead=consistent_read
         )
         return response.get('Item')
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -258,19 +183,8 @@ def update_item(
     attribute_values: dict,
     return_values: str = 'NONE'
 ):
-    """
-    Update item attributes.
-    
-    Args:
-        table_name: Table name
-        key: Key dict
-        update_expression: Update expression (SET, REMOVE, ADD, DELETE)
-        attribute_values: Expression attribute values
-        return_values: NONE, ALL_OLD, UPDATED_OLD, ALL_NEW, UPDATED_NEW
-    
-    Returns:
-        dict: Updated item if return_values specified
-    """
+    # update_expression: SET/REMOVE/ADD/DELETE expressions
+    # return_values: NONE/ALL_OLD/UPDATED_OLD/ALL_NEW/UPDATED_NEW
     try:
         response = dynamodb.update_item(
             TableName=table_name,
@@ -280,7 +194,6 @@ def update_item(
             ReturnValues=return_values
         )
         return response.get('Attributes')
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -288,17 +201,7 @@ def update_item(
 ### Delete Item
 ```python
 def delete_item(table_name: str, key: dict, return_values: str = 'NONE') -> dict:
-    """
-    Delete item from table.
-    
-    Args:
-        table_name: Table name
-        key: Key dict
-        return_values: NONE, ALL_OLD (return deleted item)
-    
-    Returns:
-        dict: Deleted item if return_values='ALL_OLD'
-    """
+    # return_values='ALL_OLD' returns the deleted item
     try:
         response = dynamodb.delete_item(
             TableName=table_name,
@@ -306,7 +209,6 @@ def delete_item(table_name: str, key: dict, return_values: str = 'NONE') -> dict
             ReturnValues=return_values
         )
         return response.get('Attributes')
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -323,20 +225,9 @@ def query_table(
     limit: int = None,
     scan_forward: bool = True
 ):
-    """
-    Query table using key condition.
-    
-    Args:
-        table_name: Table name
-        key_condition_expression: Key condition (partition key required)
-        attribute_values: Expression attribute values
-        consistent_read: Strong consistency
-        limit: Max items to return
-        scan_forward: Sort order (True = ascending)
-    
-    Returns:
-        dict: Query results with Items, Count, LastEvaluatedKey
-    """
+    # key_condition_expression: partition key required, e.g. 'user_id = :uid'
+    # consistent_read: default False (eventual); True for strong consistency
+    # scan_forward: True=ascending, False=descending sort order
     try:
         params = {
             'TableName': table_name,
@@ -345,38 +236,30 @@ def query_table(
             'ConsistentRead': consistent_read,
             'ScanIndexForward': scan_forward
         }
-        
         if limit:
             params['Limit'] = limit
-        
         response = dynamodb.query(**params)
         return response
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 
 def query_all_items(table_name: str, key_condition: str, values: dict) -> list:
-    """Query all matching items with pagination."""
+    # Paginated query — returns all matching items
     items = []
     last_key = None
-    
     while True:
         params = {
             'TableName': table_name,
             'KeyConditionExpression': key_condition,
             'ExpressionAttributeValues': values
         }
-        
         if last_key:
             params['ExclusiveStartKey'] = last_key
-        
         response = dynamodb.query(**params)
         items.extend(response['Items'])
-        
         last_key = response.get('LastEvaluatedKey')
         if not last_key:
             break
-    
     return items
 ```
 
@@ -391,104 +274,66 @@ def scan_table(
     limit: int = None,
     projection_expression: str = None
 ):
-    """
-    Scan entire table.
-    
-    Args:
-        table_name: Table name
-        filter_expression: Optional filter
-        attribute_values: Filter attribute values
-        limit: Max items to return
-        projection_expression: Attributes to return
-    
-    Returns:
-        dict: Scan results
-    """
+    # filter_expression: client-side filter after query
+    # projection_expression: attribute names to return
     try:
         params = {'TableName': table_name}
-        
         if filter_expression:
             params['FilterExpression'] = filter_expression
-        
         if attribute_values:
             params['ExpressionAttributeValues'] = attribute_values
-        
         if limit:
             params['Limit'] = limit
-        
         if projection_expression:
             params['ProjectionExpression'] = projection_expression
-        
         response = dynamodb.scan(**params)
         return response
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 
 def scan_all_items(table_name: str) -> list:
-    """Scan all items with pagination."""
+    # Paginated scan — avoid in production for large tables
     items = []
     last_key = None
-    
     while True:
         params = {'TableName': table_name}
-        
         if last_key:
             params['ExclusiveStartKey'] = last_key
-        
         response = dynamodb.scan(**params)
         items.extend(response['Items'])
-        
         last_key = response.get('LastEvaluatedKey')
         if not last_key:
             break
-    
     return items
 
 def parallel_scan(table_name: str, total_segments: int = 4) -> list:
-    """
-    Parallel scan for large tables.
-    
-    Args:
-        table_name: Table name
-        total_segments: Number of parallel segments
-    
-    Returns:
-        list: All items
-    """
+    # Parallel scan splits table into segments scanned concurrently
     import concurrent.futures
-    
+
     def scan_segment(segment: int):
         items = []
         last_key = None
-        
         while True:
             params = {
                 'TableName': table_name,
                 'TotalSegments': total_segments,
                 'Segment': segment
             }
-            
             if last_key:
                 params['ExclusiveStartKey'] = last_key
-            
             response = dynamodb.scan(**params)
             items.extend(response['Items'])
-            
             last_key = response.get('LastEvaluatedKey')
             if not last_key:
                 break
-        
         return items
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=total_segments) as executor:
         futures = [executor.submit(scan_segment, i) for i in range(total_segments)]
         results = [f.result() for f in futures]
-    
     all_items = []
     for items in results:
         all_items.extend(items)
-    
     return all_items
 ```
 
@@ -500,7 +345,7 @@ def create_gsi(
     table_name: str,
     index_name: str,
     partition_key: str,
-    partition_key_type: str,
+    partition_key_type: str = 'S',
     sort_key: str = None,
     sort_key_type: str = None,
     projection_type: str = 'ALL',
@@ -508,33 +353,16 @@ def create_gsi(
     rcu: int = 5,
     wcu: int = 5
 ):
-    """
-    Create Global Secondary Index.
-    
-    Args:
-        table_name: Table name
-        index_name: GSI name
-        partition_key: GSI partition key attribute
-        partition_key_type: Attribute type (S, N, B)
-        sort_key: Optional GSI sort key
-        sort_key_type: Sort key type
-        projection_type: ALL, KEYS_ONLY, INCLUDE
-        non_key_attributes: For INCLUDE projection
-        rcu: Read capacity units
-        wcu: Write capacity units
-    
-    Returns:
-        dict: Update response
-    """
+    # projection_type: ALL / KEYS_ONLY / INCLUDE
+    # non_key_attributes: required for INCLUDE projection
     try:
         attribute_definitions = [
             {'AttributeName': partition_key, 'AttributeType': partition_key_type}
         ]
-        
         key_schema = [
             {'AttributeName': partition_key, 'KeyType': 'HASH'}
         ]
-        
+
         if sort_key:
             attribute_definitions.append(
                 {'AttributeName': sort_key, 'AttributeType': sort_key_type}
@@ -542,11 +370,11 @@ def create_gsi(
             key_schema.append(
                 {'AttributeName': sort_key, 'KeyType': 'RANGE'}
             )
-        
+
         projection = {'ProjectionType': projection_type}
         if non_key_attributes and projection_type == 'INCLUDE':
             projection['NonKeyAttributes'] = non_key_attributes
-        
+
         response = dynamodb.update_table(
             TableName=table_name,
             AttributeDefinitions=attribute_definitions,
@@ -565,7 +393,6 @@ def create_gsi(
             ]
         )
         return response
-    
     except ClientError as e:
         handle_dynamodb_error(e)
 ```
@@ -573,40 +400,25 @@ def create_gsi(
 ## Waiters
 
 ```python
-def wait_for_table_active(table_name: str, timeout: int = 600):
-    """
-    Wait for table to become ACTIVE.
-    
-    Args:
-        table_name: Table name
-        timeout: Max wait time in seconds
-    
-    Returns:
-        bool: True if active, False if timeout
-    """
+def wait_for_table_active(table_name: str, timeout: int = 600) -> bool:
+    # timeout in seconds; returns True if ACTIVE, False on timeout
     waiter = dynamodb.get_waiter('table_exists')
     try:
         waiter.wait(
             TableName=table_name,
-            WaiterConfig={
-                'Delay': 10,
-                'MaxAttempts': timeout // 10
-            }
+            WaiterConfig={'Delay': 10, 'MaxAttempts': timeout // 10}
         )
         return True
     except Exception:
         return False
 
-def wait_for_table_deleted(table_name: str, timeout: int = 300):
-    """Wait for table to be deleted."""
+def wait_for_table_deleted(table_name: str, timeout: int = 300) -> bool:
+    # timeout in seconds; returns True if deleted, False on timeout
     waiter = dynamodb.get_waiter('table_not_exists')
     try:
         waiter.wait(
             TableName=table_name,
-            WaiterConfig={
-                'Delay': 10,
-                'MaxAttempts': timeout // 10
-            }
+            WaiterConfig={'Delay': 10, 'MaxAttempts': timeout // 10}
         )
         return True
     except Exception:
@@ -617,18 +429,10 @@ def wait_for_table_deleted(table_name: str, timeout: int = 300):
 
 ```python
 def handle_dynamodb_error(error: ClientError):
-    """
-    Handle DynamoDB errors with recovery guidance.
-    
-    Args:
-        error: ClientError from boto3
-    
-    Raises:
-        Exception with recovery guidance
-    """
+    # Consistent error handler; raises Exception with recovery guidance
     error_code = error.response['Error']['Code']
     error_message = error.response['Error']['Message']
-    
+
     recovery_map = {
         'TableAlreadyExists': 'HALT - Table exists. Use describe-table.',
         'ResourceNotFoundException': 'HALT - Table not found. Check name.',
@@ -640,47 +444,7 @@ def handle_dynamodb_error(error: ClientError):
         'TransactionConflictException': 'RETRY - Transaction conflict, retry operation.',
         'IdempotentParameterMismatchException': 'HALT - Different idempotent token used.',
     }
-    
+
     recovery = recovery_map.get(error_code, 'HALT - Check AWS documentation.')
-    
     raise Exception(f"DynamoDB Error [{error_code}]: {error_message}\nRecovery: {recovery}")
-```
-
-## Complete Flow Example
-
-```python
-def create_table_complete(config: dict) -> dict:
-    """
-    Complete flow: create table, wait, validate.
-    
-    Args:
-        config: Dict with all table parameters
-    
-    Returns:
-        dict: Table details
-    """
-    # Create table
-    table = create_table(
-        table_name=config['table_name'],
-        partition_key=config['partition_key'],
-        partition_key_type=config.get('partition_key_type', 'S'),
-        sort_key=config.get('sort_key'),
-        sort_key_type=config.get('sort_key_type'),
-        rcu=config.get('rcu', 5),
-        wcu=config.get('wcu', 5),
-        billing_mode=config.get('billing_mode', 'PROVISIONED')
-    )
-    
-    # Wait for ACTIVE
-    wait_for_table_active(config['table_name'])
-    
-    # Get final state
-    final_table = describe_table(config['table_name'])
-    
-    return {
-        'name': final_table['TableName'],
-        'status': final_table['TableStatus'],
-        'arn': final_table['TableArn'],
-        'item_count': final_table['ItemCount']
-    }
 ```

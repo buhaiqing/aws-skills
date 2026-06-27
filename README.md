@@ -502,8 +502,8 @@ aws sts get-caller-identity --output json
 | aws-rds-ops | RDS (Database) | ✅ Complete v1.2.0 |
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL clusters) | ✅ Complete v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.1.0 |
-| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.1.0 |
-| aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.0.0 |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.3.0 |
+| aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.1.0 |
 | aws-kms-ops | KMS (Encryption) | ✅ Complete v2.1.0 |
 | aws-route53-ops | Route53 (DNS) | ✅ Complete v1.2.0 |
 | aws-secretsmanager-ops | Secrets Manager | ✅ Complete v1.0.0 |
@@ -729,7 +729,7 @@ expanded coverage:
 | `aws-autoscaling-ops` | — | **v1.0.0 (new)** | ASG management, scaling policies, instance refresh, lifecycle hooks, capacity governance; **GCL** + **orchestrator-aware (P1 patched)** |
 | `aws-config-ops` | — | **v1.0.0 (new)** | Configuration recorder, delivery channel, managed/custom rules, conformance packs, aggregator, compliance evaluation; **GCL** + **orchestrator-aware (P1 patched)** |
 | `aws-eventbridge-ops` | — | **v1.0.0 (new)** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL** + **orchestrator-aware (P2 pending)** |
-| `aws-cloudtrail-ops` | v1.0.0 | **v1.0.0+** | API event correlation, change timeline; **orchestrator-aware (P1 patched)** |
+| `aws-cloudtrail-ops` | v1.0.0 | **v1.1.0+** | API event correlation, change timeline; **orchestrator-aware (P1 patched)** |
 | `aws-s3-ops` | v1.0.0 | **v1.1.0** | Lifecycle gap detection, public-access audit, cost optimization; **GCL pilot** + **orchestrator-aware (P1 patched)** |
 | `aws-iam-ops` | v1.0.0 | **v1.1.0** | Credential leak response, IAM attach tracking; **GCL pilot** + **orchestrator-aware (P1 patched)** |
 | `aws-kms-ops` | v1.0.0 | **v2.1.0** | Key compliance, rotation, deletion guard; **GCL pilot** + **orchestrator-aware (P1 patched)** |

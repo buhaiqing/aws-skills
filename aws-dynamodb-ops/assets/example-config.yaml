@@ -1,587 +1,65 @@
-# DynamoDB Example Configurations
+# DynamoDB Configuration Examples (YAML Anchors)
+# ===============================================
+# Template: Replace {{user.*}} placeholders at runtime.
+# Use YAML anchors to avoid repeating common settings.
 
-Configuration examples for AWS DynamoDB operations.
+# --- Shared Anchors ---
+x-billing-provisioned: &billing-provisioned
+  BillingMode: PAY_PER_REQUEST
 
-## Provisioned Capacity Table
+x-billing-on-demand: &billing-on-demand
+  BillingMode: PAY_PER_REQUEST
 
-### Basic Provisioned Table
-```yaml
-table:
-  name: "user-profiles-prod"
-  billing_mode: PROVISIONED
-  
-  # Primary Key
-  partition_key:
-    name: "user_id"
-    type: "S"  # String
-  
-  # Optional Sort Key
-  sort_key:
-    name: "created_at"
-    type: "S"  # ISO 8601 timestamp
-  
-  # Capacity
-  provisioned_throughput:
-    read_capacity_units: 50
-    write_capacity_units: 25
-  
-  # Auto-scaling (recommended)
-  auto_scaling:
-    read:
-      min_capacity: 50
-      max_capacity: 1000
-      target_utilization: 70
-    write:
-      min_capacity: 25
-      max_capacity: 500
-      target_utilization: 70
-  
-  # Server-side encryption
-  sse_specification:
-    enabled: true
-    sse_type: KMS
-    kms_key_id: "{{user.KmsKeyId}}"  # Optional, uses AWS managed key if not specified
-  
-  # Point-in-time recovery
-  point_in_time_recovery:
-    enabled: true
-  
-  # Tags
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: Application
-      Value: user-service
-    - Key: Owner
-      Value: platform-team
-```
+x-rcu-wcu: &rcu-wcu
+  ReadCapacityUnits: "{{user.RCU:5}}"
+  WriteCapacityUnits: "{{user.WCU:5}}"
 
-### Production Table with GSI
-```yaml
-table:
-  name: "orders-prod"
-  billing_mode: PROVISIONED
-  
-  partition_key:
-    name: "order_id"
-    type: "S"
-  
-  sort_key:
-    name: "created_at"
-    type: "S"
-  
-  provisioned_throughput:
-    read_capacity_units: 100
-    write_capacity_units: 50
-  
-  # Global Secondary Indexes
-  global_secondary_indexes:
-    - name: "UserIndex"
-      key_schema:
-        - AttributeName: "user_id"
+x-tags: &tags
+  Tags:
+    - Key: "Name"; Value: "{{user.TableName}}"
+    - Key: "Environment"; Value: "{{user.Environment:dev}}"
+    - Key: "ManagedBy"; Value: "AI-Agent"
+
+x-ttl-attr: &ttl-attr
+  TimeToLiveSpecification:
+    AttributeName: "{{user.TTLAttributeName:ttl}}"
+    Enabled: true
+
+# --- Example: On-Demand Table ---
+on-demand-table: &on-demand-table
+  TableName: "{{user.TableName}}"
+  KeySchema:
+    - AttributeName: "{{user.PrimaryKey}}"
+      KeyType: HASH
+    {{#if user.SortKey}}
+    - AttributeName: "{{user.SortKey}}"
+      KeyType: RANGE
+    {{/if}}
+  BillingMode: PAY_PER_REQUEST
+  <<: *tags
+
+# --- Example: Provisioned Table ---
+provisioned-table: &provisioned-table
+  TableName: "{{user.TableName}}"
+  KeySchema:
+    - AttributeName: "{{user.PrimaryKey}}"
+      KeyType: HASH
+  BillingMode: PROVISIONED
+  <<: *rcu-wcu
+  <<: *tags
+
+# --- Example: Table with GSI ---
+table-with-gsi: &table-with-gsi
+  TableName: "{{user.TableName}}"
+  KeySchema:
+    - AttributeName: "{{user.PrimaryKey}}"
+      KeyType: HASH
+  BillingMode: PAY_PER_REQUEST
+  GlobalSecondaryIndexes:
+    - IndexName: "{{user.GSIName:gsi1}}"
+      KeySchema:
+        - AttributeName: "{{user.GSIPartitionKey}}"
           KeyType: HASH
-        - AttributeName: "created_at"
-          KeyType: RANGE
-      projection:
-        projection_type: INCLUDE
-        non_key_attributes:
-          - "order_total"
-          - "status"
-      provisioned_throughput:
-        read_capacity_units: 50
-        write_capacity_units: 25
-      
-    - name: "StatusIndex"
-      key_schema:
-        - AttributeName: "status"
-          KeyType: HASH
-        - AttributeName: "created_at"
-          KeyType: RANGE
-      projection:
-        projection_type: KEYS_ONLY
-      provisioned_throughput:
-        read_capacity_units: 25
-        write_capacity_units: 10
-  
-  # Time to Live
-  ttl:
-    enabled: true
-    attribute_name: "ttl"
-  
-  # Streams for event-driven
-  streams:
-    enabled: true
-    view_type: NEW_AND_OLD_IMAGES
-  
-  # Tags
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: DataClassification
-      Value: sensitive
-```
-
-## On-Demand Capacity Table
-
-### Development Table
-```yaml
-table:
-  name: "events-dev"
-  billing_mode: PAY_PER_REQUEST  # On-demand
-  
-  partition_key:
-    name: "event_id"
-    type: "S"
-  
-  sort_key:
-    name: "timestamp"
-    type: "N"  # Unix timestamp
-  
-  # No capacity units needed for on-demand
-  
-  # TTL for automatic cleanup
-  ttl:
-    enabled: true
-    attribute_name: "expiration_time"
-  
-  # Minimal GSI for dev
-  global_secondary_indexes:
-    - name: "DeviceIndex"
-      key_schema:
-        - AttributeName: "device_id"
-          KeyType: HASH
-      projection:
-        projection_type: ALL
-      # On-demand GSI - no capacity needed
-  
-  tags:
-    - Key: Environment
-      Value: development
-    - Key: CostCenter
-      Value: development
-```
-
-### Time-Series Table with Sharding
-```yaml
-table:
-  name: "metrics-timeseries"
-  billing_mode: PAY_PER_REQUEST
-  
-  # Sharded partition key to avoid hot partitions
-  partition_key:
-    name: "shard_key"  # Format: device_id#YYYY-MM-DD#random(0-9)
-    type: "S"
-  
-  sort_key:
-    name: "timestamp"
-    type: "N"
-  
-  attribute_definitions:
-    - AttributeName: "shard_key"
-      AttributeType: "S"
-    - AttributeName: "timestamp"
-      AttributeType: "N"
-    - AttributeName: "device_id"
-      AttributeType: "S"
-    - AttributeName: "metric_date"
-      AttributeType: "S"
-  
-  # GSI for querying by device without date
-  global_secondary_indexes:
-    - name: "DeviceMetricsIndex"
-      key_schema:
-        - AttributeName: "device_id"
-          KeyType: HASH
-        - AttributeName: "timestamp"
-          KeyType: RANGE
-      projection:
-        projection_type: ALL
-    
-    - name: "DateMetricsIndex"
-      key_schema:
-        - AttributeName: "metric_date"
-          KeyType: HASH
-        - AttributeName: "timestamp"
-          KeyType: RANGE
-      projection:
-        projection_type: INCLUDE
-        non_key_attributes:
-          - "device_id"
-          - "metric_value"
-  
-  ttl:
-    enabled: true
-    attribute_name: "ttl"
-  
-  tags:
-    - Key: Environment
-      Value: production
-    - Key: Application
-      Value: metrics-aggregator
-```
-
-## Item Examples
-
-### User Profile Item
-```yaml
-item:
-  table_name: "user-profiles-prod"
-  
-  attributes:
-    user_id:
-      S: "user-12345"
-    
-    email:
-      S: "user@example.com"
-    
-    profile:
-      M:  # Map type
-        first_name:
-          S: "John"
-        last_name:
-          S: "Doe"
-        preferences:
-          M:
-            theme:
-              S: "dark"
-            notifications:
-              BOOL: true
-    
-    roles:
-      SS:  # String Set
-        - "user"
-        - "premium"
-    
-    metadata:
-      M:
-        created_at:
-          S: "2024-01-15T10:30:00Z"
-        last_login:
-          S: "2024-06-15T08:45:00Z"
-        login_count:
-          N: "42"
-    
-    tags:
-      L:  # List
-        - S: "active"
-        - S: "verified"
-    
-    # TTL attribute (Unix timestamp)
-    ttl:
-      N: "1750000000"
-```
-
-### Order Item with Binary Data
-```yaml
-item:
-  table_name: "orders-prod"
-  
-  attributes:
-    order_id:
-      S: "ORD-2024-001234"
-    
-    user_id:
-      S: "user-12345"
-    
-    created_at:
-      S: "2024-06-15T10:30:00Z"
-    
-    status:
-      S: "processing"
-    
-    items:
-      L:
-        - M:
-            product_id:
-              S: "PROD-001"
-            quantity:
-              N: "2"
-            price:
-              N: "29.99"
-        - M:
-            product_id:
-              S: "PROD-002"
-            quantity:
-              N: "1"
-            price:
-              N: "49.99"
-    
-    order_total:
-      N: "109.97"
-    
-    shipping_address:
-      M:
-        street:
-          S: "123 Main St"
-        city:
-          S: "Seattle"
-        state:
-          S: "WA"
-        zip:
-          S: "98101"
-    
-    # Compressed data (binary)
-    receipt_pdf:
-      B: "<base64-encoded-binary>"
-    
-    # TTL for order archiving
-    ttl:
-      N: "1750000000"
-```
-
-### Time-Series Metric Item
-```yaml
-item:
-  table_name: "metrics-timeseries"
-  
-  attributes:
-    # Sharded key to distribute writes
-    shard_key:
-      S: "device-12345#2024-06-15#7"  # device#date#random(0-9)
-    
-    timestamp:
-      N: "1718455800"
-    
-    # Also store for GSI queries
-    device_id:
-      S: "device-12345"
-    
-    metric_date:
-      S: "2024-06-15"
-    
-    metric_value:
-      N: "98.6"
-    
-    metric_type:
-      S: "temperature"
-    
-    unit:
-      S: "celsius"
-    
-    location:
-      M:
-        lat:
-          N: "47.6062"
-        lng:
-          N: "-122.3321"
-    
-    # TTL - expire after 90 days
-    ttl:
-      N: "1726225800"
-```
-
-## Conditional Write Examples
-
-### Put with Condition (Prevent Overwrite)
-```yaml
-operation: put_item
-condition_expression: "attribute_not_exists(user_id)"
-item:
-  user_id:
-    S: "user-new"
-  email:
-    S: "newuser@example.com"
-  created_at:
-    S: "2024-06-15T10:30:00Z"
-```
-
-### Update with Condition
-```yaml
-operation: update_item
-key:
-  user_id:
-    S: "user-12345"
-update_expression: "SET profile.preferences.theme = :theme, updated_at = :now"
-condition_expression: "attribute_exists(user_id) AND metadata.last_login > :min_date"
-expression_attribute_values:
-  ":theme":
-    S: "light"
-  ":now":
-    S: "2024-06-15T12:00:00Z"
-  ":min_date":
-    S: "2024-01-01T00:00:00Z"
-```
-
-### Increment Counter
-```yaml
-operation: update_item
-key:
-  counter_name:
-    S: "page_views"
-update_expression: "SET counter_value = if_not_exists(counter_value, :zero) + :inc"
-expression_attribute_values:
-  ":zero":
-    N: "0"
-  ":inc":
-    N: "1"
-return_values: UPDATED_NEW
-```
-
-## Query Examples
-
-### Query by Partition Key
-```yaml
-operation: query
-table_name: "orders-prod"
-key_condition_expression: "order_id = :order_id"
-expression_attribute_values:
-  ":order_id":
-    S: "ORD-2024-001234"
-consistent_read: false  # Use eventual consistency
-limit: 1
-```
-
-### Query with Sort Key Range
-```yaml
-operation: query
-table_name: "orders-prod"
-key_condition_expression: "user_id = :user_id AND created_at BETWEEN :start AND :end"
-expression_attribute_values:
-  ":user_id":
-    S: "user-12345"
-  ":start":
-    S: "2024-06-01T00:00:00Z"
-  ":end":
-    S: "2024-06-30T23:59:59Z"
-scan_index_forward: false  # Descending order (newest first)
-limit: 100
-```
-
-### Query GSI
-```yaml
-operation: query
-table_name: "orders-prod"
-index_name: "StatusIndex"
-key_condition_expression: "status = :status AND created_at > :date"
-expression_attribute_values:
-  ":status":
-    S: "pending"
-  ":date":
-    S: "2024-06-14T00:00:00Z"
-filter_expression: "order_total > :min_amount"
-expression_attribute_values:
-  ":min_amount":
-    N: "50.00"
-```
-
-## Stream Configuration
-
-### Lambda Trigger Configuration
-```yaml
-stream_event_source_mapping:
-  function_name: "process-dynamodb-stream"
-  event_source_arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders-prod/stream/2024-01-01T00:00:00.000"
-  
-  # Batch settings
-  batch_size: 100
-  batch_window: 5  # seconds
-  
-  # Starting position
-  starting_position: TRIM_HORIZON  # LATEST or TRIM_HORIZON
-  
-  # Parallelization
-  parallelization_factor: 2
-  
-  # Retry and DLQ
-  maximum_retry_attempts: 3
-  maximum_record_age_in_seconds: 86400
-  destination_config:
-    on_failure:
-      destination: "arn:aws:sns:us-east-1:123456789012:dynamodb-stream-dlq"
-  
-  # Filter (optional)
-  filter_criteria:
-    filters:
-      - pattern: '{"eventName": ["INSERT", "MODIFY"]}'
-```
-
-## Backup Configuration
-
-### On-Demand Backup
-```yaml
-backup:
-  type: on_demand
-  table_name: "orders-prod"
-  backup_name: "orders-pre-migration-2024-06-15"
-  
-  tags:
-    - Key: Purpose
-      Value: "pre-migration-backup"
-    - Key: CreatedBy
-      Value: "ops-team"
-```
-
-### Point-in-Time Recovery
-```yaml
-point_in_time_recovery:
-  table_name: "orders-prod"
-  enabled: true
-  
-  # To restore to point in time
-restore:
-  source_table: "orders-prod"
-  target_table: "orders-restored-2024-06-15"
-  restore_date_time: "2024-06-14T10:00:00Z"  # Within last 35 days
-```
-
-## Complete Workflow
-
-### Create Production Table Flow
-```yaml
-workflow:
-  name: "create-production-table"
-  
-  steps:
-    # 1. Pre-flight
-    - step: "preflight"
-      actions:
-        - "Verify table name unique"
-        - "Check IAM permissions"
-        - "Validate KMS key exists"
-    
-    # 2. Create table
-    - step: "create_table"
-      config:
-        billing_mode: PROVISIONED
-        partition_key: "user_id"
-        sort_key: "created_at"
-        rcu: 50
-        wcu: 25
-    
-    # 3. Enable auto-scaling
-    - step: "enable_auto_scaling"
-      config:
-        read_target: 70
-        write_target: 70
-    
-    # 4. Create GSI
-    - step: "create_gsi"
-      config:
-        index_name: "EmailIndex"
-        partition_key: "email"
-        rcu: 25
-        wcu: 10
-    
-    # 5. Wait for ACTIVE
-    - step: "wait"
-      for: "table_active"
-      timeout: 600  # seconds
-    
-    # 6. Configure TTL
-    - step: "enable_ttl"
-      attribute: "ttl"
-    
-    # 7. Enable PITR
-    - step: "enable_pitr"
-    
-    # 8. Create initial backup
-    - step: "create_backup"
-      name: "initial-backup"
-    
-    # 9. Output table ARN
-    - step: "output"
-      fields:
-        - "table_arn"
-        - "table_status"
-        - "gsi_count"
-```
+      Projection:
+        ProjectionType: ALL
+  <<: *tags

@@ -502,8 +502,8 @@ aws sts get-caller-identity --output json
 | aws-rds-ops | RDS (数据库) | ✅ 完成 v1.2.0 |
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL 集群) | ✅ 完成 v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.1.0 |
-| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.1.0 |
-| aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.0.0 |
+| aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.3.0 |
+| aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.1.0 |
 | aws-kms-ops | KMS (加密) | ✅ 完成 v2.1.0 |
 | aws-route53-ops | Route53 (DNS) | ✅ 完成 v1.2.0 |
 | aws-secretsmanager-ops | Secrets Manager | ✅ 完成 v1.0.0 |
@@ -629,7 +629,7 @@ aws-aiops-orchestrator/
 | `aws-autoscaling-ops` | — | **v1.0.0（新增）** | ASG 管理、扩缩策略、实例刷新、生命周期钩子、容量治理；**GCL** + **已适配编排器（P1）** |
 | `aws-config-ops` | — | **v1.0.0（新增）** | 配置记录器、投递通道、托管/自定义规则、合规包、聚合器、合规评估；**GCL** + **已适配编排器（P1）** |
 | `aws-eventbridge-ops` | — | **v1.0.0（新增）** | 事件总线、规则/目标、API 目标、连接、归档/重放、调度器、管道；**GCL** + **已适配编排器（P2 待办）** |
-| `aws-cloudtrail-ops` | v1.0.0 | **v1.0.0+** | API 事件关联、变更时间线；**已适配编排器（P1）** |
+| `aws-cloudtrail-ops` | v1.0.0 | **v1.1.0+** | API 事件关联、变更时间线；**已适配编排器（P1）** |
 | `aws-s3-ops` | v1.0.0 | **v1.1.0** | 生命周期缺口检测、公开访问审计、成本优化；**GCL 试点** + **已适配编排器（P1）** |
 | `aws-iam-ops` | v1.0.0 | **v1.1.0** | 凭据泄露响应、IAM 附加追踪；**GCL 试点** + **已适配编排器（P1）** |
 | `aws-kms-ops` | v1.0.0 | **v2.1.0** | 密钥合规性、轮换、删除保护；**GCL 试点** + **已适配编排器（P1）** |
