@@ -32,6 +32,19 @@
   `get-web-acl` / `list-web-acls` lookup (rule A8).
 ```
 
+## Supported Operations (Generator reference)
+- list-web-acls, get-web-acl, create-web-acl, delete-web-acl
+- list-rule-groups, get-rule-group, delete-rule-group
+- list-ip-sets, get-ip-set, delete-ip-set
+- associate-web-acl, disassociate-web-acl
+- update-web-acl, put-logging-configuration
+- check-capacity
+
+## Confirmation Strings
+- `delete-web-acl`:    `confirm=DELETE_WEB_ACL <name>`
+- `delete-rule-group`: `confirm=DELETE_RULE_GROUP <name>`
+- `delete-ip-set`:     `confirm=DELETE_IP_SET <name>`
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -53,10 +66,13 @@
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
+| `{{output.requested_region}}` | Orchestrator from `{{user.region}}` | Critic region-check target (rule A7) |
+| `{{output.safety_confirm_token}}` | Orchestrator from user confirmation | Critic Safety-gate target |
 
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-06-27 | Added `## Confirmation Strings` section (gcl-spec v1.12.0 §11.7 pattern); added `{{output.requested_region}}` and `{{output.safety_confirm_token}}` for rule A7 + Safety gate alignment (v1.12.0 §7.1). |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-waf-ops` |
 
 ---
