@@ -1,19 +1,6 @@
 # AWS CLI Usage — EventBridge
 
-## Common JSON Paths
-
-```
-# Bus:       .EventBuses[].{Name,Arn,EventBusName}
-# Rule:      .Rules[0].{Name,Arn,EventPattern,ScheduleExpression,State}
-# Rules:     .Rules[].{Name,Arn,State,ManagedBy}
-# Targets:   .Targets[].{Id,Arn,RoleArn,Input}
-# Arch:      .Archives[].{ArchiveName,EventSourceArn,RetentionDays,State}
-# Replay:    .Replay.{ReplayName,State,ReplayStartTime,ReplayEndTime}
-# Conn:      .Connections[].{Name,ConnectionArn,AuthorizationType,ConnectionState}
-# APIDest:   .ApiDestinations[].{Name,ApiDestinationArn,InvocationEndpoint,HttpMethod}
-# Schedule:  .Schedule.{Name,State,ScheduleExpression,Target.{Arn,RoleArn}}
-# Pipe:      .Pipes[].{Name,Arn,Source,Target,State,DesiredState}
-```
+> JSON paths are centralized in `SKILL.md` §Common JSON Paths (TE-4).
 
 ## Command Map
 

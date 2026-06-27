@@ -12,8 +12,8 @@ compatibility: >-
   to EventBridge endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-06-07"
+  version: "1.1.0"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -99,7 +99,7 @@ Covers EventBus, Rules, Targets, API Destinations, Connections, Archives/Replay,
 
 Every operation: **Pre-flight** → **Execute** (CLI, boto3 fallback) → **Validate** → **Recover**.
 
-### Common Pre-flight Steps (all ops)
+### Common Pre-flight (all ops)
 
 ```bash
 aws --version && aws sts get-caller-identity --output json
@@ -107,19 +107,19 @@ aws --version && aws sts get-caller-identity --output json
 
 ### Create Event Rule
 
-Pre-flight: Verify event bus: `aws events describe-event-bus --name "{{user.bus_name}}"`
+Pre-flight: `aws events describe-event-bus --name "{{user.bus_name}}"`
 ```bash
 aws events put-rule \
   --name "{{user.rule_name}}" \
   --event-bus-name "{{user.bus_name}}" \
   --event-pattern '{{"source": ["aws.ec2"], "detail-type": ["EC2 Instance State-change Notification"]}}' \
   --state ENABLED \
-  --region "{{user.region}}" \
-  --output json
+  --region "{{user.region}}" --output json
 ```
 Validate: `aws events describe-rule --name "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}"`
 
 ### Add Targets
+
 ```bash
 aws events put-targets \
   --rule "{{user.rule_name}}" \
@@ -129,17 +129,26 @@ aws events put-targets \
 ```
 
 ### Delete Rule
+
 **Safety Gate**: `confirm=DELETE_RULE {{user.rule_name}}`. Must remove targets first.
 ```bash
-# List + remove targets
 aws events list-targets-by-rule --rule "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --region "{{user.region}}"
 aws events remove-targets --rule "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --ids "{{user.target_id}}" \
   --region "{{user.region}}" --output json
-# Then delete rule
 aws events delete-rule --name "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --region "{{user.region}}" --output json
 ```
 
+### Delete Event Bus
+
+**Safety Gate**: `confirm=DELETE_BUS {{user.bus_name}}`. Must delete all rules first (EB2).
+```bash
+aws events list-rules --event-bus-name "{{user.bus_name}}" --region "{{user.region}}"
+# Delete each rule (apply EB1 per rule above)
+aws events delete-event-bus --name "{{user.bus_name}}" --region "{{user.region}}" --output json
+```
+
 ### Create Schedule (Scheduler)
+
 ```bash
 aws scheduler create-schedule \
   --name "{{user.schedule_name}}" \
@@ -150,12 +159,14 @@ aws scheduler create-schedule \
 ```
 
 ### Delete Schedule
+
 **Safety Gate**: `confirm=DELETE_SCHEDULE {{user.schedule_name}}`
 ```bash
 aws scheduler delete-schedule --name "{{user.schedule_name}}" --region "{{user.region}}" --output json
 ```
 
 ### Create Pipe
+
 ```bash
 aws pipes create-pipe \
   --name "{{user.pipe_name}}" \
@@ -165,7 +176,15 @@ aws pipes create-pipe \
   --region "{{user.region}}" --output json
 ```
 
+### Delete Pipe
+
+**Safety Gate**: `confirm=DELETE_PIPE {{user.pipe_name}}`
+```bash
+aws pipes delete-pipe --name "{{user.pipe_name}}" --region "{{user.region}}" --output json
+```
+
 ### Create Archive
+
 ```bash
 aws events create-archive \
   --archive-name "{{user.archive_name}}" \
@@ -174,7 +193,15 @@ aws events create-archive \
   --region "{{user.region}}" --output json
 ```
 
+### Delete Archive
+
+**Safety Gate**: `confirm=DELETE_ARCHIVE {{user.archive_name}}`. Irreversible data loss (EB6).
+```bash
+aws events delete-archive --archive-name "{{user.archive_name}}" --region "{{user.region}}" --output json
+```
+
 ### Create API Destination + Connection
+
 ```bash
 # Step 1: Connection
 aws events create-connection --name "{{user.conn_name}}" --authorization-type API_KEY \
@@ -185,6 +212,12 @@ aws events create-api-destination --name "{{user.api_dest_name}}" --connection-a
   --invocation-endpoint "{{user.api_dest_endpoint}}" --http-method POST \
   --region "{{user.region}}" --output json
 ```
+
+### Delete API Destination / Connection
+
+**Safety Gates**: `confirm=DELETE_API_DEST {{user.api_dest_name}}` / `confirm=DELETE_CONNECTION {{user.conn_name}}`
+- `delete-connection`: verify no API destinations reference it first (EB3)
+- `delete-api-destination`: verify no rules reference it
 
 ## Token Efficiency
 
@@ -214,8 +247,8 @@ Full spec: [`aws-skill-generator/references/gcl-spec.md`](../../aws-skill-genera
 | `delete-rule` | required | Must remove targets first; `confirm=DELETE_RULE <name>` |
 | `delete-event-bus` | required | Delete all rules first; `confirm=DELETE_BUS <name>` |
 | `delete-api-destination` | required | `confirm=DELETE_API_DEST <name>` |
-| `delete-connection` | required | May break API destinations using it |
-| `delete-archive` | required | Irrecoverable; events lost |
+| `delete-connection` | required | May break API destinations using it; `confirm=DELETE_CONNECTION <name>` |
+| `delete-archive` | required | Irrecoverable; events lost; `confirm=DELETE_ARCHIVE <name>` |
 | `remove-targets` | required | `confirm=REMOVE_TARGETS <rule>` |
 | `delete-schedule` | required | `confirm=DELETE_SCHEDULE <name>` |
 | `delete-pipe` | required | Stops event flow; `confirm=DELETE_PIPE <name>` |

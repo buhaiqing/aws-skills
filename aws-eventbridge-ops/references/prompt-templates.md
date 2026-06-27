@@ -3,13 +3,13 @@
 > Specialization of the shared skeleton:
 > [`aws-skill-generator/references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
 >
-> This file contains only the **service-specific deltas** for `aws-eventbridge-ops`:
-> Hard rules (substituted into the Critic template's `{skill.hard_rules}`),
-> Confirmation strings, and Variable Convention deltas. The three canonical
-> templates (Generator / Critic / Orchestrator) are referenced from the
-> skeleton file; do not duplicate them here.
-
-## Skill metadata (used by skeleton `{skill.*}` placeholders)
+ > This file contains only the **service-specific deltas** for `aws-eventbridge-ops`:
+ > Hard rules (substituted into the Critic template's `{{skill.hard_rules}}`),
+ > Confirmation strings, and Variable Convention deltas. The three canonical
+ > templates (Generator / Critic / Orchestrator) are referenced from the
+ > skeleton file; do not duplicate them here.
+ 
+ ## Skill metadata (used by skeleton `{{skill.*}}` placeholders)
 
 | Placeholder | Value |
 |---|---|
@@ -18,11 +18,11 @@
 | `{{skill.aws_cli_svc}}` | `eventbridge` |
 | `{{skill.max_iter}}` | `3` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
-## Hard rules (Critic template injection)
-
-> These bullets are substituted into the Critic template's
-> `{skill.hard_rules}` slot in `prompt-skeletons.md` §2.
-> They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
+ ## Hard rules (Critic template injection)
+ 
+ > These bullets are substituted into the Critic template's
+ > `{{skill.hard_rules}}` slot in `prompt-skeletons.md` §2.
+ > They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
 
 ```text
 - Safety = 0 if missing `confirm=` for destructive ops

@@ -53,43 +53,43 @@ Source → Pipe → (Enrichment) → Target
 {"source": ["aws.health"], "detail-type": ["AWS Health Event"]}
 ```
 
-## Support Targets
+## Support Targets (Use API for current limits)
 
-| Target Type | Limit per rule |
-|-------------|---------------|
-| Lambda | 5 |
-| SQS | 5 |
-| SNS | 5 |
-| Step Functions | 5 |
-| Event Bus | 5 |
+```bash
+# Default target limit per rule is 5 (adjustable up to 100)
+# Check current quotas:
+aws service-quotas get-service-quota \
+  --service-code events \
+  --quota-code L-8179BFB3 \
+  --region "{{user.region}}" --output json
+```
+
+| Target Type | Default per rule |
+|-------------|-----------------|
+| Lambda, SQS, SNS, Step Functions, Event Bus, Kinesis, Logs | 5 each |
 | API Destination | 1 |
-| Kinesis Stream | 5 |
-| Logs Group | 5 |
 
-## Quotas
+## Quotas (Use API for current values)
 
-| Resource | Default | Adjustable? |
-|----------|---------|-------------|
-| Rules per bus | 300 | Yes |
-| Targets per rule | 5 | Yes (up to 100) |
-| Event buses per account | 100 | Yes |
-| Concurrent invocations per rule | 750/s | Yes |
-| Archived event retention | 7 days min, forever max | Configurable |
-| Schedules per account | 1,000 | Yes |
-| Pipes per account | 100 | Yes |
+```bash
+# List all EventBridge quotas:
+aws service-quotas list-service-quotas --service-code events --region "{{user.region}}" --output json
+
+# Key quotas (defaults, check API for current):
+# Rules per bus: 300 | Targets per rule: 5 (up to 100)
+# Event buses per account: 100 | Schedules per account: 1,000
+# Pipes per account: 100 | Archive retention: 7–1200 days
+```
 
 ## Pricing
 
-| Component | Cost |
-|-----------|------|
-| Custom event ingestion | $1.00 per million events |
-| Cross-account/region events | $1.00 per million events |
-| Scheduled invocations | $1.00 per million invocations |
-| API destinations | $0.20 per million invocations |
-| Archives | $0.03 per GB/month |
-| Replay | $1.00 per million replayed events |
-| Scheduler | $1.00 per million schedule invocations |
-| Pipes | Free (pay for downstream resources) |
+See [AWS EventBridge Pricing](https://aws.amazon.com/eventbridge/pricing/) for current rates. Key components:
+- Custom event ingestion: per million events
+- Cross-account/region events: per million events
+- API destinations: per million invocations
+- Archives: per GB/month
+- Scheduler: per million invocations
+- Pipes: free (pay for downstream resources)
 
 ## Best Practices
 
