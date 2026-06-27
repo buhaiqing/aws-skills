@@ -13,7 +13,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-06-07"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:

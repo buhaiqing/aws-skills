@@ -38,7 +38,7 @@
 | `put-bucket-lifecycle-configuration` (expiry ≥ 30 days) | Correctness | Routine |
 | `put-bucket-lifecycle-configuration` (expiry < 30 days) | Correctness, **Safety** | Treat as destructive: `confirm=PUT_LIFECYCLE_SHORT <bucket>` |
 | `put-bucket-policy` (no public access) | Correctness, Spec Compliance | Routine |
-| `put-bucket-policy` (adds `Principal: "*"` with `Effect: Allow`) | Correctness, **Safety** | `confirm=PUT_POLICY_PUBLIC <bucket>` required; same family as IAM `Principal: *` trust policy |
+| `put-bucket-policy` (adds `Principal: "*"` with `Effect: Allow`) | Correctness, **Safety** | `confirm=PUT_POLICY_PUBLIC <bucket>` required (rule A15); same family as IAM `Principal: *` trust policy |
 | `put-bucket-acl` to `private` | Correctness | Tightens access; safe |
 | `put-bucket-acl` to `public-read` / `public-read-write` / `authenticated-read` | Correctness, **Safety** | Treat as destructive: `confirm=PUT_ACL_PUBLIC <bucket>` |
 | `put-object-acl` to any public canned ACL | Correctness, **Safety** | Same as bucket ACL: `confirm=PUT_OBJECT_ACL_PUBLIC <bucket>/<key>` |

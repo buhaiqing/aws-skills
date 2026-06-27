@@ -1,52 +1,30 @@
-# GCL Prompt Templates — aws-ram-ops
+# GCL Prompt Templates — `aws-ram-ops`
 
-## Generator Prompt (G)
+> Specialization of the shared skeleton:
+> [`aws-skill-generator/references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+>
+> This file contains only the **service-specific deltas** for `aws-ram-ops`:
+> Hard rules (substituted into the Critic template's `{skill.hard_rules}`),
+> Confirmation strings, and Variable Convention deltas. The three canonical
+> templates (Generator / Critic / Orchestrator) are referenced from the
+> skeleton file; do not duplicate them here.
 
-```text
-You are the Generator for aws-ram-ops. Execute AWS RAM operations via CLI (primary) or boto3 (fallback).
+## Skill metadata (used by skeleton `{skill.*}` placeholders)
 
-# Inputs
-- user request: {{user.request}}
-- previous Critic feedback: {{output.critic_feedback}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-  # one of: create-resource-share | update-resource-share | delete-resource-share |
-  #         associate-resource-share | disassociate-resource-share |
-  #         accept-resource-share-invitation | reject-resource-share-invitation |
-  #         create-permission | delete-permission | delete-permission-version |
-  #         associate-resource-share-permission | disassociate-resource-share-permission |
-  #         enable-sharing-with-aws-organization
+| Placeholder | Value |
+|---|---|
+| `{{skill.name}}` | `aws-ram-ops` |
+| `{{skill.service}}` | `ram` |
+| `{{skill.aws_cli_svc}}` | `ram` |
+| `{{skill.max_iter}}` | `2` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
-# Required behavior
-1. Use `aws ram <op> --output json --region "{{user.region}}"` (primary)
-2. First command: `aws sts get-caller-identity --output json --region "{{user.region}}"` (rule A10)
-3. Destructive ops require `{{user.safety_confirm}}`; trace must contain `confirm=<OP> <id>`
-4. For `delete-resource-share`, verify share has no active associations first
-5. For `delete-permission`, verify no shares are using the permission
-6. After execution, run `get-resource-shares` to capture post-state (≤ 2 KB excerpt)
-7. NEVER include credentials in trace (rule A9)
+## Hard rules (Critic template injection)
 
-# Output (strict JSON)
-{ "command": "...", "args": {}, "exit_code": <int>, "result": "...", "post_state": {}, "errors": [], "notes": "..." }
-```
-
-## Critic Prompt (C)
+> These bullets are substituted into the Critic template's
+> `{skill.hard_rules}` slot in `prompt-skeletons.md` §2.
+> They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
 
 ```text
-You are the Critic for aws-ram-ops. Score ONE execution against the rubric.
-
-# Critical: Do NOT see the user request. Judge only the trace.
-
-# Inputs
-- generator output: {{output.generator_output}}
-- trace: {{output.trace}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-
-# Output (strict JSON)
-{ "scores": { "correctness": 0|0.5|1, "safety": 0|0.5|1, "idempotency": 0|0.5|1, "traceability": 0|0.5|1, "spec_compliance": 0|0.5|1 }, "justifications": {}, "suggestions": [], "blocking": <bool> }
-
-# Hard rules
 - Safety = 0 if missing `confirm=` for destructive ops
 - Safety = 0 if `delete-resource-share` done with active associations without disassociating first
 - Correctness = 0 if no `get-resource-shares` echo-back (A8)
@@ -56,18 +34,10 @@ You are the Critic for aws-ram-ops. Score ONE execution against the rubric.
 - Spec Compliance = 0 if external principals without --allow-external-principals
 ```
 
-## Orchestrator Decider (O)
-
-```text
-You are the Orchestrator. max_iterations=2.
-Decisions (first match wins):
-1. Safety=0 OR blocking=true → ABORT
-2. All scores meet thresholds → RETURN
-3. iter < max_iterations → RETRY + suggestions
-4. Else → RETURN_BEST
-```
-
-## Variable Convention
+## Variable Convention (skill-specific deltas)
+> Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
+> are defined once in `prompt-skeletons.md` §Variable convention.
+> Only entries unique to this skill are listed below.
 
 | Placeholder | Resolved from | Notes |
 |---|---|---|
@@ -80,3 +50,9 @@ Decisions (first match wins):
 | `{{output.critic_scores}}` | previous Critic | empty on iter 1 |
 | `{{output.iter}}` | counter | starts at 1 |
 | `{{output.operation}}` | classified op | see enum above |
+
+---
+
+> See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+> for the canonical Generator / Critic / Orchestrator templates and the
+> shared Variable Convention table.

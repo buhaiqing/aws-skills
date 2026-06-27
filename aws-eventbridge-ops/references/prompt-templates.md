@@ -1,63 +1,40 @@
-# GCL Prompt Templates — aws-eventbridge-ops
+# GCL Prompt Templates — `aws-eventbridge-ops`
 
-## Generator Prompt (G)
+> Specialization of the shared skeleton:
+> [`aws-skill-generator/references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+>
+> This file contains only the **service-specific deltas** for `aws-eventbridge-ops`:
+> Hard rules (substituted into the Critic template's `{skill.hard_rules}`),
+> Confirmation strings, and Variable Convention deltas. The three canonical
+> templates (Generator / Critic / Orchestrator) are referenced from the
+> skeleton file; do not duplicate them here.
 
-```text
-You are the Generator for aws-eventbridge-ops. Execute via CLI (primary) or boto3 (fallback).
+## Skill metadata (used by skeleton `{skill.*}` placeholders)
 
-# Inputs
-- user request: {{user.request}}
-- previous Critic feedback: {{output.critic_feedback}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-  # one of: put-rule | delete-rule | put-targets | remove-targets |
-  #         create-event-bus | delete-event-bus | describe-event-bus |
-  #         enable-rule | disable-rule | create-archive | start-replay |
-  #         create-connection | create-api-destination | delete-connection | delete-api-destination |
-  #         create-schedule | delete-schedule | create-pipe | delete-pipe
+| Placeholder | Value |
+|---|---|
+| `{{skill.name}}` | `aws-eventbridge-ops` |
+| `{{skill.service}}` | `eventbridge` |
+| `{{skill.aws_cli_svc}}` | `eventbridge` |
+| `{{skill.max_iter}}` | `3` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
-# Required behavior
-1. Use `aws events <op> --output json --region "{{user.region}}"` (primary); `aws scheduler` / `aws pipes` for those ops
-2. First command: `aws sts get-caller-identity --output json --region "{{user.region}}"` (A10)
-3. Destructive ops require `{{user.safety_confirm}}`; trace must contain `confirm=<OP> <id>`
-4. For `delete-rule`, list + remove targets FIRST, then delete rule
-5. For `delete-event-bus`, list + delete all rules FIRST
-6. For `put-rule`, validate event pattern JSON is valid
-7. After execution, run `describe-*` for post-state (≤ 2 KB excerpt)
-8. NEVER include credentials in trace (A9)
+## Hard rules (Critic template injection)
 
-# Output (strict JSON)
-{ "command": "...", "args": {}, "exit_code": <int>, "result": "...", "post_state": {}, "errors": [], "notes": "..." }
-```
-
-## Critic Prompt (C)
+> These bullets are substituted into the Critic template's
+> `{skill.hard_rules}` slot in `prompt-skeletons.md` §2.
+> They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
 
 ```text
-You are the Critic for aws-eventbridge-ops. Score ONE execution against the rubric. Do NOT see user request.
-
-# Inputs
-- generator output: {{output.generator_output}}
-- trace: {{output.trace}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-
-# Output (strict JSON)
-{ "scores": {"correctness":0|0.5|1,"safety":0|0.5|1,"idempotency":0|0.5|1,"traceability":0|0.5|1,"spec_compliance":0|0.5|1}, "justifications":{}, "suggestions":[], "blocking":<bool> }
-
-# Hard rules
 - Safety = 0 if missing `confirm=` for destructive ops
 - Safety = 0 if `delete-rule` done without `remove-targets` first
 - Correctness = 0 if no `describe-*` echo-back (A8) or region mismatch (A7)
 - Safety = 0 if credentials in trace (A9); Traceability = 0 if sts not first (A10)
 ```
 
-## Orchestrator Decider (O)
-
-```text
-max_iterations=3. First match wins: (1) Safety=0 → ABORT (2) All pass → RETURN (3) iter < max → RETRY (4) → RETURN_BEST
-```
-
-## Variable Convention
+## Variable Convention (skill-specific deltas)
+> Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
+> are defined once in `prompt-skeletons.md` §Variable convention.
+> Only entries unique to this skill are listed below.
 
 | Placeholder | Source | Notes |
 |---|---|---|
@@ -69,3 +46,9 @@ max_iterations=3. First match wins: (1) Safety=0 → ABORT (2) All pass → RETU
 | `{{output.trace}}` | execution buffer | |
 | `{{output.critic_scores}}` | previous Critic | empty on iter 1 |
 | `{{output.iter}}` | counter | starts at 1 |
+
+---
+
+> See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+> for the canonical Generator / Critic / Orchestrator templates and the
+> shared Variable Convention table.

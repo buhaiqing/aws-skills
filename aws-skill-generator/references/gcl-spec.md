@@ -195,6 +195,17 @@ These rules come up often enough to be standardised repo-wide. Each skill's
 | A8 | Resource id in the request was not echoed back from a `describe-*` lookup | Correctness=0 |
 | A9 | Plaintext secret (`AWS_SECRET_ACCESS_KEY`, `SessionToken`, `DbPassword`) appears in trace | Safety=0; trace MUST mask with `***` and length only |
 | A10 | `aws sts get-caller-identity` not run before any IAM/KMS mutating op | Traceability=0 (no identity provenance) |
+| A11 | `aws cloudfront delete-distribution` before `Status=Deployed` (Enabled) | Correctness=0; distribution MUST first be Disabled, then poll `get-distribution` until `Status=Deployed`, then delete |
+| A12 | `aws elbv2 deregister-targets` dropping ≥50% of healthy targets without drain confirmation | Correctness=0 unless trace records `confirm=DRAIN_TARGETS <tg-arn> <from-count>→<to-count>`; default rule is undeletable |
+| A13 | `aws ec2 delete-vpc` without 8-describe pre-flight (subnets/IGWs/NATs/RTs/SGs/endpoints/peering/NACLs) | Correctness=0; trace MUST contain all 8 describe-call results with `null`/empty markers for absent resources |
+| A14 | `aws rds delete-db-instance` / `aws rds delete-db-cluster` with `--skip-final-snapshot` on a prod-tagged instance | Safety=0 unless trace contains literal `DELETE_NO_SNAPSHOT <db-id>` token; Aurora cluster delete is irreversible (no final-cluster-snapshot equivalent for Global DB) |
+| A15 | `aws s3api put-bucket-policy` widening to `Principal: "*"` + `Effect: Allow` + `Action: "s3:*"` | Safety=0 unless trace contains literal `confirm=PUT_POLICY_PUBLIC <bucket>`; same rule for `put-bucket-acl` with public canned ACL |
+| A16 | `aws autoscaling delete-auto-scaling-group` with `--force-delete` while `DesiredCapacity > 0` | Safety=0 unless `--desired-capacity 0` was applied first AND `InstanceProtection=false` on all instances; otherwise `--force-delete` is rejected by AWS with a noisy error that masks the real cause |
+
+> **Reference convention:** every skill's `references/rubric.md` SHOULD
+> reference applicable A-rules by id (e.g. "rule A11", "rule A14") rather
+> than restating the rule in prose. This keeps rules centralized in
+> `gcl-spec.md` §8 and lets the spec evolve without touching every skill.
 
 ## 9. Anti-Patterns (banned)
 
@@ -206,6 +217,24 @@ These rules come up often enough to be standardised repo-wide. Each skill's
 - ❌ **Trace not persisted** — no post-mortem possible → banned
 - ❌ **Critic mutates resources** — Critic is read-only by definition → banned
 - ❌ **AWS CLI `--output json` placed before subcommand** — non-portable; convention is `aws <svc> <op> --output json` (see CLAUDE.md) → banned in examples and traces
+- ❌ **`{{user.*}}` placeholders in Critic templates** — the Critic must score the trace in isolation; any `{{user.*}}` reference inside a Critic prompt template (even inside a fenced code block) lets the Critic see the original request and rubber-stamp. If the Critic needs a value that originates from the user request, the Orchestrator MUST extract it from `{{user.*}}` and re-inject it as `{{output.*}}` before calling the Critic. The only `{{user.*}}` references allowed in a skill's `references/prompt-templates.md` are inside the **Generator** section and the **Variable Convention** documentation table. See the mapping in §7.1 below.
+
+### 7.1 User→Output placeholder mapping (Critic isolation)
+
+When the Critic template needs a value that semantically comes from the user
+request, the skill's prompt-templates.md MUST route it through `{{output.*}}`,
+populated by the Orchestrator from the trace or from `{{user.*}}`. Standard
+mappings:
+
+| Origin (Generator / Variable Convention) | Critic-side reference | Orchestrator behavior |
+|---|---|---|
+| `{{user.region}}` | `{{output.requested_region}}` | Copy `{{user.region}}` (or `{{env.AWS_DEFAULT_REGION}}` fallback) into `output.requested_region` before invoking Critic |
+| `{{user.safety_confirm}}` | `{{output.safety_confirm_token}}` | Capture the literal `confirm=<OP> <id>` token from the trace into `output.safety_confirm_token`; if absent, set to empty string (Critic then scores Safety=0 per rule §3) |
+
+Rationale: the Critic sees `{{output.*}}` as trace-derived state, not as the
+user's stated intent. This preserves rule A7 (region check) and destructive-op
+confirmation checks **without** letting the Critic pattern-match against the
+original request. (Added in spec v1.11.0, 2026-06-27, see §11 changelog.)
 
 ## 10. Rollout Roadmap
 
@@ -213,9 +242,10 @@ These rules come up often enough to be standardised repo-wide. Each skill's
   **`aws-ec2-ops`** (most representative destructive workload) with its
   `references/rubric.md` and `references/prompt-templates.md`.
   `aws-iam-ops` follows in the next PR.
-- **Phase 2** — add `scripts/gcl_runner.py` as a reusable Orchestrator
-  (invokes G, then C in isolated context, persists trace, enforces
-  termination). Independent of any specific agent runtime.
+- **Phase 2** (shipped 2026-06-27) — `scripts/gcl_runner.py` exists as a reusable
+  Orchestrator (invokes G, then C in isolated context, persists trace to
+  `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json`, enforces §5 termination).
+  Independent of any specific agent runtime.
 - **Phase 3** — feed `gcl-trace-*.json` into a CloudWatch dashboard / Athena
   query for Quality Gate pass-rate and per-skill failure-mode histograms.
 - **Phase 4** — wire rubric pass-rate to CloudWatch Alarms; production
@@ -231,7 +261,13 @@ These rules come up often enough to be standardised repo-wide. Each skill's
 | 1.3.0 | 2026-06-04 | Fourth GCL pilot on `aws-s3-ops` (v1.1.0) |
 | 1.4.0 | 2026-06-04 | Group 1 GCL rollout: `aws-rds-ops`, `aws-lambda-ops`, `aws-dynamodb-ops` |
 | 1.5.0 | 2026-06-04 | Group 2 GCL rollout: `aws-vpc-ops`, `aws-route53-ops`, `aws-cloudfront-ops`, `aws-elb-ops` |
-| 1.6.0 | 2026-06-04 | Group 3 GCL rollout (complete): `aws-elasticache-ops`, `aws-waf-ops`, `aws-secretsmanager-ops`, `aws-ssm-ops`, `aws-acm-ops`, `aws-eks-ops`, `aws-sqs-ops`, `aws-sns-ops`, `aws-stepfunctions-ops`, `aws-cloudwatch-ops`, `aws-cloudtrail-ops` — all 22 skills now have complete GCL implementation |
+| 1.6.0 | 2026-06-04 | Group 3 GCL rollout: `aws-elasticache-ops`, `aws-waf-ops`, `aws-secretsmanager-ops`, `aws-ssm-ops`, `aws-acm-ops`, `aws-eks-ops`, `aws-sqs-ops`, `aws-sns-ops`, `aws-stepfunctions-ops`, `aws-cloudwatch-ops`, `aws-cloudtrail-ops` |
+| 1.7.0 | 2026-06-07 | Group 4 GCL rollout: `aws-autoscaling-ops`, `aws-config-ops`, `aws-eventbridge-ops` |
+| 1.8.0 | 2026-06-12 | Group 5 GCL rollout: `aws-athena-ops`, `aws-guardduty-ops`, `aws-opensearch-ops`, `aws-ram-ops`, `aws-securityhub-ops` — all 23 GCL-enabled skills |
+| 1.9.0 | 2026-06-13 | Group 6 GCL rollout: `aws-aurora-ops` — 24 GCL-enabled skills |
+| 1.10.0 | 2026-06-13 | `aws-aurora-ops` AIOps delegate + `aws-aiops-cruise` / `aws-aiops-orchestrator` GCL disabled (meta) — final count 26 GCL-enabled + 2 meta read-only + 1 generator meta = 29 total `aws-<svc>-ops` |
+| 1.11.0 | 2026-06-27 | **Critic-isolation hardening.** Added §7.1 (User→Output placeholder mapping) and a new anti-pattern to §9 (`{{user.*}}` in Critic templates banned). Migrated all 22 affected skill prompt-templates.md to route `{{user.region}}` → `{{output.requested_region}}` and `{{user.safety_confirm}}` → `{{output.safety_confirm_token}}`. Added `scripts/gcl_runner.py` (Phase 2 reusable Orchestrator; see §10). Updated `aws-guardduty-ops` rubric to 0/0.5/1 discrete scale + ABORT clause. Spec now covers 31 `aws-<svc>-ops` skills; see `AGENTS.md` §11.5 for the Per-Skill Defaults table (also updated). |
+| 1.12.0 | 2026-06-27 | **A11–A16 added + prompt-skeleton extraction (O3).** §8 gained six new repo-wide rules: A11 (CloudFront delete must disable→poll Deployed first), A12 (ELB deregister-targets 50%/100% drain confirmation), A13 (VPC delete-vpc 8-describe pre-flight), A14 (RDS/Aurora `--skip-final-snapshot` guard), A15 (S3 `Principal: *` policy widening guard), A16 (ASG `--force-delete` requires scale-to-0 + InstanceProtection=false). Backfilled A-id labels into the 7 affected rubrics. Created `aws-skill-generator/references/prompt-skeletons.md` (canonical Generator/Critic/Orchestrator templates + shared Variable Convention). `scripts/_sync_prompt_skeletons.py` retro-migrated all 31 skill `prompt-templates.md` from ~5,800 lines of duplicated boilerplate to ~2,200 lines of thin deltas (-78%). `scripts/gcl_runner.py` now resolves the rendered Critic prompt at runtime via `render_critic_prompt()` and exposes `--print-critic` for inspection. Net repo diff: 48 files, -3,456 lines. |
 
 ## 12. See also
 

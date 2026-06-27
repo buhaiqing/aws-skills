@@ -26,7 +26,7 @@
 | `failover-db-cluster` | Correctness, **Safety** | Brief outage; confirm required |
 | `stop-db-cluster` | Correctness, **Safety** | Reversible within 7 days |
 | `delete-db-cluster` (with snapshot) | Correctness, Safety, Traceability | Default `--final-db-snapshot-identifier`; deletes all members |
-| `delete-db-cluster` (`--skip-final-snapshot`) | Correctness, Safety | Needs literal `DELETE_NO_SNAPSHOT <cluster-id>` (rule A5) |
+| `delete-db-cluster` (`--skip-final-snapshot`) | Correctness, Safety | Needs literal `DELETE_NO_SNAPSHOT <cluster-id>` (rule A14; supersedes legacy A5 reference) |
 | `delete-db-cluster-snapshot` | Correctness, Safety | `confirm=DELETE_DB_CLUSTER_SNAPSHOT <snap-id>` |
 | `delete-db-cluster-parameter-group` | Correctness, Safety | Pre-flight: no cluster references group |
 | `delete-global-cluster` | Correctness, Safety | All secondaries removed first |

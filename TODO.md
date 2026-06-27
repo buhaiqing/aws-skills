@@ -183,4 +183,24 @@ Can confuse naive frontmatter parsers. Files with the most `---` usage:
 
 ---
 
-*Last updated: 2026-06-12 (ALL 51 items resolved — 21 HIGH + 22 MEDIUM + 8 LOW)*
+## GCL Hardening Pass — 2026-06-27 (post-51 follow-up)
+
+A targeted GCL audit on 2026-06-27 found 7 NEW items not covered by the
+original 51-item sweep (auditor: GCL audit script + manual review). All
+resolved in a single pass; full report at `/tmp/gcl-audit-report.md`.
+
+| # | Severity | Item | Status |
+|---|---------|------|--------|
+| G1 | HIGH | 22/31 skill Critic templates leaked `{{user.region}}` / `{{user.safety_confirm}}` (rubber-stamp vector per `gcl-spec.md` §9) | DONE — routed to `{{output.requested_region}}` / `{{output.safety_confirm_token}}` per new §7.1 |
+| G2 | HIGH | Phase 2 deliverable `scripts/gcl_runner.py` missing | DONE — reusable Orchestrator with `--self-test` / `--flaky-critic` / `--print-critic` |
+| G3 | MEDIUM | `aws-guardduty-ops` rubric used non-spec 1.0/0.8/0.7 weights; missing ABORT clause; prompt used bare `{{cli_command}}` namespace | DONE — migrated to 0/0.5/1 discrete scale + ABORT clause + `{{output.*}}` namespaces |
+| G4 | MEDIUM | `aws-iam-ops` rubric lacked A3 reference; `aws-vpc-ops` rubric lacked A9 reference | DONE — both now have "Repo-wide AWS rules compliance" sections citing A3/A7/A8/A9/A10 |
+| G5 | LOW | `gcl-spec.md` / `AGENTS.md` "22 skills" wording stale (actual 31) | DONE — changelog extended to v1.12.0; "22" → "31" |
+| G6 | OPT | O1: spec §8 lacked A11–A16 service-specific safety rules | DONE — A11 (cloudfront) / A12 (elb) / A13 (vpc) / A14 (rds/aurora) / A15 (s3) / A16 (autoscaling) added; backfilled A-id labels into 7 rubrics |
+| G7 | OPT | O3: ~5,800 lines of duplicated boilerplate across 31 skill `prompt-templates.md` files | DONE — `aws-skill-generator/references/prompt-skeletons.md` (231 lines shared skeleton) + `scripts/_sync_prompt_skeletons.py` (idempotent migration); per-skill files now avg ~70 lines. **Net repo diff: 48 files, -3,456 lines (-78% on the touched file group).** |
+
+| G-Pass | 7 | 7 | 0 |
+
+---
+
+*Last updated: 2026-06-27 (GCL hardening pass: original 51 items + 7 new G-items all resolved — 21 HIGH + 22 MEDIUM + 8 LOW + 7 G-pass = **58 total resolved**)*

@@ -1,50 +1,30 @@
-# GCL Prompt Templates — aws-athena-ops
+# GCL Prompt Templates — `aws-athena-ops`
 
-## Generator Prompt (G)
+> Specialization of the shared skeleton:
+> [`aws-skill-generator/references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+>
+> This file contains only the **service-specific deltas** for `aws-athena-ops`:
+> Hard rules (substituted into the Critic template's `{skill.hard_rules}`),
+> Confirmation strings, and Variable Convention deltas. The three canonical
+> templates (Generator / Critic / Orchestrator) are referenced from the
+> skeleton file; do not duplicate them here.
 
-```text
-You are the Generator for aws-athena-ops. Execute Amazon Athena operations via CLI (primary) or boto3 (fallback).
+## Skill metadata (used by skeleton `{skill.*}` placeholders)
 
-# Inputs
-- user request: {{user.request}}
-- previous Critic feedback: {{output.critic_feedback}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-  # one of: create-work-group | update-work-group | delete-work-group |
-  #         create-named-query | update-named-query | delete-named-query |
-  #         start-query-execution | stop-query-execution |
-  #         create-data-catalog | update-data-catalog | delete-data-catalog |
-  #         create-prepared-statement | update-prepared-statement | delete-prepared-statement
+| Placeholder | Value |
+|---|---|
+| `{{skill.name}}` | `aws-athena-ops` |
+| `{{skill.service}}` | `athena` |
+| `{{skill.aws_cli_svc}}` | `athena` |
+| `{{skill.max_iter}}` | `2` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
-# Required behavior
-1. Use `aws athena <op> --output json --region "{{user.region}}"` (primary)
-2. First command: `aws sts get-caller-identity --output json --region "{{user.region}}"` (rule A10)
-3. Destructive ops require `{{user.safety_confirm}}`; trace must contain `confirm=<OP> <id>`
-4. For `start-query-execution`, verify database exists first; poll until terminal state
-5. After execution, run `get-*` to capture post-state (≤ 2 KB excerpt)
-6. NEVER include credentials in trace (rule A9)
+## Hard rules (Critic template injection)
 
-# Output (strict JSON)
-{ "command": "...", "args": {}, "exit_code": <int>, "result": "...", "post_state": {}, "errors": [], "notes": "..." }
-```
-
-## Critic Prompt (C)
+> These bullets are substituted into the Critic template's
+> `{skill.hard_rules}` slot in `prompt-skeletons.md` §2.
+> They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
 
 ```text
-You are the Critic for aws-athena-ops. Score ONE execution against the rubric.
-
-# Critical: Do NOT see the user request. Judge only the trace.
-
-# Inputs
-- generator output: {{output.generator_output}}
-- trace: {{output.trace}}
-- rubric: {{output.rubric}}
-- operation type: {{output.operation}}
-
-# Output (strict JSON)
-{ "scores": { "correctness": 0|0.5|1, "safety": 0|0.5|1, "idempotency": 0|0.5|1, "traceability": 0|0.5|1, "spec_compliance": 0|0.5|1 }, "justifications": {}, "suggestions": [], "blocking": <bool> }
-
-# Hard rules
 - Safety = 0 if missing `confirm=` for destructive ops
 - Correctness = 0 if no `get-*` echo-back (A8)
 - Correctness = 0 if region mismatch (A7)
@@ -53,18 +33,10 @@ You are the Critic for aws-athena-ops. Score ONE execution against the rubric.
 - Spec Compliance = 0 if database/catalog does not exist
 ```
 
-## Orchestrator Decider (O)
-
-```text
-You are the Orchestrator. max_iterations=2.
-Decisions (first match wins):
-1. Safety=0 OR blocking=true → ABORT
-2. All scores meet thresholds → RETURN
-3. iter < max_iterations → RETRY + suggestions
-4. Else → RETURN_BEST
-```
-
-## Variable Convention
+## Variable Convention (skill-specific deltas)
+> Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
+> are defined once in `prompt-skeletons.md` §Variable convention.
+> Only entries unique to this skill are listed below.
 
 | Placeholder | Resolved from | Notes |
 |---|---|---|
@@ -77,3 +49,9 @@ Decisions (first match wins):
 | `{{output.critic_scores}}` | previous Critic | empty on iter 1 |
 | `{{output.iter}}` | counter | starts at 1 |
 | `{{output.operation}}` | classified op | see enum above |
+
+---
+
+> See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+> for the canonical Generator / Critic / Orchestrator templates and the
+> shared Variable Convention table.

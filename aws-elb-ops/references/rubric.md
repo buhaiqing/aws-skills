@@ -26,7 +26,7 @@
 | `create-rule` | Correctness, Spec Compliance | Priority is unique and within range |
 | `register-targets` (small batch) | Correctness | Routine; trace target arn list |
 | `deregister-targets` (small batch, < 50% of healthy targets) | Correctness, **Safety** | Confirm; pre-flight: `describe-target-health` to check `TargetHealth.State` and current `healthy` count |
-| `deregister-targets` (≥ 50% of healthy targets) | Correctness, Safety, **Traceability** | **CRITICAL DRAIN**; require `confirm=DEREGISTER_DRAIN <target-group-arn> count=<n>/<total>`; pre-flight MUST compute `(to-deregister / current-healthy)` ratio and emit a warning if ≥ 50% |
+| `deregister-targets` (≥ 50% of healthy targets) | Correctness, Safety, **Traceability** | **CRITICAL DRAIN**; require `confirm=DEREGISTER_DRAIN <target-group-arn> count=<n>/<total>`; pre-flight MUST compute `(to-deregister / current-healthy)` ratio and emit a warning if ≥ 50% (rule A12) |
 | `deregister-targets` (ALL healthy targets) | Correctness, Safety, **Traceability** | **TOTAL OUTAGE**; require `confirm=DEREGISTER_ALL <target-group-arn>` |
 | `deregister-targets` (target currently has `draining` state) | Correctness | Wait for drain to complete (ConnectionDraining enabled, default 300 s); do not register a new target until drain finishes |
 | `delete-load-balancer` | Correctness, Safety, **Traceability** | `confirm=DELETE_LB <lb-arn>`; pre-flight: list listeners + target groups; refuse if listeners exist (delete listeners first) |

@@ -220,29 +220,29 @@ total score. Full rules in spec §3.
 | Skill | GCL | Default `max_iter` | Notes |
 |---|---|---|---|
 | `aws-ec2-ops` | **required (pilot)** | 2 | `terminate-instances`, `delete-key-pair`, `deregister-image`, `detach-volume` |
-| `aws-autoscaling-ops` | **required** | 2 | `delete-auto-scaling-group` (`--force-delete` guard), `delete-launch-configuration`, `detach-instances` (decrement guard), `set-desired-capacity` → 0 — shipped v1.0.0 |
+| `aws-autoscaling-ops` | **required** | 2 | `delete-auto-scaling-group` (`--force-delete` guard + rule A16), `delete-launch-configuration`, `detach-instances` (decrement guard), `set-desired-capacity` → 0 — shipped v1.0.0 |
 | `aws-config-ops` | **recommended** | 3 | `delete-config-rule`, `delete-configuration-recorder`, `stop-configuration-recorder` — shipped v1.0.0 |
 | `aws-eventbridge-ops` | **recommended** | 3 | `delete-rule` (target cleanup guard), `delete-event-bus`, `delete-schedule`, `delete-pipe` — shipped v1.0.0 |
 | `aws-iam-ops` | **required (pilot)** | 2 | `delete-user`, `detach-user-policy`, `delete-access-key`; `*:*` policy guard |
 | `aws-kms-ops` | **required (pilot)** | 2 | `schedule-key-deletion` is irreversible; `--pending-window-in-days ≥ 7` |
-| `aws-s3-ops` | **required (pilot)** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal) |
-| `aws-rds-ops` | **required** | 2 | `delete-db-instance` (final-snapshot guard for prod) — shipped v1.1.0 |
-| `aws-aurora-ops` | **required** | 2 | `delete-db-cluster`, `delete-db-cluster-snapshot`, `failover-db-cluster`, `backtrack-db-cluster`, Global Database detach — shipped v1.0.0 |
+| `aws-s3-ops` | **required (pilot)** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal), `put-bucket-policy` widening (rule A15) |
+| `aws-rds-ops` | **required** | 2 | `delete-db-instance` (`--skip-final-snapshot` → rule A14); `delete-db-cluster` in `aws-aurora-ops` |
+| `aws-aurora-ops` | **required** | 2 | `delete-db-cluster` (rule A14), `delete-db-cluster-snapshot`, `failover-db-cluster`, `backtrack-db-cluster`, Global Database detach — shipped v1.1.0 |
 | `aws-lambda-ops` | **required** | 2 | `delete-function` (irreversible), `delete-function-concurrency` — shipped v1.1.0 |
 | `aws-dynamodb-ops` | **required** | 2 | `delete-table` (data loss), `update-table` (throughput) — shipped v1.1.0 |
 | `aws-elasticache-ops` | **required** | 2 | `delete-replication-group`, `delete-cache-cluster` |
 | `aws-route53-ops` | **required** | 2 | `delete-hosted-zone` (DNS cut) — shipped v1.2.0 |
 | `aws-sqs-ops` | **required** | 2 | `delete-queue` (in-flight message loss) |
 | `aws-sns-ops` | **required** | 2 | `delete-topic`, `unsubscribe` |
-| `aws-cloudfront-ops` | **required** | 2 | `delete-distribution` (cache invalidation + DNS) — shipped v1.1.0 |
+| `aws-cloudfront-ops` | **required** | 2 | `delete-distribution` (must disable→poll Deployed; rule A11) — shipped v1.1.0 |
 | `aws-waf-ops` | **required** | 2 | `delete-rule-group`, `delete-web-acl` |
 | `aws-secretsmanager-ops` | **required** | 2 | `delete-secret` (irrecoverable), `put-secret-value` |
 | `aws-ssm-ops` | **required** | 2 | `send-command` (remote exec), `delete-parameter` |
 | `aws-stepfunctions-ops` | **required** | 2 | `delete-state-machine`, `stop-execution` |
-| `aws-vpc-ops` | **required** | 2 | `delete-vpc` (cascade), `delete-security-group` (cross-ref) — shipped v1.3.0 |
+| `aws-vpc-ops` | **required** | 2 | `delete-vpc` 8-describe pre-flight (rule A13), `delete-security-group` (cross-ref) — shipped v1.3.0 |
 | `aws-acm-ops` | required | 2 | `delete-certificate` (in-use guard) |
 | `aws-eks-ops` | required | 2 | `delete-cluster` (irreversible) |
-| `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% DRAIN — shipped v2.2.0 |
+| `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% drain confirmation (rule A12) — shipped v2.2.0 |
 | `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |
 | `aws-athena-ops` | **required** | 2 | `delete-work-group`, `delete-named-query`, `delete-data-catalog`, `delete-prepared-statement` — shipped v1.0.0 |
 | `aws-guardduty-ops` | **required** | 2 | `delete-detector`, `delete-filter`, `delete-ip-set`, `delete-threat-intel-set`, `delete-publishing-destination` — shipped v1.0.0 |
@@ -267,11 +267,25 @@ by the Phase 2 Orchestrator runner.
 
 ### 11.7 Prompt templates (mandatory per skill)
 
-Each skill's `references/prompt-templates.md` MUST contain Generator,
-Critic, and Orchestrator decider skeletons (spec §7). Placeholders MUST
+Each skill's `references/prompt-templates.md` is a **thin specialization**
+of the canonical shared skeleton at
+[`references/prompt-skeletons.md`](aws-skill-generator/references/prompt-skeletons.md)
+(spec §7). The per-skill file contains ONLY:
+
+1. Skill metadata table (`{{skill.*}}` placeholders)
+2. Hard rules (Critic template injection) — one bullet per
+   service-specific rule, each citing a `gcl-spec.md` §8 A-id (A1–A16)
+3. Confirmation Strings table — mandatory for every destructive op
+4. Variable Convention deltas — only entries unique to this skill
+
+The three canonical templates (Generator / Critic / Orchestrator) are
+resolved from the shared skeleton at runtime by
+`scripts/gcl_runner.py` via `render_critic_prompt()`. Placeholders MUST
 follow the repository-wide `{{env.*}}` / `{{user.*}}` / `{{output.*}}`
-convention (see AGENTS.md §Variable Convention). Critic prompt MUST hide
-the raw user request to prevent "answer-aligned" rubber-stamping.
+convention. Critic prompt MUST hide the raw user request to prevent
+"answer-aligned" rubber-stamping. New skill creators MUST use the
+[`assets/new-skill-template/prompt-templates.md`](aws-skill-generator/assets/new-skill-template/prompt-templates.md)
+copy-paste template; run `--dry-run` before merging.
 
 ### 11.8 Anti-patterns (banned)
 
@@ -296,6 +310,12 @@ Codified in `gcl-spec.md` §8. Highlights:
 - **A9** Plaintext `KeyMaterial` / `PasswordData` / `UserData` credentials
   in trace → Safety = 0; mask with `***` and length only
 - **A10** `aws sts get-caller-identity` MUST be the first command in trace
+- **A11** `cloudfront delete-distribution` must `disable → poll Deployed` first
+- **A12** `elbv2 deregister-targets` ≥50% → requires drain confirmation
+- **A13** `ec2 delete-vpc` requires 8-describe pre-flight
+- **A14** `rds --skip-final-snapshot` → requires `DELETE_NO_SNAPSHOT` token
+- **A15** `s3 put-bucket-policy` widening to `Principal: *` → requires public confirmation
+- **A16** `autoscaling --force-delete` with `DesiredCapacity > 0` → must scale-to-0 first
 
 ### 11.10 Rollout roadmap
 
@@ -330,6 +350,9 @@ Codified in `gcl-spec.md` §8. Highlights:
 | 1.8.0 | 2026-06-12 | Added 5 skills to §11.5 Per-Skill Defaults table (back-filled from Groups 6–7 GCL rollout): **`aws-athena-ops`** (required, max_iter=2), **`aws-guardduty-ops`** (required, max_iter=2), **`aws-opensearch-ops`** (required, max_iter=2), **`aws-ram-ops`** (required, max_iter=2), **`aws-securityhub-ops`** (required, max_iter=2) — all shipped with rubric.md and prompt-templates.md. |
 | 1.9.0 | 2026-06-13 | New skill — **`aws-aurora-ops`** (v1.0.0→**v1.1.0** AIOps): orchestrator delegate contract, 8 prompt scenarios, layered inspection, AIOps metrics CLI, cross-skill chains; **`aws-rds-ops`** delegates Aurora failover; **`aws-aiops-cruise`** / **`aws-aiops-orchestrator`** route Aurora cluster ops here. |
 | 1.10.0 | 2026-06-13 | **`aws-aurora-ops`** v1.2.0 P2: orchestrator runbooks RB-023–RB-027, detection rules FD-15/16 PD-08/09, `incident-schema` v1.1.0 Aurora/`RDSProxy` resource types + examples. |
+| 1.11.0 | 2026-06-27 | **GCL hardening pass.** (a) Migrated 22 skill `prompt-templates.md` files to route `{{user.region}}` → `{{output.requested_region}}` and `{{user.safety_confirm}}` → `{{output.safety_confirm_token}}` inside the Critic section, eliminating the rubber-stamp vector (`gcl-spec.md` §9 anti-pattern); added §7.1 to `gcl-spec.md` documenting the placeholder mapping. (b) Shipped `scripts/gcl_runner.py` (Phase 2 reusable Orchestrator: §4 loop, §5 termination, §6 trace schema, 30-day prune, `--self-test` mode for unit verification). (c) `aws-guardduty-ops` rubric migrated from continuous 1.0/0.8/0.7 weights to spec-mandated 0/0.5/1 discrete scale + explicit ABORT-on-Safety-0 clause; `aws-guardduty-ops` prompt templates migrated from bare `{{cli_command}}` / `{{boto3_code}}` / `{{generator_output}}` to spec-compliant `{{output.*}}` namespaces. (d) `aws-iam-ops` rubric now explicitly references rules **A3** / **A7** / **A8** / **A9** / **A10** by id; `aws-vpc-ops` rubric added A9 (`UserData` / `KeyMaterial` masking) clause. (e) `gcl-spec.md` changelog extended to v1.11.0; "22 skills" references corrected to the actual 31-skill scope (28 required/recommended + 2 meta read-only + 1 generator meta). |
+| 1.12.0 | 2026-06-27 | **O1 (A11–A16) + O3 (prompt-skeleton extraction) + `--print-critic` runtime.** `gcl-spec.md` §8 gained six new repo-wide safety rules: **A11** (CloudFront distribution delete requires disable→Deployed first), **A12** (ELB `deregister-targets` 50%/100% drain confirmation), **A13** (VPC `delete-vpc` 8-describe pre-flight), **A14** (RDS/Aurora `--skip-final-snapshot` guard, supersedes legacy A5 in `aws-aurora-ops`), **A15** (S3 `Principal: *` policy widening), **A16** (ASG `--force-delete` requires scale-to-0 + `InstanceProtection=false`). Backfilled A-id labels into the 7 affected rubrics (cloudfront/elb/vpc/rds/aurora/s3/autoscaling). Created `aws-skill-generator/references/prompt-skeletons.md` (canonical Generator/Critic/Orchestrator templates + shared Variable Convention table; 231 lines). New `scripts/_sync_prompt_skeletons.py` retro-migrated all 31 skill `prompt-templates.md` files from ~5,800 lines of duplicated boilerplate to **~2,200 lines of thin deltas (-78%)**; idempotent; supports `--skill <name>`, `--all`, `--dry-run`, `--restore`. `scripts/gcl_runner.py` now exposes `render_critic_prompt()` + `--print-critic` for inspecting the merged Critic prompt at runtime. All three termination paths (PASS / SAFETY_FAIL / MAX_ITER) verified end-to-end via `--self-test` after migration. Net repo diff vs pre-v1.11.0: 48 files changed, **-3,456 lines**. |
+| 1.13.0 | 2026-06-27 | **§11.7 updated to reflect shared skeleton architecture (prompt-templates.md is now a thin specialization, not self-contained) + §11.9 extended with A11–A16 highlights + §11.5 Per-Skill Defaults table annotated with A-rules for 7 skills (cloudfront/elb/vpc/rds/aurora/s3/autoscaling). New copy-paste template at `aws-skill-generator/assets/new-skill-template/prompt-templates.md` for new skill creators.** |
 
 ### 11.12 See also
 

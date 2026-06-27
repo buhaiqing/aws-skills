@@ -30,7 +30,7 @@
 |---|---|---|
 | `create-auto-scaling-group` | Correctness, Safety | Must verify LT/LC and subnets exist; Safety = 0 if no pre-flight check |
 | `update-auto-scaling-group` | Correctness | Must respect min ≤ desired ≤ max constraint |
-| `delete-auto-scaling-group` | Correctness, Safety, **Traceability** | Must include snapshot of pre-delete state; `--force-delete` requires explicit opt-in |
+| `delete-auto-scaling-group` | Correctness, Safety, **Traceability** | Must include snapshot of pre-delete state; `--force-delete` requires explicit opt-in (rule A16 — requires `--desired-capacity 0` and `InstanceProtection=false` first) |
 | `delete-launch-configuration` | Correctness, Safety | Cannot delete LC in use by any ASG |
 | `delete-policy` | Correctness, Safety | `confirm=DELETE_POLICY <policy-name>` |
 | `delete-scheduled-action` | Correctness, Safety | `confirm=DELETE_SCHEDULE <action-name>` |

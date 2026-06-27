@@ -24,7 +24,7 @@
 | `create-distribution` | Correctness, Spec Compliance | OAC preferred over OAI for S3 origins; refuse OAI on new distributions |
 | `create-distribution-with-tags` | Correctness, Spec Compliance | Tags in the request must be sanitized (no secret env values) |
 | `update-distribution` (any change) | Correctness, **Safety** | Cache invalidation may be required for content changes; pre-flight confirm; require `If-Match` ETag |
-| `delete-distribution` (Enabled) | Correctness, **Safety** | **MUST disable first** (CloudFront API requires `Enabled=false`); pre-flight MUST call `update-distribution` with `Enabled=false` then poll until `Status=Deployed`; `confirm=DELETE_DISTRIBUTION <id>` |
+| `delete-distribution` (Enabled) | Correctness, **Safety** | **MUST disable first** (CloudFront API requires `Enabled=false`); pre-flight MUST call `update-distribution` with `Enabled=false` then poll until `Status=Deployed`; `confirm=DELETE_DISTRIBUTION <id>` (rule A11) |
 | `delete-distribution` (already Disabled, not Deployed) | Correctness, Safety | Same; pre-flight verify `Status=Deployed` and `Enabled=false` |
 | `delete-streaming-distribution` | Correctness, Safety | Same as `delete-distribution` |
 | `delete-key-group` (in use by trusted-key-groups) | Correctness, **Safety** | Pre-flight: list distributions referencing the key group; refuse if any |

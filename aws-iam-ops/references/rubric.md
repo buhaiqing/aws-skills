@@ -64,6 +64,23 @@
 - `aws sts get-caller-identity` not run before any mutating op →
   **Traceability = 0 → ABORT** (rule A10).
 
+## Repo-wide AWS rules compliance
+
+This rubric incorporates the following rules from `gcl-spec.md` §8 by reference:
+
+- **A3** — `delete-user` / `detach-user-policy` requires a pre-flight
+  `list-attached-user-policies`; if non-empty → **Correctness = 0 → ABORT**.
+  Same shape applies to `delete-role` → `list-attached-role-policies`.
+- **A7** — `--region` must match `{{output.requested_region}}` (IAM is global,
+  but `aws iam create-access-key` rejects `--region` mismatches in some
+  sub-agents; rule A7 still applies for consistency).
+- **A8** — `UserName` / `RoleName` / `PolicyArn` echoed back from a
+  `get-*` / `list-*` lookup.
+- **A9** — `SecretAccessKey`, `SessionToken`, and any `Password` field MUST
+  be masked in trace; length + first/last 4 chars only.
+- **A10** — `aws sts get-caller-identity` is the first trace command before
+  any IAM mutating op.
+
 ## Loop parameters
 
 | Parameter | Value | Source |

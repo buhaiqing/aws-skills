@@ -1,92 +1,94 @@
-# GuardDuty Skill Prompt Templates (v1)
+# GCL Prompt Templates — `aws-guardduty-ops`
 
-## Generator Prompt Template
+> Specialization of the shared skeleton:
+> [`aws-skill-generator/references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+>
+> This file contains only the **service-specific deltas** for `aws-guardduty-ops`:
+> Hard rules (substituted into the Critic template's `{skill.hard_rules}`),
+> Confirmation strings, and Variable Convention deltas. The three canonical
+> templates (Generator / Critic / Orchestrator) are referenced from the
+> skeleton file; do not duplicate them here.
 
-```
-You are the AWS GuardDuty skill generator. Follow these instructions exactly:
+## Skill metadata (used by skeleton `{skill.*}` placeholders)
 
-1. Task: {{user.task}}
-2. Region: {{user.region}}
-3. Detector ID: {{user.detector_id}}
-4. Resource Name: {{user.resource_name}}
+| Placeholder | Value |
+|---|---|
+| `{{skill.name}}` | `aws-guardduty-ops` |
+| `{{skill.service}}` | `guardduty` |
+| `{{skill.aws_cli_svc}}` | `guardduty` |
+| `{{skill.max_iter}}` | `2` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
-Execute the requested GuardDuty operation using the following dual-path approach:
+## Hard rules (Critic template injection)
 
-### CLI Path (Primary)
-Run the exact AWS CLI command:
-```bash
-{{cli_command}}
-```
+> These bullets are substituted into the Critic template's
+> `{skill.hard_rules}` slot in `prompt-skeletons.md` §2.
+> They run BEFORE the canonical generic Hard rules (A7 / A8 / A9 / A10).
 
-### Boto3 Path (Fallback)
-Run the exact Python code:
-```python
-{{boto3_code}}
-```
-
-Return only the JSON output from the successful command, with no extra text.
-
-If the operation requires confirmation, first output the confirmation string: `confirm=CONFIRM_STRING {{user.resource_name}}` and wait for user approval before executing.
-```
-
-## Critic Prompt Template
-
-```
-You are the independent AWS GuardDuty skill critic. Your ONLY job is to audit the generator's output against the rubric, with NO access to the original user request.
-
-### Audit Criteria:
-1. **Correctness**: Does the output match the requested operation? Are JSON paths correct?
-2. **Safety**: Are destructive operations properly confirmed? Are credentials masked? Is region validation present?
-3. **Idempotency**: Is the operation safe to retry?
-4. **Traceability**: Are all API calls logged with masked credentials?
-5. **Spec Compliance**: Does it follow AGENTS.md charter and TE rules?
-
-### Input to Audit:
-{{generator_output}}
-
-Return a JSON object with:
-{"score": float, "pass": boolean, "feedback": string}
+```text
+- Safety = 0 if any destructive `delete-*` op is missing the literal
+  `confirm=DELETE_GUARDDUTY_<RESOURCE> <id>` token in the trace, OR
+  if {{output.safety_confirm_token}} is empty.
+- Safety = 0 if `disable-guardduty` is missing `confirm=DISABLE_GUARDDUTY <detector-id>`.
 ```
 
-## Orchestrator Prompt Template
-
-```
-You are the GuardDuty skill GCL orchestrator. Follow these steps:
-
-1. Receive the user's request: {{user.task}}
-2. Run the generator with the request
-3. Run the critic to audit the generator's output
-4. If the critic passes, return the output
-5. If the critic fails, fix the issues and retry up to max_iter=2 times
-6. Return the final result or abort if max_iter is reached
-
-### Supported Operations:
+## Supported Operations (Generator reference)
 - list-detectors, describe-detector
 - create-filter, list-filters, get-filter, delete-filter
 - create-ip-set, list-ip-sets, get-ip-set, delete-ip-set
-- create-threat-intel-set, list-threat-intel-sets, get-threat-intel-set, delete-threat-intel-set
+- create-threat-intel-set, list-threat-intel-sets, get-threat-intel-set,
+  delete-threat-intel-set
 - list-findings, get-findings
 - enable-guardduty, disable-guardduty
 - create-member, list-members, delete-member
 - create-admin, delete-admin
 
-### Confirmation Strings:
-- delete-filter: `confirm=DELETE_GUARDDUTY_FILTER {{user.resource_name}}`
-- delete-detector: `confirm=DELETE_GUARDDUTY_DETECTOR {{user.detector_id}}`
-- delete-ip-set: `confirm=DELETE_GUARDDUTY_IPSET {{user.ip_set_id}}`
-- delete-threat-intel-set: `confirm=DELETE_GUARDDUTY_THREATINTELSET {{user.threat_intel_set_id}}`
-```
+## Confirmation Strings
+- `delete-filter`:           `confirm=DELETE_GUARDDUTY_FILTER <name>`
+- `delete-detector`:         `confirm=DELETE_GUARDDUTY_DETECTOR <detector-id>`
+- `delete-ip-set`:           `confirm=DELETE_GUARDDUTY_IPSET <ip-set-id>`
+- `delete-threat-intel-set`: `confirm=DELETE_GUARDDUTY_THREATINTELSET <threat-intel-set-id>`
+- `delete-member`:           `confirm=DELETE_GUARDDUTY_MEMBER <account-id>`
+- `delete-admin`:            `confirm=DELETE_GUARDDUTY_ADMIN <account-id>`
+- `disable-guardduty`:       `confirm=DISABLE_GUARDDUTY <detector-id>`
 
-## Variable Convention
+## Variable Convention (skill-specific deltas)
+> Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
+> are defined once in `prompt-skeletons.md` §Variable convention.
+> Only entries unique to this skill are listed below.
 
-| Placeholder | Source |
-|-------------|--------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime environment |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime environment |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime environment |
-| `{{user.region}}` | User input |
-| `{{user.detector_id}}` | User input |
-| `{{user.resource_name}}` | User input |
-| `{{user.finding_ids}}` | User input |
-| `{{user.ip_set_id}}` | User input |
-| `{{user.threat_intel_set_id}}` | User input |
+| Placeholder | Resolved from | Notes |
+|---|---|---|
+| `{{user.request}}` | agent runtime | sanitized; never includes secret env values |
+| `{{user.region}}` | user input or `{{env.AWS_DEFAULT_REGION}}` | routed to Critic as `{{output.requested_region}}` (see §7.1) |
+| `{{user.safety_confirm}}` | explicit user confirmation | routed to Critic as `{{output.safety_confirm_token}}`; required for destructive ops |
+| `{{user.detector_id}}` | user input | GuardDuty detector UUID |
+| `{{user.resource_name}}` | user input | filter / ip-set / threat-intel-set name |
+| `{{user.ip_set_id}}` | user input | ip-set UUID |
+| `{{user.threat_intel_set_id}}` | user input | threat-intel-set UUID |
+| `{{user.finding_ids}}` | user input | list of finding IDs |
+| `{{env.AWS_ACCESS_KEY_ID}}` | runtime env | NEVER prompt user; fail if unset |
+| `{{env.AWS_SECRET_ACCESS_KEY}}` | runtime env | NEVER prompt user; NEVER log (rule A9) |
+| `{{env.AWS_DEFAULT_REGION}}` | runtime env | fallback for `{{user.region}}` |
+| `{{output.rubric}}` | `references/rubric.md` of active skill | injected as literal block |
+| `{{output.generator_output}}` | previous Generator run | empty on iter 1 |
+| `{{output.trace}}` | execution trace buffer | command/args/exit_code/result/errors |
+| `{{output.critic_scores}}` | previous Critic run | empty on iter 1 |
+| `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
+| `{{output.iter}}` | Orchestrator counter | starts at 1 |
+| `{{output.operation}}` | Orchestrator classification | one of the listed operation types |
+| `{{output.cli_command}}` | Generator-resolved CLI invocation | for self-test or template render |
+| `{{output.boto3_code}}` | Generator-resolved boto3 invocation | for fallback path |
+| `{{output.requested_region}}` | Orchestrator from `{{user.region}}` | Critic region-check target (rule A7) |
+| `{{output.safety_confirm_token}}` | Orchestrator from user confirmation | Critic Safety-gate target |
+
+## Changelog
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-12 | Initial GuardDuty prompt templates (Group 5 rollout). |
+| 1.1.0 | 2026-06-27 | Migrated bare `{{cli_command}}` / `{{boto3_code}}` / `{{generator_output}}` to spec-compliant `{{output.*}}` namespaces (gcl-spec v1.11.0 §7.1). Added explicit Critic isolation guarantee; added `{{output.requested_region}}` and `{{output.safety_confirm_token}}` placeholders for rule A7 + Safety gate. Renamed section headers to match the canonical Generator/Critic/Orchestrator pattern used by the other 30 skills. |
+
+---
+
+> See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+> for the canonical Generator / Critic / Orchestrator templates and the
+> shared Variable Convention table.

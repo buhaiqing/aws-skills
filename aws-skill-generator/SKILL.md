@@ -13,8 +13,8 @@ compatibility: >-
   frontmatter conventions.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-05-10"
+  version: "1.1.0"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: meta-skill
 ---
@@ -53,6 +53,7 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 - [ ] Dual-path: AWS CLI (primary) + boto3 SDK (fallback)
 - [ ] **[TE] Token Efficiency applied** — see §Key Principles below
 - [ ] **[GCL] Destructive-op classification recorded** — see §Generator ↔ GCL Integration below. If any op matches a `required` row in `AGENTS.md` §11.5, the skill MUST ship `references/rubric.md` + `references/prompt-templates.md` + a `## Quality Gate (GCL)` section.
+- [ ] **[GCL] Prompt templates use the shared skeleton** — see §Using the shared prompt skeleton below. `references/prompt-templates.md` is now a thin specialization of [`references/prompt-skeletons.md`](references/prompt-skeletons.md), NOT a self-contained file. Boilerplate (Generator/Critic/Orchestrator) belongs in the skeleton; only service-specific Hard rules + confirmation strings belong in the skill file.
 
 ### P1 — SHOULD Complete
 - [ ] Cross-service delegation documented
@@ -214,6 +215,9 @@ x-prod: &prod
 | [troubleshooting-template.md](references/troubleshooting-template.md) | Error codes, diagnostics template |
 | [governance-review.md](references/governance-review.md) | Pre-merge checklist, adversarial scenarios |
 | [gcl-spec.md](references/gcl-spec.md) | **GCL** adversarial quality gate spec (5-dim rubric, AWS rules A1–A10, anti-patterns) |
+| [prompt-skeletons.md](references/prompt-skeletons.md) | **GCL** shared Generator/Critic/Orchestrator templates + Variable Convention (mandatory reference for new skills' `prompt-templates.md`; see §Using the shared prompt skeleton below) |
+| [../scripts/_sync_prompt_skeletons.py](../scripts/_sync_prompt_skeletons.py) | Idempotent migration script: extracts skill-specific Hard rules + confirmation strings and rewrites `prompt-templates.md` as a thin skeleton specialization. Use `--dry-run` to verify, `--all` to apply, `--restore` to roll back. |
+| [assets/new-skill-template/prompt-templates.md](../assets/new-skill-template/prompt-templates.md) | **New-skill copy-paste template**: `cp` into `<skill>/references/prompt-templates.md`, fill in the four `<...>` placeholders, add Hard rule bullets + confirmation table, run the 3 verification commands at the bottom of the file. |
 
 ## See Also
 
@@ -337,6 +341,132 @@ no-credential-logging rule (rule A9) and the `--region` rule (A7).
 6. **Variable Convention table** at the bottom — copy the structure
    from a pilot; do not invent new placeholder types.
 
+### Using the shared prompt skeleton (O3 — mandatory for new skills)
+
+> **Background:** Before 2026-06-27, every skill duplicated the
+> Generator/Critic/Orchestrator templates inline, producing ~5,800
+> lines of near-identical boilerplate across 31 skills. As of spec
+> v1.12.0, the canonical templates live in
+> [`references/prompt-skeletons.md`](references/prompt-skeletons.md)
+> (one source of truth, 231 lines), and each skill's
+> `references/prompt-templates.md` is now a **thin specialization**
+> containing only the service-specific deltas.
+
+#### Required structure for a new skill's `prompt-templates.md`
+
+```
+# GCL Prompt Templates — `<skill>`
+
+> Specialization of the shared skeleton:
+> [`references/prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
+>
+> This file contains only service-specific deltas. The three canonical
+> templates (Generator / Critic / Orchestrator) are referenced from
+> the skeleton file; do not duplicate them here.
+
+## Skill metadata (used by skeleton `{{skill.*}}` placeholders)
+
+| Placeholder | Value |
+|---|---|
+| `{{skill.name}}` | `<skill>` |
+| `{{skill.service}}` | `<service>` |
+| `{{skill.aws_cli_svc}}` | `<aws-cli-namespace>` |
+| `{{skill.max_iter}}` | `<2|3>` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
+
+## Hard rules (Critic template injection)
+
+```text
+<bullet list of service-specific Hard rules — substituted into the
+ Critic template's `{{skill.hard_rules}}` slot. Each rule MUST cite a
+ rule id from gcl-spec.md §8 (e.g. "rule A14") or a `gcl-spec.md`
+ section reference.>
+```
+
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `<op>` | `confirm=<OP> <resource>` |
+
+## Variable Convention (skill-specific deltas)
+
+> Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`) are
+> defined once in `prompt-skeletons.md` §Variable convention. Only
+> entries unique to this skill are listed below.
+
+| Placeholder | Resolved from | Notes |
+|---|---|---|
+| ... | ... | ... |
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | <date> | Initial GCL prompt templates (shared skeleton specialization) |
+```
+
+#### Rules for new skills
+
+1. **Do NOT duplicate the Generator / Critic / Orchestrator bodies.**
+   Reference the skeleton file by name and let the runtime
+   (`scripts/gcl_runner.py`) inline them at load time.
+2. **Hard rules block is the ONLY service-specific content that ends up
+   in the Critic prompt.** Everything else is documentation for humans.
+3. **Each Hard rule MUST reference a `gcl-spec.md` §8 A-id** (A1–A16) OR
+   a named operation in `references/rubric.md`. Bare prose without a
+   reference becomes untrackable.
+4. **Confirmation strings table is mandatory** for every destructive op.
+   Non-destructive ops may omit the table entirely.
+5. **Variable Convention deltas** — only list placeholders unique to
+   this skill. The 20+ standard `{{env.*}}` / `{{user.*}}` / `{{output.*}}`
+   placeholders are already in the skeleton; re-listing them here is
+   noise (TE-3 / TE-6 violation).
+6. **After writing the file, dry-run the sync to verify extraction:**
+
+   ```bash
+   python3 scripts/_sync_prompt_skeletons.py --skill <your-skill> --dry-run
+   ```
+
+   The output should show a `Hard rules` block containing your bullets
+   and a `Skill metadata` table with the right `{{skill.*}}` values.
+   If the Hard rules block is empty, you forgot to put the
+   `## Hard rules (Critic template injection)` header.
+
+#### Rules for extending an existing skill
+
+When you add a new operation to an existing skill:
+
+1. Add a new bullet under `## Hard rules (Critic template injection)`
+   in the skill's `prompt-templates.md`. Cite the relevant A-id.
+2. Add a new row to the `## Confirmation Strings` table if the op is
+   destructive.
+3. Do NOT modify the skeleton file unless the new rule is a **repo-wide**
+   pattern (i.e. it would apply to ≥3 services). Per-service rules stay
+   in the skill file; only generic rules belong in the skeleton.
+
+#### Verifying the specialization is complete
+
+```bash
+# 1. Confirm the rendered Critic prompt is well-formed
+python3 scripts/gcl_runner.py --skill <your-skill> --print-critic
+
+# 2. Confirm the skeleton + skill delta merge at runtime
+python3 scripts/gcl_runner.py --skill <your-skill> --request "list" --self-test
+# expect: status: PASS  iter: 1
+
+# 3. Confirm the Hard rules block was extracted (header + fenced block)
+python3 scripts/_sync_prompt_skeletons.py --skill <your-skill> --dry-run \
+  | grep -E "^## Hard rules \(Critic|^```text$" | head -2
+# expect:
+#   ## Hard rules (Critic template injection)
+#   ```text
+```
+
+If any of these fail, the skill is not properly wired into the GCL
+shared skeleton — fix before merging.
+
+
+
 ### When a service is added to an existing skill (not a new skill)
 
 If you are extending `aws-s3-ops` with a new op (e.g. adding
@@ -372,3 +502,4 @@ After scaffolding is in place, confirm:
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Added §Generator ↔ GCL Integration section; P0 checklist now requires GCL classification; Reference Files table now lists `gcl-spec.md` |
+| 1.1.0 | 2026-06-27 | **O3 wiring: shared prompt-skeleton now mandatory for new skills.** Added `### Using the shared prompt skeleton (O3)` section right after `### How to write service-specific prompt templates`, with: (a) the required structure template for `prompt-templates.md` (Skill metadata + Hard rules + Confirmation strings + Variable deltas + Changelog); (b) 6 explicit rules for new skills (no template duplication; cite A-ids; mandatory confirmation table; dry-run verification); (c) 3 rules for extending existing skills (Hard rules in skill file, not skeleton, unless ≥3 services affected); (d) 3 verification commands (`--print-critic`, `--self-test`, `_sync_prompt_skeletons.py --dry-run`). P0 checklist now requires skeleton specialization. References `references/prompt-skeletons.md` and `gcl-spec.md` v1.12.0. |
