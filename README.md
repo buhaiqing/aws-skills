@@ -517,7 +517,7 @@ aws sts get-caller-identity --output json
 | aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
 | aws-securityhub-ops | Security Hub (security findings/compliance) | ✅ Complete v1.0.0 |
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.1.0 |
-| aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.2.0 |
+| aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.3.0 |
 | aws-topo-discovery | Cross-product Topology Discovery | ✅ Complete v1.1.0 |
 | aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.0.0** — see [§AIOps Cruise](#aiops-cruise) |
 

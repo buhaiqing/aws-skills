@@ -579,6 +579,7 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 ## Reference Files
 
 - [Prompt Examples](references/prompt-examples.md) — multi-account app sharing & authorization scenarios
+- [Integration](references/integration.md) — Organizations, IAM, VPC/RDS/Aurora cross-account sharing
 - [AWS CLI Usage](references/aws-cli-usage.md)
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
 - [Core Concepts](references/core-concepts.md)
@@ -588,7 +589,7 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 
 ## Quality Gate (GCL)
 
-> Phase 1 GCL rollout (2026-06-10, required). Every execution of
+> Phase 1 GCL rollout (2026-06-10, required, max_iter=2). Every execution of
 > `aws-ram-ops` MUST be wrapped by the Generator-Critic-Loop defined in
 > `aws-skill-generator/references/gcl-spec.md`.
 
