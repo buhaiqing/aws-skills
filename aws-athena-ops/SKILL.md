@@ -11,8 +11,8 @@ compatibility: >-
   to Amazon Athena endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-06-10"
+  version: "1.1.0"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -26,6 +26,7 @@ metadata:
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
     - AWS_DEFAULT_REGION
     - AWS_PROFILE
   cross_skill_deps:
@@ -33,7 +34,7 @@ metadata:
     - aws-iam-ops         # Workgroup IAM policies / Service role
 ---
 
-# Amazon Athena Operations Skill
+# AWS Athena Operations Skill
 
 ## Common JSON Paths (Centralized)
 
@@ -48,7 +49,7 @@ metadata:
 
 ## Overview
 
-Amazon Athena is a serverless interactive query service for analyzing data in S3 using SQL. This skill is an **operational runbook** with pre-flight → execute → validate → recover.
+Amazon Athena is a serverless interactive query service for analyzing data in S3 using SQL. This skill is an **operational runbook** with explicit scope, credential rules, pre-flight checks, dual-path execution (AWS CLI + boto3 SDK), validation, and recovery.
 
 ## Trigger & Scope
 
@@ -85,7 +86,14 @@ Amazon Athena is a serverless interactive query service for analyzing data in S3
 
 ## Execution Flow Pattern
 
-Every operation: **Pre-flight** → **Execute** (CLI, boto3 fallback) → **Validate** → **Recover**.
+Every operation follows: **Pre-flight → Execute → Validate → Recover**
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Pre-flight │ → │   Execute   │ → │   Validate  │ → │   Recover   │
+│   Checks    │    │ CLI/SDK     │    │   Polling   │    │  On Error   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
 
 ### Common Pre-flight Steps (all ops)
 
@@ -254,18 +262,37 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 - TE-5: YAML anchors in `assets/example-config.yaml` where applicable
 - TE-6: Flows only in SKILL.md (no duplicate in references/)
 
+## Config File Placeholders
+
+`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
+
+| Placeholder | Source | Agent Action |
+|-------------|--------|--------------|
+| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
+| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
+| `{{user.workgroup_name}}` | User input | Ask once; substitute |
+| `{{user.output_location}}` | User input | S3 path (s3://bucket/prefix/); ask once |
+
+Before using `example-config.yaml`:
+1. Load `.env` from project root (if present)
+2. Substitute `{{env.*}}` placeholders with loaded values
+3. Collect `{{user.*}}` values from user input
+4. Use rendered config for CLI/SDK commands
+
 ## Reference Files
 
 - [AWS CLI Usage](references/aws-cli-usage.md)
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
+- [Prompt Examples](references/prompt-examples.md)
+- [Integration](references/integration.md)
 - [GCL Rubric](references/rubric.md)
 - [GCL Prompt Templates](references/prompt-templates.md)
 
 ## Quality Gate (GCL)
 
-> Phase 1 GCL rollout (2026-06-10, required). Every execution of
+> Phase 1 GCL rollout (2026-06-10, required, max_iter=2). Every execution of
 > `aws-athena-ops` MUST be wrapped by the Generator-Critic-Loop defined in
 > `aws-skill-generator/references/gcl-spec.md`.
 

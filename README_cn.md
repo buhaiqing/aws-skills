@@ -517,7 +517,7 @@ aws sts get-caller-identity --output json
 | aws-opensearch-ops | OpenSearch Service (托管 Elasticsearch) | ✅ 完成 v1.0.0 |
 | aws-guardduty-ops | GuardDuty (威胁检测) | ✅ 完成 v1.0.0 |
 | aws-securityhub-ops | Security Hub (安全发现/合规) | ✅ 完成 v1.0.0 |
-| aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.0.0 |
+| aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.1.0 |
 | aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.2.0 |
 | aws-topo-discovery | 跨产品拓扑发现 | ✅ 完成 v1.1.0 |
 | aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.0.0** — 见 [§AIOps 巡检](#aiops-巡检) |

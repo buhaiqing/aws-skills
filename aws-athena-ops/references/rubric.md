@@ -66,3 +66,11 @@ This rubric enforces the following rules from `aws-skill-generator/references/gc
 | `max_iterations` | **2** | `gcl-spec.md` §10 (required class default) |
 | Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` | `gcl-spec.md` §6 |
 | Rubric version | `v1` | this file |
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-10 | Initial rubric for `aws-athena-ops` GCL rollout (required, max_iter=2) |
+| 1.1.0 | 2026-06-27 | No rubric content change; aligned with v1.1.0 SKILL.md template parity pass |
+
