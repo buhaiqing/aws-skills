@@ -45,7 +45,7 @@
 - Account IDs or ARNs containing credentials appearing in trace unmasked → **Safety = 0 → ABORT** (rule A9)
 - `aws sts get-caller-identity` not run before any mutating op → **Traceability = 0 → ABORT** (rule A10)
 
-## Reference to AWS Rules A1–A10
+## Reference to AWS Rules A1–A16
 
 This rubric enforces the following rules from `aws-skill-generator/references/gcl-spec.md` §8:
 
@@ -58,6 +58,12 @@ This rubric enforces the following rules from `aws-skill-generator/references/gc
 | **A8** | Resource echo-back: All resource share ARNs must be echoed from `get-resource-shares` lookups |
 | **A9** | Secret masking: Account IDs and ARNs with credentials must be masked |
 | **A10** | Identity provenance: `aws sts get-caller-identity` MUST be first command |
+| **A11** | Not applicable — RAM has no distribution lifecycle equivalent |
+| **A12** | Not applicable — RAM does not deregister targets from a target group |
+| **A13** | Not applicable — RAM does not delete VPCs |
+| **A14** | Not applicable — RAM `delete-resource-share` has no final-snapshot analogue |
+| **A15** | Not applicable — RAM does not call `s3api put-bucket-policy` |
+| **A16** | Not applicable — RAM does not call `autoscaling delete-auto-scaling-group` |
 
 ## Loop parameters
 

@@ -53,6 +53,17 @@
 
 ---
 
+## Confirmation Strings (mandatory for every destructive op)
+
+> Substituted into the Generator template's `{skill.confirmation_strings}` slot.
+
+| Operation | Confirmation token | Safety consequence if absent |
+|---|---|---|
+| `delete-resource-share` | `confirm=DELETE_RESOURCE_SHARE <arn>` | Safety = 0 → ABORT |
+| `delete-permission` | `confirm=DELETE_PERMISSION <arn>` | Safety = 0 → ABORT |
+| `delete-permission-version` | `confirm=DELETE_PERMISSION_VERSION <arn> <version>` | Safety = 0 → ABORT |
+| `reject-resource-share-invitation` | `confirm=REJECT_INVITATION <arn>` | Safety = 0 → ABORT |
+
 > See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
 > for the canonical Generator / Critic / Orchestrator templates and the
 > shared Variable Convention table.

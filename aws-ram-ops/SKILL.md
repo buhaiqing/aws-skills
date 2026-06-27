@@ -11,8 +11,8 @@ compatibility: >-
   to AWS RAM endpoints.
 metadata:
   author: aws
-  version: "1.2.0"
-  last_updated: "2026-06-26"
+  version: "1.3.0"
+  last_updated: "2026-06-27"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:

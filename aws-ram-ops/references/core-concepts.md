@@ -53,13 +53,13 @@ Account B (Consumer)
 
 ## Supported Resource Types
 
-| Category | Resource Types |
-|----------|---------------|
-| Compute | EC2 Subnets, Security Groups, Capacity Reservations, DX Gateway Associations |
-| Networking | VPC Prefix Delegations |
-| Database | RDS Clusters (Aurora), Neptune Clusters, DocumentDB Clusters |
-| Storage | EFS File Systems |
-| Other | License Manager Configurations |
+Query the API to get the authoritative, up-to-date list:
+
+```bash
+aws ram list-resource-types --region {{user.region}} --output json | jq '.resourceTypes[].resourceType'
+```
+
+No hardcoded table — resource type availability varies by region and account.
 
 ## Quotas
 
