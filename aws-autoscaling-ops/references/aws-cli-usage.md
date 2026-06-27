@@ -1,6 +1,8 @@
 # AWS CLI Usage — Auto Scaling
 
-## Common JSON Paths (Centralized)
+> **TE-4**: JSON paths centralized in SKILL.md `## Common JSON Paths`. This file is the canonical source for CLI commands.
+
+## Common JSON Paths
 
 ```
 # ASG:           .AutoScalingGroups[0].{AutoScalingGroupName,MinSize,MaxSize,DesiredCapacity,Instances[*].{InstanceId,LifecycleState,HealthStatus}}
@@ -60,121 +62,89 @@
 
 ## Key CLI Conventions
 
-### Output Format
-Always use `--output json` for agent parsing.
-
-### Region
-Pass `--region` or rely on `AWS_DEFAULT_REGION`.
-
-### Pagination
-CLI auto-paginates. For explicit control:
+Always use `--output json` for agent parsing. Pass `--region` or rely on `AWS_DEFAULT_REGION`. For explicit pagination:
 ```bash
 aws autoscaling describe-auto-scaling-groups --next-token TOKEN --max-items N
 ```
 
 ## Common Patterns
 
-### Create Auto Scaling Group (Full Example)
+### Create ASG
 ```bash
 aws autoscaling create-auto-scaling-group \
-  --auto-scaling-group-name "my-asg" \
-  --launch-template "LaunchTemplateName=my-lt,Version=\$Default" \
-  --min-size 1 \
-  --max-size 5 \
-  --desired-capacity 2 \
-  --vpc-zone-identifier "subnet-abc12345,subnet-def67890" \
-  --health-check-type ELB \
-  --health-check-grace-period 300 \
-  --default-cooldown 300 \
-  --tags "[{\"Key\":\"Name\",\"Value\":\"my-asg-instance\",\"PropagateAtLaunch\":true},{\"Key\":\"Environment\",\"Value\":\"production\",\"PropagateAtLaunch\":true}]" \
-  --region us-east-1 \
-  --output json
+  --auto-scaling-group-name "{{user.asg_name}}" \
+  --launch-template "LaunchTemplateName={{user.lt_name}},Version={{user.lt_version}}" \
+  --min-size {{user.min_size}} --max-size {{user.max_size}} --desired-capacity {{user.desired_capacity}} \
+  --vpc-zone-identifier "{{user.subnet_ids}}" --region "{{user.region}}" --output json
 ```
 
-### Describe Auto Scaling Group
+### Delete ASG (scale-to-0 first)
 ```bash
-aws autoscaling describe-auto-scaling-groups \
-  --auto-scaling-group-names "my-asg" \
-  --region us-east-1 \
-  --output json \
-  | jq '.AutoScalingGroups[0] | {AutoScalingGroupName, MinSize, MaxSize, DesiredCapacity, InstancesCount: [.Instances[] | length]}'
+# Scale to 0
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name "{{user.asg_name}}" \
+  --min-size 0 --max-size 0 --desired-capacity 0 --region "{{user.region}}" --output json
+# Wait for instances to terminate, then delete
+aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "{{user.asg_name}}" \
+  --region "{{user.region}}" --output json
+# Or force-delete (all instances immediately)
+aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "{{user.asg_name}}" \
+  --force-delete --region "{{user.region}}" --output json
 ```
 
-### List All ASGs with Instance Count
+### Describe ASG
 ```bash
-aws autoscaling describe-auto-scaling-groups \
-  --region us-east-1 \
-  --output json \
-  | jq '.AutoScalingGroups[] | {Name: .AutoScalingGroupName, Min: .MinSize, Max: .MaxSize, Desired: .DesiredCapacity, Instances: [.Instances[] | {Id: .InstanceId, State: .LifecycleState, Health: .HealthStatus}]}'
+aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "{{user.asg_name}}" \
+  --region "{{user.region}}" --output json
 ```
 
-### Scale Out (Increase Desired Capacity)
+### Scale Out
 ```bash
-aws autoscaling set-desired-capacity \
-  --auto-scaling-group-name "my-asg" \
-  --desired-capacity 4 \
-  --honor-cooldown \
-  --region us-east-1 \
-  --output json
+aws autoscaling set-desired-capacity --auto-scaling-group-name "{{user.asg_name}}" \
+  --desired-capacity {{user.desired_capacity}} --region "{{user.region}}" --output json
 ```
 
-### Create Target Tracking Policy (CPU Utilization)
+### Scaling Policy
 ```bash
-aws autoscaling put-scaling-policy \
-  --auto-scaling-group-name "my-asg" \
-  --policy-name "cpu-target-50" \
-  --policy-type TargetTrackingScaling \
-  --target-tracking-configuration '{"TargetValue": 50.0, "PredefinedMetricSpecification": {"PredefinedMetricType": "ASGAverageCPUUtilization"}}' \
-  --region us-east-1 \
-  --output json
+# Target tracking
+aws autoscaling put-scaling-policy --auto-scaling-group-name "{{user.asg_name}}" \
+  --policy-name "{{user.policy_name}}" --policy-type TargetTrackingScaling \
+  --target-tracking-configuration '{"TargetValue":50.0,"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"}}' \
+  --region "{{user.region}}" --output json
+# Step scaling
+aws autoscaling put-scaling-policy --auto-scaling-group-name "{{user.asg_name}}" \
+  --policy-name "{{user.policy_name}}" --policy-type StepScaling \
+  --adjustment-type ChangeInCapacity \
+  --step-adjustments '[{"MetricIntervalLowerBound":0,"ScalingAdjustment":1},{"MetricIntervalLowerBound":20,"ScalingAdjustment":2}]' \
+  --region "{{user.region}}" --output json
 ```
 
-### Create Lifecycle Hook
+### Lifecycle Hook
 ```bash
-aws autoscaling put-lifecycle-hook \
-  --lifecycle-hook-name "my-hook" \
-  --auto-scaling-group-name "my-asg" \
+aws autoscaling put-lifecycle-hook --lifecycle-hook-name "{{user.lifecycle_hook_name}}" \
+  --auto-scaling-group-name "{{user.asg_name}}" \
   --lifecycle-transition "autoscaling:EC2_INSTANCE_LAUNCHING" \
-  --heartbeat-timeout 300 \
-  --default-result "CONTINUE" \
-  --region us-east-1 \
-  --output json
+  --heartbeat-timeout 300 --default-result CONTINUE --region "{{user.region}}" --output json
 ```
 
-### Delete Auto Scaling Group (force delete)
+### Suspend / Resume
 ```bash
-aws autoscaling delete-auto-scaling-group \
-  --auto-scaling-group-name "my-asg" \
-  --force-delete \
-  --region us-east-1 \
-  --output json
+aws autoscaling suspend-processes --auto-scaling-group-name "{{user.asg_name}}" \
+  --scaling-processes HealthCheck ReplaceUnhealthy --region "{{user.region}}" --output json
+aws autoscaling resume-processes --auto-scaling-group-name "{{user.asg_name}}" \
+  --scaling-processes HealthCheck ReplaceUnhealthy --region "{{user.region}}" --output json
 ```
 
-### Suspend Health Check Process
+### Instance Refresh
 ```bash
-aws autoscaling suspend-processes \
-  --auto-scaling-group-name "my-asg" \
-  --scaling-processes "HealthCheck" "ReplaceUnhealthy" \
-  --region us-east-1 \
-  --output json
+aws autoscaling start-instance-refresh --auto-scaling-group-name "{{user.asg_name}}" \
+  --preferences '{"MinHealthyPercentage":90,"InstanceWarmup":300}' \
+  --region "{{user.region}}" --output json
+# Poll
+aws autoscaling describe-instance-refreshes --auto-scaling-group-name "{{user.asg_name}}" \
+  --region "{{user.region}}" --output json
 ```
 
-### Query by Tag
-```bash
-aws autoscaling describe-auto-scaling-groups \
-  --region us-east-1 \
-  --output json \
-  | jq '.AutoScalingGroups[] | select(.Tags[] | select(.Key=="Environment" and .Value=="production")) | .AutoScalingGroupName'
-```
+## Error Handling
 
-## Retry Strategy
-
-| Error Code | Retry? | Max Retries |
-|------------|--------|-------------|
-| 400 (InvalidParameter) | No | 0 |
-| 403 (AccessDenied) | No | 0 |
-| 404 (NotFound) | No | 0 |
-| 429 (Throttling) | Yes | 3 with exponential backoff |
-| 500 (InternalError) | Yes | 3 with exponential backoff |
-| 503 (ServiceUnavailable) | Yes | 3 |
-| ScalingActivityInProgress | Yes | Wait + retry
+> See `references/troubleshooting.md` §Common API Error Codes.
+> 400/403/404 → no retry | 429/500/503 → backoff 3x | ScalingActivityInProgress → wait + retry.
