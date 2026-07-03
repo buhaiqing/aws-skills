@@ -306,6 +306,83 @@ def apply_chain_inference(
                     )
                 )
 
+    # CloudWatch alarm inference rules
+    for alarm_name, metrics in signals.get("CloudWatch", {}).items():
+        state = metrics.get("StateValue")
+        if state is not None and state == "ALARM":
+            rule = "CW-ALARM-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: CloudWatch alarm `{alarm_name}` in ALARM state → customer signal"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="CloudWatch",
+                        resource_id=alarm_name,
+                        rule_id=rule,
+                        title="CloudWatch alarm in ALARM state",
+                        level="WARNING",
+                        metric="StateValue",
+                        current_value=1,
+                        recommendation="Review alarm reason; correlate with other findings",
+                    )
+                )
+
+    # DevOps Guru insight inference rules
+    for insight_id, metrics in signals.get("DevOpsGuru", {}).items():
+        status = metrics.get("Status")
+        if status is not None and status == "ONGOING":
+            rule = "DG-INSIGHT-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: DevOps Guru insight `{insight_id}` ONGOING → follow recommendation"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="DevOpsGuru",
+                        resource_id=insight_id,
+                        rule_id=rule,
+                        title="DevOps Guru ONGOING insight",
+                        level="WARNING",
+                        metric="InsightStatus",
+                        current_value=1,
+                        recommendation="Follow DevOps Guru recommendation narrative",
+                    )
+                )
+
+    # X-Ray fault/error rate inference rules
+    for node, metrics in signals.get("XRay", {}).items():
+        fault_rate = metrics.get("FaultRate")
+        if fault_rate is not None and fault_rate >= 5:
+            rule = "XRAY-FAULT-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: X-Ray node `{node}` fault rate {fault_rate:.1f}% → trace hot spot"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="XRay",
+                        resource_id=node,
+                        rule_id=rule,
+                        title="X-Ray node fault rate elevated",
+                        level="WARNING" if fault_rate < 10 else "CRITICAL",
+                        metric="FaultRate",
+                        current_value=fault_rate,
+                        threshold_warning=5,
+                        threshold_critical=10,
+                        recommendation="Open X-Ray trace map for cold start / downstream timeout",
+                    )
+                )
+
     for rid, metrics in signals.get("NAT", {}).items():
         err = metrics.get("ErrorPortAllocation")
         if err is not None and err >= 1:
@@ -631,6 +708,11 @@ def correlate_native_findings(
             )
         for x in xray_nodes[:3]:
             lines.append(f"  - Hot node: `{x['resource_id']}` rate={x.get('current_value')}%")
+
+    if ("CF-EDGE-01" in rules or "CF-ORIGIN-01" in rules) and ("S3-4XX-01" in rules or "S3-5XX-01" in rules):
+        lines.append(
+            "- **CF-S3-COMPOSITE**: CloudFront errors + S3 origin issues → verify OAC/bucket policy/path"
+        )
 
     return extra, lines
 
