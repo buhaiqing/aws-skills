@@ -136,6 +136,170 @@ def apply_chain_inference(
                     )
                 )
 
+    # EC2 memory, I/O, and network chain rules
+    for rid, metrics in signals.get("EC2", {}).items():
+        mem = metrics.get("MemoryUtilization")
+        if mem is not None and mem >= 85:
+            rule = "EC2-MEM-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: EC2 `{rid}` memory > 85% sustained "
+                    "→ possible memory leak or undersized instance"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="EC2",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="EC2 memory utilization critical",
+                        level="CRITICAL" if mem >= 95 else "WARNING",
+                        metric="MemoryUtilization",
+                        current_value=mem,
+                        threshold_warning=85,
+                        threshold_critical=95,
+                        recommendation="Check process-level memory via `ps aux --sort=-%mem`; check `/var/log/messages` or `dmesg` for OOM kills; consider instance resize. Delegate aws-ec2-ops.",
+                    )
+                )
+
+        vol_ql = metrics.get("VolumeQueueLength")
+        burst = metrics.get("BurstBalance")
+        if vol_ql is not None and vol_ql > 48 and burst is not None and burst < 20:
+            rule = "EC2-IO-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: EC2 `{rid}` VolumeQueueLength {vol_ql:.0f} + "
+                    f"BurstBalance {burst:.1f}% → EBS IOPS/throughput exhaustion"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="EC2",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="EBS burst bucket depleted with high queue depth",
+                        level="CRITICAL" if vol_ql > 64 else "WARNING",
+                        metric="VolumeQueueLength",
+                        current_value=vol_ql,
+                        threshold_warning=48,
+                        threshold_critical=64,
+                        recommendation="Upgrade to gp3/io1/io2 with provisioned IOPS. Delegate aws-ec2-ops.",
+                    )
+                )
+
+        read_lat = metrics.get("ReadLatency")
+        write_lat = metrics.get("WriteLatency")
+        lat_p95 = max(
+            v for v in (read_lat, write_lat) if v is not None
+        ) if (read_lat is not None or write_lat is not None) else None
+        if lat_p95 is not None and lat_p95 > 0.02 and vol_ql is not None and vol_ql > 32:
+            rule = "EC2-IO-02"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: EC2 `{rid}` disk latency p95 {lat_p95 * 1000:.1f}ms + "
+                    f"VolumeQueueLength {vol_ql:.0f} → EBS latency from queue depth"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="EC2",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="EBS high latency due to queue depth",
+                        level="CRITICAL" if lat_p95 > 0.1 else "WARNING",
+                        metric="ReadLatency",
+                        current_value=lat_p95,
+                        threshold_warning=0.02,
+                        threshold_critical=0.1,
+                        recommendation="Reduce concurrent I/O, increase EBS IOPS, or migrate to io1/io2. Delegate aws-ec2-ops.",
+                    )
+                )
+
+        net_out = metrics.get("NetworkOut")
+        net_limit = metrics.get("NetworkBandwidth")
+        if net_out is not None:
+            rule = "EC2-NET-01"
+            if rule not in existing_rule_ids:
+                if net_limit is not None and net_limit > 0:
+                    pct = net_out / net_limit * 100
+                    emit = net_out / net_limit > 0.80
+                else:
+                    pct = None
+                    emit = True  # informational — no limit to compare against
+                if emit:
+                    label = (
+                        f"{pct:.0f}% of instance limit" if pct is not None
+                        else f"{net_out / 1e6:.1f} MB/s"
+                    )
+                    lines.append(
+                        f"- **{rule}**: EC2 `{rid}` network out {label} "
+                        "→ bandwidth saturation risk"
+                    )
+                    if pct is not None:
+                        level = "CRITICAL" if pct >= 95 else "WARNING"
+                        thr_w = net_limit * 0.80
+                        thr_c = net_limit * 0.95
+                    else:
+                        level = "WARNING"
+                        thr_w = None
+                        thr_c = None
+                    incidents.append(
+                        make_incident(
+                            run_id=run_id,
+                            customer=customer,
+                            region=region,
+                            resource_type="EC2",
+                            resource_id=rid,
+                            rule_id=rule,
+                            title="EC2 network bandwidth saturation",
+                            level=level,
+                            metric="NetworkOut",
+                            current_value=net_out,
+                            threshold_warning=thr_w,
+                            threshold_critical=thr_c,
+                            recommendation="Check `describe-instance-types` for NetworkPerformance and resize if needed. Delegate aws-ec2-ops.",
+                        )
+                    )
+
+        pkt_in = metrics.get("NetworkPacketsIn")
+        pkt_out = metrics.get("NetworkPacketsOut")
+        drop_in = metrics.get("PacketDropIn")
+        drop_out = metrics.get("PacketDropOut")
+        if pkt_in is not None and pkt_out is not None and (drop_in is not None or drop_out is not None):
+            total_pkts = pkt_in + pkt_out
+            total_drops = (drop_in or 0) + (drop_out or 0)
+            if total_pkts > 0 and total_drops / total_pkts > 0.01:
+                rule = "EC2-NET-02"
+                if rule not in existing_rule_ids:
+                    drop_pct = total_drops / total_pkts * 100
+                    lines.append(
+                        f"- **{rule}**: EC2 `{rid}` packet drop rate {drop_pct:.1f}% "
+                        "→ SG/ENI packet drops"
+                    )
+                    incidents.append(
+                        make_incident(
+                            run_id=run_id,
+                            customer=customer,
+                            region=region,
+                            resource_type="EC2",
+                            resource_id=rid,
+                            rule_id=rule,
+                            title="EC2 packet drops detected",
+                            level="WARNING",
+                            metric="PacketDropRate",
+                            current_value=round(drop_pct, 2),
+                            threshold_warning=1.0,
+                            threshold_critical=5.0,
+                            recommendation="Review SG rules; check ENI limits; check VPC Flow Logs for REJECT entries. Delegate aws-vpc-ops + aws-ec2-ops.",
+                        )
+                    )
+
     # Lambda throttles + API Gateway 5xx (serverless path)
     for fn, metrics in signals.get("Lambda", {}).items():
         if (metrics.get("Throttles") or 0) >= 1:
