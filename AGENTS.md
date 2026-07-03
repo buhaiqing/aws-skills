@@ -252,7 +252,7 @@ total score. Full rules in spec §3.
 | `aws-cloudtrail-ops` | optional | 3 | read-mostly; `delete-trail` = severe |
 | `aws-skill-generator` | optional | 3 | meta operation; secret-leak guard |
 | `aws-topo-discovery` | optional | 3 | read-only discovery; no destructive operations |
-| `aws-aiops-cruise` | optional | 3 | read-only full-chain patrol; 7 Perceive Agents; no destructive operations |
+| `aws-aiops-cruise` | recommended | 3 | read-only full-chain patrol; 7 Perceive Agents; no destructive operations |
 
 Each skill may override its own `max_iter` in its `SKILL.md` under
 `## Quality Gate (GCL)`. A skill not yet listed has GCL **disabled** by

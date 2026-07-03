@@ -19,9 +19,12 @@ Disable WoW: `daily-health-check.py --no-wow`
 
 ## Future (v1.2+)
 
-- Persist rolling 30d metric snapshots under `.runtime/aws-aiops-cruise/metrics/`
-- Z-score vs local baseline per resource/metric
-- Integrate CloudWatch Anomaly Detection alarms as external baseline
+> **Roadmap target**: v1.2.0 (estimated 2026-Q3)
+
+1. Persist rolling 30d metric snapshots under `.runtime/aws-aiops-cruise/metrics/`
+2. Z-score vs local baseline per resource/metric
+3. Integrate CloudWatch Anomaly Detection alarms as external baseline
+4. Auto-calibrate thresholds from historical data (reduces static threshold false positives)
 
 ## Retention
 

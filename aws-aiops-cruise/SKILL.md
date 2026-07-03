@@ -24,7 +24,7 @@ metadata:
   cli_applicability: dual-path
   gcl:
     enabled: true
-    class: optional
+    class: recommended
     max_iter: 3
     rubric_version: v1
     rubric_ref: references/rubric.md
