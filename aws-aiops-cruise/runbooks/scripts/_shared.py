@@ -80,6 +80,7 @@ PRODUCTS: list[dict[str, Any]] = [
             "DatabaseConnections": {W: 70, C: 85},
             "FreeStorageSpace": {W: 5_000_000_000, C: 2_000_000_000},
             "ReadLatency": {W: 0.02, C: 0.1},
+            "WriteLatency": {W: 0.02, C: 0.1},
         },
         "namespace": "AWS/RDS",
         "dim": "DBInstanceIdentifier",

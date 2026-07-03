@@ -114,6 +114,37 @@ def apply_chain_inference(
                     )
                 )
 
+    for rid, metrics in signals.get("RDS", {}).items():
+        read_lat = metrics.get("ReadLatency")
+        write_lat = metrics.get("WriteLatency")
+        lat_max = max(
+            v for v in (read_lat, write_lat) if v is not None
+        ) if (read_lat is not None or write_lat is not None) else None
+        if lat_max is not None and lat_max >= 0.02:
+            rule = "RDS-LAT-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: RDS `{rid}` latency p95 {lat_max * 1000:.1f}ms "
+                    "→ slow query or I/O bottleneck"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="RDS",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="RDS read/write latency elevated",
+                        level="CRITICAL" if lat_max >= 0.1 else "WARNING",
+                        metric="ReadLatency+WriteLatency",
+                        current_value=lat_max,
+                        threshold_warning=0.02,
+                        threshold_critical=0.1,
+                        recommendation="PI top SQL via aws-rds-ops; check IOPS sizing and query patterns",
+                    )
+                )
+
     for rid, metrics in signals.get("NAT", {}).items():
         err = metrics.get("ErrorPortAllocation")
         if err is not None and err >= 1:
