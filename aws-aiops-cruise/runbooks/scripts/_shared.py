@@ -520,7 +520,7 @@ def make_incident(
     dedup_key = f"{customer}:{resource_type}:{resource_id}:{rule_id}:{ts[:10]}"
     inc: dict[str, Any] = {
         "incident_id": str(uuid.uuid4()),
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "customer": customer,
         "timestamp": ts,
         "run_id": run_id,
