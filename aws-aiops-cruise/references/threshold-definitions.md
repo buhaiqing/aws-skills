@@ -1,5 +1,11 @@
 # Threshold Definitions — AWS AIOps Cruise
 
+> **TE-1 notice**: Thresholds below are **AWS-stable conventions / recommended defaults** —
+> reasonable starting points that match AWS console default alarm thresholds
+> and published best practices. For production use, prefer CloudWatch anomaly
+> detection bands or dynamic baselines (see [`dynamic-baseline.md`](dynamic-baseline.md))
+> instead of hardcoded values.
+>
 > Default Warning (W) / Critical (C) thresholds. Override via runbook args when documented.
 > Thresholds below are per-service; see `inference-rules.md` for cross-signal chain patterns.
 

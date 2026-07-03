@@ -2,6 +2,8 @@
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.1.0 | 2026-07-04 | GCL compliance: shared skeleton prompt-templates migration; frontmatter GCL/cross_skill_deps/delegate metadata; TE-1 threshold disclaimer; TE-6 execution flow consolidation; TE checklist section; `{{user.safety_confirm}}` added |
+|---------|------|--------|
 | 1.9.0 | 2026-06-13 | P1: SKILL slim; boto3 CLI fallback; aiops_context `facts_info`; markdown topology link; Perceive `_cruise_env.sh`; TopoScan auto overlay; Mermaid health only WARNING+ |
 | 2.0.0 | 2026-06-13 | P2: `_aws_native` split into `collectors/`; health overlay + cf-origins unit tests |
 | 1.8.1 | 2026-06-13 | P0: RDS-PROXY-01 pool %; execution-guide sync; orchestrator delegate-routing cruise/topo |

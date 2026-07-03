@@ -17,11 +17,32 @@ compatibility: >-
   Read-only Describe/List/Get APIs strictly enforced.
 metadata:
   author: aws
-  version: "2.0.0"
-  last_updated: "2026-06-13"
+  version: "2.1.0"
+  last_updated: "2026-07-04"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: cross-product-aiops-cruise
   cli_applicability: dual-path
+  gcl:
+    enabled: true
+    class: optional
+    max_iter: 3
+    rubric_version: v1
+    rubric_ref: references/rubric.md
+    prompts_ref: references/prompt-templates.md
+  cross_skill_deps:
+    - aws-topo-discovery
+    - aws-cloudwatch-ops
+    - aws-rds-ops
+    - aws-aurora-ops
+    - aws-elb-ops
+    - aws-ec2-ops
+    - aws-aiops-orchestrator
+  orchestrator_aware: true
+  orchestrator_compat: ">=0.1.0"
+  delegate:
+    accepts: ["health-check", "rca", "pre-flight-check", "capacity-review"]
+    produces_facts: ["metric", "log", "event", "state", "topology"]
+    idempotency_ttl: "PT24H"
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
@@ -104,6 +125,7 @@ See [`references/perceive-design.md`](references/perceive-design.md).
 | `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Default region when user omits |
 | `{{env.AWS_PROFILE}}` | Runtime env | Overrides explicit keys |
 | `{{user.scope_name}}` | User input | Workload label (customer / app name) |
+| `{{user.safety_confirm}}` | User input | Explicit scope confirmation for full-account patrol |
 | `{{user.tag_key}}` | User input | e.g. `customer`, `Environment` |
 | `{{user.tag_value}}` | User input | e.g. `prod-acme` |
 | `{{user.resource_group}}` | User input | AWS Resource Group name (preferred scope) |
@@ -129,30 +151,16 @@ See [`references/perceive-design.md`](references/perceive-design.md).
 | Findings schema | All findings MUST match [`references/incident-schema.md`](references/incident-schema.md) |
 | Report persistence | JSON → `audit-results/` (git-ignored) |
 
-## Pre-flight Interaction
+## Pre-flight & Execution Flow
 
-Interactive scope/scenario prompts: [`runbooks/01-daily-health-check.md`](runbooks/01-daily-health-check.md). Non-interactive: pass `--resource-group` or `--tag-key`/`--tag-value`, `--non-interactive`, optional `--enable-xray` / `--render-topology`.
-
-## Execution Flow Pattern
-
-Every runbook: **Pre-flight → Execute → Validate → Recover**
+Every runbook follows: **Pre-flight → Execute → Validate → Recover**
 
 | Step | Actions |
 |------|---------|
-| Pre-flight | `aws sts get-caller-identity`, scope (RG/tag), CLI/jq check |
-| Execute | Phase 1–3: inventory → CloudWatch → inference |
-| Validate | Grade PASS/WARNING/CRITICAL; incident schema check |
+| Pre-flight | `aws sts get-caller-identity`, scope confirmation (RG/tag), CLI/jq check, interactive prompts per [`runbooks/01-daily-health-check.md`](runbooks/01-daily-health-check.md). Non-interactive: `--resource-group`, `--tag-key`/`--tag-value`, `--non-interactive` |
+| Execute | **3-phase execution** (details in `runbooks/`):<br>1 — Sniff + topology: Resource Groups Tagging API, VPC/ELB/EC2/RDS inventory → Sniff report<br>2 — Deep collect: CloudWatch 6h + WoW, optional SSM/PI, CloudTrail window → Metric bundles<br>3 — Infer + report: Rules in [`references/inference-rules.md`](references/inference-rules.md) → Markdown + JSON incidents |
+| Validate | Grade PASS/WARNING/CRITICAL per [`references/incident-schema.md`](references/incident-schema.md) |
 | Recover | Throttle backoff 3×; AccessDenied → HALT; empty scope → HALT |
-
-## Execution Flow Overview
-
-Three phases (details in `runbooks/`):
-
-| Phase | Actions | Output |
-|-------|---------|--------|
-| **1 — Sniff + topology** | Resource Groups Tagging API, VPC/ELB/EC2/RDS inventory | Sniff report + confirm list if confidence ≤ 0.8 |
-| **2 — Deep collect** | CloudWatch 6h + WoW, optional SSM/PI, CloudTrail window | Metric bundles per resource |
-| **3 — Infer + report** | Rules in [`references/inference-rules.md`](references/inference-rules.md) | Markdown + JSON incidents |
 
 **CLI entry**:
 
@@ -207,6 +215,17 @@ Alarm → cruise: [`assets/ci-cd-templates/eventbridge-alarm-cruise.json`](asset
 | Spec Compliance | ≥ 0.8 | Runbook + incident schema |
 
 GCL: **optional**, `max_iter=3`. Prompts: [`references/prompt-templates.md`](references/prompt-templates.md). Rubric: [`references/rubric.md`](references/rubric.md).
+
+## Token Efficiency (TE-1…TE-6)
+
+| Rule | Status | Notes |
+|------|--------|-------|
+| TE-1: No hardcoded version/port/state tables | Partial | Thresholds in `references/threshold-definitions.md` are AWS-stable conventions; flagged as "default starting points" |
+| TE-2: No SDK docstrings | Pass | Inline code comments only |
+| TE-3: Compact error tables | Pass | Single-row Recover table |
+| TE-4: JSON paths centralized at file top | Pass | `references/execution-guide.md` centralizes all paths |
+| TE-5: YAML anchors in example config | N/A | No `example-config.yaml` (read-only skill) |
+| TE-6: No duplicated flows across SKILL.md and references | Pass | Execution flow consolidated above |
 
 ## Runbook Index
 
