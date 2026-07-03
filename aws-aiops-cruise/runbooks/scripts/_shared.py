@@ -77,7 +77,7 @@ PRODUCTS: list[dict[str, Any]] = [
         "id": "DBInstanceIdentifier",
         "metrics": {
             "CPUUtilization": {W: 75, C: 85},
-            "DatabaseConnections": {W: 70, C: 85},
+            "DatabaseConnections": {W: 70, C: 85},  # percentage of max_connections (dynamic)
             "FreeStorageSpace": {W: 5_000_000_000, C: 2_000_000_000},
             "ReadLatency": {W: 0.02, C: 0.1},
             "WriteLatency": {W: 0.02, C: 0.1},
@@ -632,20 +632,35 @@ def parallel_metric_scan(
         else:
             val = stats.get("max") if stats.get("max") is not None else stats.get("avg")
         wow = get_wow_change(region, prod["namespace"], metric, prod["dim"], dim_value) if enable_wow else None
-        return prod, rid, metric, thr, val, wow
+        # For RDS DatabaseConnections, fetch max_connections from parameter group
+        max_conn = 0
+        if prod["name"] == "RDS" and metric == "DatabaseConnections" and val is not None:
+            from collectors._rds_helpers import _parameter_max_connections
+            db_data = run_aws(["aws", "rds", "describe-db-instances", "--db-instance-identifier", rid], region)
+            if db_data and db_data.get("DBInstances"):
+                pg_name = db_data["DBInstances"][0].get("DBParameterGroups", [{}])[0].get("DBParameterGroupName", "")
+                if pg_name:
+                    max_conn = _parameter_max_connections(region, pg_name) or 0
+        return prod, rid, metric, thr, val, wow, max_conn
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futs = [pool.submit(_one, t) for t in tasks]
         for fut in as_completed(futs):
             try:
-                prod, rid, metric, thr, val, wow = fut.result()
+                prod, rid, metric, thr, val, wow, max_conn = fut.result()
             except Exception as e:
                 log("WARN", f"metric task failed: {e}")
                 continue
             pname = prod["name"]
             signals.setdefault(pname, {}).setdefault(rid, {})[metric] = val
-            invert = prod.get("metric_invert", {}).get(metric, False)
-            level = level_for_value(val, thr, invert=invert)
+            # For RDS DatabaseConnections, store max_connections and use percentage
+            if pname == "RDS" and metric == "DatabaseConnections" and max_conn > 0:
+                signals[pname][rid]["_max_connections"] = max_conn
+                val_pct = (val / max_conn * 100) if val is not None else None
+                level = level_for_value(val_pct, thr)
+            else:
+                invert = prod.get("metric_invert", {}).get(metric, False)
+                level = level_for_value(val, thr, invert=invert)
             if wow is not None and wow > 50 and level is None:
                 level = "WARNING"
             if level:

@@ -92,10 +92,12 @@ def apply_chain_inference(
 
     for rid, metrics in signals.get("RDS", {}).items():
         conn = metrics.get("DatabaseConnections")
-        if conn is not None and conn >= 70:
+        max_conn = metrics.get("_max_connections", 0)
+        conn_pct = (conn / max_conn * 100) if max_conn > 0 else conn
+        if conn is not None and conn_pct >= 70:
             rule = "RDS-CONN-01"
             if rule not in existing_rule_ids:
-                lines.append(f"- **{rule}**: RDS `{rid}` connections elevated → pool/leak check")
+                lines.append(f"- **{rule}**: RDS `{rid}` connections {conn_pct:.0f}% of max → pool/leak check")
                 incidents.append(
                     make_incident(
                         run_id=run_id,
@@ -105,9 +107,9 @@ def apply_chain_inference(
                         resource_id=rid,
                         rule_id=rule,
                         title="RDS connection count elevated",
-                        level="CRITICAL" if conn >= 85 else "WARNING",
+                        level="CRITICAL" if conn_pct >= 85 else "WARNING",
                         metric="DatabaseConnections",
-                        current_value=conn,
+                        current_value=conn_pct,
                         threshold_warning=70,
                         threshold_critical=85,
                         recommendation="Review app connection pool; delegate aws-rds-ops for PI",

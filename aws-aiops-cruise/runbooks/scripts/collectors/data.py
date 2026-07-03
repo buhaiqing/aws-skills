@@ -7,7 +7,7 @@ from typing import Any
 
 from _shared import make_incident, resource_in_scope, run_aws, log
 
-from collectors._rds_helpers import _proxy_client_connection_limit
+from collectors._rds_helpers import _proxy_client_connection_limit, _parameter_max_connections
 from collectors._time import json_time
 
 def audit_rds_performance_insights(
@@ -266,7 +266,11 @@ def audit_rds_proxy(region: str, scope_ids: set[str], run_id: str, customer: str
             )
             if stats and stats.get("Datapoints"):
                 conn = max(p.get("Maximum", 0) for p in stats["Datapoints"])
-                if conn >= 70:
+                # Compute percentage against cluster max_connections
+                cl_pg = cl.get("DBClusterParameterGroup", "")
+                max_conn = _parameter_max_connections(region, cl_pg, cluster=True) if cl_pg else 0
+                conn_pct = (conn / max_conn * 100) if max_conn else conn
+                if conn_pct >= 70:
                     incidents.append(
                         make_incident(
                             run_id=run_id,
@@ -275,8 +279,8 @@ def audit_rds_proxy(region: str, scope_ids: set[str], run_id: str, customer: str
                             resource_type="Aurora",
                             resource_id=cid,
                             rule_id="RDS-PROXY-AURORA-02",
-                            title=f"Aurora `{cid}` connections {conn:.0f} via proxy `{name}`",
-                            level="CRITICAL" if conn >= 85 else "WARNING",
+                            title=f"Aurora `{cid}` connections {conn:.0f} ({conn_pct:.0f}%) via proxy `{name}`",
+                            level="CRITICAL" if conn_pct >= 85 else "WARNING",
                             metric="DatabaseConnections",
                             current_value=conn,
                             threshold_warning=70,
