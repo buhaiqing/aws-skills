@@ -147,6 +147,165 @@ def apply_chain_inference(
                     )
                 )
 
+    # Aurora inference rules
+    for rid, metrics in signals.get("Aurora", {}).items():
+        lag = metrics.get("AuroraReplicaLag")
+        if lag is not None and lag > 1000:
+            rule = "AURORA-LAG-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: Aurora `{rid}` replica lag {lag:.0f}ms "
+                    "→ replication bottleneck"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="Aurora",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="Aurora replica lag elevated",
+                        level="CRITICAL" if lag > 30000 else "WARNING",
+                        metric="AuroraReplicaLag",
+                        current_value=lag,
+                        threshold_warning=1000,
+                        threshold_critical=30000,
+                        recommendation="PI top SQL on writer; add reader or scale writer — aws-aurora-ops",
+                    )
+                )
+
+        slv_cap = metrics.get("ServerlessDatabaseCapacity")
+        slv_max = metrics.get("_max_capacity")
+        if slv_cap is not None and slv_max is not None and slv_max > 0:
+            cap_pct = slv_cap / slv_max * 100
+            if cap_pct >= 90:
+                rule = "AURORA-SLV2-01"
+                if rule not in existing_rule_ids:
+                    lines.append(
+                        f"- **{rule}**: Aurora `{rid}` Serverless v2 capacity "
+                        f"{cap_pct:.0f}% of max → scaling pressure"
+                    )
+                    incidents.append(
+                        make_incident(
+                            run_id=run_id,
+                            customer=customer,
+                            region=region,
+                            resource_type="Aurora",
+                            resource_id=rid,
+                            rule_id=rule,
+                            title="Aurora Serverless v2 capacity near ceiling",
+                            level="CRITICAL",
+                            metric="ServerlessDatabaseCapacity",
+                            current_value=slv_cap,
+                            recommendation="Raise MaxCapacity (≤ ceiling); aws-aurora-ops modify-db-cluster",
+                        )
+                    )
+
+        buf_hit = metrics.get("BufferCacheHitRatio")
+        if buf_hit is not None and buf_hit < 99:
+            rule = "AURORA-CACHE-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: Aurora `{rid}` buffer cache hit ratio "
+                    f"{buf_hit:.1f}% → memory pressure"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="Aurora",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="Aurora buffer cache hit ratio low",
+                        level="CRITICAL" if buf_hit < 95 else "WARNING",
+                        metric="BufferCacheHitRatio",
+                        current_value=buf_hit,
+                        threshold_warning=99,
+                        threshold_critical=95,
+                        recommendation="Scale instance class or tune buffer pool parameters — aws-aurora-ops",
+                    )
+                )
+
+    # RDS Proxy inference rules
+    for rid, metrics in signals.get("RDSProxy", {}).items():
+        client_conn = metrics.get("ClientConnections")
+        pool_limit = metrics.get("_pool_limit")
+        if client_conn is not None:
+            if pool_limit is not None and pool_limit > 0:
+                conn_pct = client_conn / pool_limit * 100
+                if conn_pct >= 80:
+                    rule = "RDS-PROXY-01"
+                    if rule not in existing_rule_ids:
+                        lines.append(
+                            f"- **{rule}**: RDS Proxy `{rid}` client connections "
+                            f"{conn_pct:.0f}% of pool limit → connection pool exhaustion"
+                        )
+                        incidents.append(
+                            make_incident(
+                                run_id=run_id,
+                                customer=customer,
+                                region=region,
+                                resource_type="RDSProxy",
+                                resource_id=rid,
+                                rule_id=rule,
+                                title="RDS Proxy client connections near pool limit",
+                                level="CRITICAL" if conn_pct >= 95 else "WARNING",
+                                metric="ClientConnections",
+                                current_value=client_conn,
+                                threshold_warning=pool_limit * 0.80,
+                                threshold_critical=pool_limit * 0.95,
+                                recommendation="Tune proxy max_connections_percent or increase target max_connections",
+                            )
+                        )
+            elif client_conn >= 1000:
+                rule = "RDS-PROXY-01"
+                if rule not in existing_rule_ids:
+                    lines.append(
+                        f"- **{rule}**: RDS Proxy `{rid}` client connections "
+                        f"{client_conn:.0f} (pool limit unknown) → connection pressure"
+                    )
+                    incidents.append(
+                        make_incident(
+                            run_id=run_id,
+                            customer=customer,
+                            region=region,
+                            resource_type="RDSProxy",
+                            resource_id=rid,
+                            rule_id=rule,
+                            title="RDS Proxy client connections elevated",
+                            level="WARNING",
+                            metric="ClientConnections",
+                            current_value=client_conn,
+                            recommendation="Tune proxy max_connections_percent or increase target max_connections",
+                        )
+                    )
+
+        setup_fail = metrics.get("DatabaseConnectionsSetupFailed")
+        if setup_fail is not None and setup_fail > 0:
+            rule = "RDS-PROXY-02"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: RDS Proxy `{rid}` connection setup failures "
+                    f"{setup_fail:.0f} → auth or connectivity issue"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="RDSProxy",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="RDS Proxy connection setup failures",
+                        level="CRITICAL",
+                        metric="DatabaseConnectionsSetupFailed",
+                        current_value=setup_fail,
+                        recommendation="Check auth config, SG rules, target RDS availability — aws-rds-ops",
+                    )
+                )
+
     for rid, metrics in signals.get("NAT", {}).items():
         err = metrics.get("ErrorPortAllocation")
         if err is not None and err >= 1:

@@ -437,6 +437,127 @@ def get_metric_stats(
     }
 
 
+# ---------------------------------------------------------------------------
+# Batch metric collection via get-metric-data (up to 100 queries per call)
+# ---------------------------------------------------------------------------
+
+_BATCH_SIZE = 100
+
+
+def _sanitize_query_id(ns: str, metric: str, dim_value: str) -> str:
+    """Build a CloudWatch MetricDataQuery Id from its components."""
+    import re
+
+    raw = f"{ns}_{metric}_{dim_value}"
+    safe = re.sub(r"[^A-Za-z0-9_]", "_", raw)
+    if not safe[0].isalpha():
+        safe = "m" + safe
+    return safe[:255]
+
+
+def get_metric_data_batch(
+    region: str,
+    queries: list[tuple[str, str, str, str, str]],
+    hours: int = 6,
+) -> dict[tuple[str, str], dict[str, float | None]]:
+    """Fetch multiple metrics in batches of up to 100.
+
+    Parameters
+    ----------
+    queries : list of (namespace, metric_name, dim_name, dim_value, statistic)
+        One entry per (resource, metric) pair.
+    hours : int
+        Look-back window in hours.
+
+    Returns
+    -------
+    dict mapping (metric_name, dim_value) → {"avg": float|None, "max": float|None, "sum": float|None}
+    """
+    end = datetime.now(UTC)
+    start = end - timedelta(hours=hours)
+    results: dict[tuple[str, str], dict[str, float | None]] = {}
+
+    for offset in range(0, len(queries), _BATCH_SIZE):
+        batch = queries[offset : offset + _BATCH_SIZE]
+        mdqs: list[dict[str, Any]] = []
+        id_map: dict[str, tuple[str, str, str]] = {}  # qid → (metric, dim_value, statistic)
+
+        for ns, metric, dim_name, dim_value, statistic in batch:
+            qid = _sanitize_query_id(ns, metric, dim_value)
+            # Deduplicate: if same (metric, dim_value) already added, skip
+            key = (metric, dim_value)
+            if qid in id_map:
+                continue
+            id_map[qid] = (metric, dim_value, statistic)
+
+            stat_field = "Average" if statistic not in ("Sum", "Maximum", "Minimum") else statistic
+            mdqs.append(
+                {
+                    "Id": qid,
+                    "MetricStat": {
+                        "Metric": {
+                            "Namespace": ns,
+                            "MetricName": metric,
+                            "Dimensions": [{"Name": dim_name, "Value": dim_value}],
+                        },
+                        "Period": 300,
+                        "Stat": stat_field,
+                    },
+                }
+            )
+
+        if not mdqs:
+            continue
+
+        data = run_aws(
+            [
+                "aws",
+                "cloudwatch",
+                "get-metric-data",
+                "--metric-data-queries",
+                json.dumps(mdqs),
+                "--start-time",
+                start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "--end-time",
+                end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            ],
+            region,
+        )
+
+        if not data or not data.get("MetricDataResults"):
+            # Batch failed — caller should fall back to individual calls
+            return {}
+
+        # Process each metric result
+        for result in data["MetricDataResults"]:
+            qid = result.get("Id", "")
+            info = id_map.get(qid)
+            if not info:
+                continue
+            metric, dim_value, statistic = info
+            values = result.get("Values", [])
+            if not values:
+                results[(metric, dim_value)] = {"avg": None, "max": None, "sum": None}
+                continue
+
+            stat_val = values[0] if len(values) == 1 else sum(values) / len(values)
+            avg_val = stat_val if statistic not in ("Sum", "Maximum") else None
+            max_val = stat_val if statistic == "Maximum" else None
+            sum_val = stat_val if statistic == "Sum" else None
+
+            # For Average stats, also track max from available datapoints
+            if statistic not in ("Sum", "Maximum"):
+                max_val = max(values) if len(values) > 1 else None
+
+            results[(metric, dim_value)] = {
+                "avg": avg_val,
+                "max": max_val,
+                "sum": sum_val,
+            }
+
+    return results
+
+
 def get_wow_change(
     region: str,
     namespace: str,
@@ -620,7 +741,29 @@ def parallel_metric_scan(
             for metric, thr in prod.get("metrics", {}).items():
                 tasks.append((prod, rid, dim_value, metric, thr))
 
-    def _one(args):
+    # --- Phase 1: batch metric collection via get-metric-data ---
+    # Build batch queries for all tasks
+    batch_queries: list[tuple[str, str, str, str, str]] = []
+    for prod, rid, dim_value, metric, thr in tasks:
+        stat_map = prod.get("statistic", {})
+        stat = stat_map.get(metric, "Average")
+        batch_queries.append((prod["namespace"], metric, prod["dim"], dim_value, stat))
+
+    # Collect batch results (keyed by (metric, dim_value))
+    batch_results: dict[tuple[str, str], dict[str, float | None]] = {}
+    tasks_needing_individual: list[tuple] = []
+
+    for offset in range(0, len(batch_queries), _BATCH_SIZE):
+        batch = batch_queries[offset : offset + _BATCH_SIZE]
+        batch_res = get_metric_data_batch(region, batch)
+        if batch_res:
+            batch_results.update(batch_res)
+        else:
+            # Batch failed — fall back to individual calls for this batch
+            tasks_needing_individual.extend(tasks[offset : offset + _BATCH_SIZE])
+
+    # --- Phase 2: individual fallback for tasks that weren't batched ---
+    def _one_individual(args):
         prod, rid, dim_value, metric, thr = args
         stat_map = prod.get("statistic", {})
         stat = stat_map.get(metric, "Average")
@@ -631,8 +774,41 @@ def parallel_metric_scan(
             val = stats.get("sum")
         else:
             val = stats.get("max") if stats.get("max") is not None else stats.get("avg")
+        return prod, rid, metric, thr, val
+
+    # Run individual fallback in parallel
+    individual_results: dict[tuple[str, str], float | None] = {}
+    if tasks_needing_individual:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futs = [pool.submit(_one_individual, t) for t in tasks_needing_individual]
+            for fut in as_completed(futs):
+                try:
+                    prod, rid, metric, thr, val = fut.result()
+                    stat_map = prod.get("statistic", {})
+                    stat = stat_map.get(metric, "Average")
+                    individual_results[(metric, dim_value)] = val
+                except Exception as e:
+                    log("WARN", f"individual metric fallback failed: {e}")
+
+    # --- Phase 3: compute WoW, RDS max_connections, incidents & signals ---
+    for prod, rid, dim_value, metric, thr in tasks:
+        stat_map = prod.get("statistic", {})
+        stat = stat_map.get(metric, "Average")
+
+        # Resolve value: prefer batch, fall back to individual
+        cached = batch_results.get((metric, dim_value))
+        if cached is not None:
+            if stat == "Sum":
+                val = cached.get("sum")
+            else:
+                val = cached.get("max") if cached.get("max") is not None else cached.get("avg")
+        else:
+            val = individual_results.get((metric, dim_value))
+
+        # WoW change (always individual — it's a separate API pattern)
         wow = get_wow_change(region, prod["namespace"], metric, prod["dim"], dim_value) if enable_wow else None
-        # For RDS DatabaseConnections, fetch max_connections from parameter group
+
+        # RDS DatabaseConnections → percentage of max_connections
         max_conn = 0
         if prod["name"] == "RDS" and metric == "DatabaseConnections" and val is not None:
             from collectors._rds_helpers import _parameter_max_connections
@@ -641,57 +817,48 @@ def parallel_metric_scan(
                 pg_name = db_data["DBInstances"][0].get("DBParameterGroups", [{}])[0].get("DBParameterGroupName", "")
                 if pg_name:
                     max_conn = _parameter_max_connections(region, pg_name) or 0
-        return prod, rid, metric, thr, val, wow, max_conn
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futs = [pool.submit(_one, t) for t in tasks]
-        for fut in as_completed(futs):
-            try:
-                prod, rid, metric, thr, val, wow, max_conn = fut.result()
-            except Exception as e:
-                log("WARN", f"metric task failed: {e}")
-                continue
-            pname = prod["name"]
-            signals.setdefault(pname, {}).setdefault(rid, {})[metric] = val
-            # For RDS DatabaseConnections, store max_connections and use percentage
-            if pname == "RDS" and metric == "DatabaseConnections" and max_conn > 0:
-                signals[pname][rid]["_max_connections"] = max_conn
-                val_pct = (val / max_conn * 100) if val is not None else None
-                level = level_for_value(val_pct, thr)
-            else:
-                invert = prod.get("metric_invert", {}).get(metric, False)
-                level = level_for_value(val, thr, invert=invert)
-            if wow is not None and wow > 50 and level is None:
-                level = "WARNING"
-            if level:
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type=pname,
-                        resource_id=rid,
-                        rule_id=f"METRIC-{pname}-{metric}",
-                        title=f"{pname} {metric} threshold breach"
-                        + (f" (WoW +{wow}%)" if wow and wow > 30 else ""),
-                        level=level,
-                        metric=metric,
-                        current_value=val,
-                        threshold_warning=thr.get(W),
-                        threshold_critical=thr.get(C),
-                        recommendation=f"See inference-rules.md for {pname}",
-                        wow_percent=wow,
-                    )
-                )
-            risk_evidence.append(
-                build_risk_evidence(
-                    pname,
-                    rid,
-                    metric,
-                    val,
-                    threshold_w=thr.get(W),
-                    threshold_c=thr.get(C),
-                    wow_pct=wow,
+        pname = prod["name"]
+        signals.setdefault(pname, {}).setdefault(rid, {})[metric] = val
+
+        if pname == "RDS" and metric == "DatabaseConnections" and max_conn > 0:
+            signals[pname][rid]["_max_connections"] = max_conn
+            val_pct = (val / max_conn * 100) if val is not None else None
+            level = level_for_value(val_pct, thr)
+        else:
+            invert = prod.get("metric_invert", {}).get(metric, False)
+            level = level_for_value(val, thr, invert=invert)
+        if wow is not None and wow > 50 and level is None:
+            level = "WARNING"
+        if level:
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type=pname,
+                    resource_id=rid,
+                    rule_id=f"METRIC-{pname}-{metric}",
+                    title=f"{pname} {metric} threshold breach"
+                    + (f" (WoW +{wow}%)" if wow and wow > 30 else ""),
+                    level=level,
+                    metric=metric,
+                    current_value=val,
+                    threshold_warning=thr.get(W),
+                    threshold_critical=thr.get(C),
+                    recommendation=f"See inference-rules.md for {pname}",
+                    wow_percent=wow,
                 )
             )
+        risk_evidence.append(
+            build_risk_evidence(
+                pname,
+                rid,
+                metric,
+                val,
+                threshold_w=thr.get(W),
+                threshold_c=thr.get(C),
+                wow_pct=wow,
+            )
+        )
     return incidents, signals, risk_evidence
