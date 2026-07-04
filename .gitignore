@@ -229,5 +229,6 @@ audit-results/
 # Agent runtime state
 .omo/
 .omc/
+.opencode/
 .pi/
 .vscode/

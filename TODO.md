@@ -203,4 +203,153 @@ resolved in a single pass; full report at `/tmp/gcl-audit-report.md`.
 
 ---
 
-*Last updated: 2026-06-27 (GCL hardening pass: original 51 items + 7 new G-items all resolved — 21 HIGH + 22 MEDIUM + 8 LOW + 7 G-pass = **58 total resolved**)*
+*Last updated: 2026-07-04 (AIOps Cruise review: 10 new items added — see §AI-OPS-CR-2026-07)*
+
+---
+
+## AI-OPS-CR-2026-07 — AIOps Cruise 巡检质量优化
+
+> Senior AIOps review of aws-aiops-cruise v2.1.0 — SKILL.md + references/ + runbooks/scripts/ + collectors/
+
+### HIGH Priority — 推理覆盖与正确性
+
+### A1. 推理规则文档与代码实现严重脱节
+
+`inference-rules.md` 定义了 30+ 条规则，但 `_inference.py` 仅实现 ~6 条。大量规则是"纸面规则"：
+
+| 缺失规则分类 | 具体规则 |
+|---|---|
+| Edge 层 | R53-ALB-01, WAF-ALB-01, CF-ALB-01, CF-S3-01 composite |
+| Compute 层 | EC2-NET-01/02, EC2-IO-01/02, ECS-TASK-01, EKS-NG-01 |
+| Data 层 | RDS-PI-01, RDS-LAT-01, AURORA-LAG-01, AURORA-SLV2-01, AURORA-CACHE-01, CACHE-MEM-01 |
+| Observability 层 | CW-ALARM-01, DG-INSIGHT-01, CFG-NC-01, SH-CRIT-01, GD-HIGH-01, XRAY-LAMBDA-01 |
+| Governance 层 | CO-EC2-01 |
+
+**Fix**: 补全 `_inference.py` 和 `collectors/` 实现，确保文档与代码一对一对应
+
+### A2. RDS 连接数阈值类型错误（BUG）
+
+`_shared.py` PRODUCTS 中 RDS `DatabaseConnections` 阈值 `{W: 70, C: 85}` — 注释说是百分比，但 `describe-db-instances` 返回的是**绝对连接数**。
+
+| # | 现象 | 修复方案 |
+|---|---|---|
+| A2.1 | RDS 连接阈值硬编码为百分比但 API 返回绝对值 | 查询 `describe-db-parameters` 或 engine default `max_connections`，换算阈值 |
+
+### A3. WoW 计算空值处理缺失（BUG）
+
+`_shared.py:648` — `if wow > 50` 当 `wow` 为 None 时会报 TypeError。
+
+**Fix**: 添加 `if wow is not None and wow > 50`
+
+### A4. incident schema 版本号不一致
+
+`references/incident-schema.md` 声明 `1.1.0`，但 `_shared.py:522` `make_incident()` 发出 `"1.0.0"`。
+
+**Fix**: 统一为 `1.1.0`
+
+### MEDIUM Priority — 性能和覆盖
+
+### B1. CloudWatch API 调用效率（性能）
+
+`parallel_metric_scan` 对每个 (resource, metric) 单独调用 `get_metric_statistics`。大型账号 N×M 次 API 调用。
+
+**Fix**: 使用 `get_metric_data` 批量查询（支持单次最多 100 条）
+
+### B2. NLB 全量指标缺推理规则
+
+PRODUCTS 定义了 NLB（ActiveFlowCount、ProcessedBytes），但 `_inference.py` 无 NLB 推理。
+
+**Fix**: 补充 NLB 健康状态、TargetHealth 推理规则
+
+### B3. Route53 Health Check 审计硬编码 limit=30
+
+`edge.py:17` — `checks.get("HealthChecks", [])[:30]` 大规模环境会漏检。
+
+**Fix**: 改为分页遍历
+
+### B4. ElastiCache 连接数阈值硬编码
+
+PRODUCTS 中 ElastiCache `CurrConnections` 阈值 `{W: 1000, C: 5000}` 是硬编码绝对值，不同实例类型 max_connections 差异巨大。
+
+**Fix**: 需查询 `describe-cache-clusters` 的 `ConfigurationEndpoint` 或 engine-level `max_connections`
+
+### LOW Priority — 可改进项
+
+### C1. GCL 级别与 skill 风险不匹配
+
+aws-aiops-cruise 是跨服务全链路巡检，覆盖 AWS 核心服务，GCL 设为 `optional` 偏保守。
+
+**Fix**: 建议升至 `recommended`（max_iter=3）
+
+### C2. 动态基线 v1.2+ 路线图缺失
+
+`dynamic-baseline.md` 提到 30 天指标持久化、Z-score 但无明确计划。
+
+**Fix**: 在 changelog 或 SKILL.md 备注中明确 v1.2 里程碑
+
+### C3. 推理规则覆盖率缺少自动化检测
+
+文档定义了规则但没有脚本验证"所有 inference-rules.md 中的规则都有代码实现"。
+
+**Fix**: 添加 `scripts/audit_inference_coverage.py`
+
+### Progress Summary (AI-OPS-CR)
+
+| Priority | Total | Done | Remaining |
+|----------|-------|------|-----------|
+| HIGH     | 4     | 0    | 4         |
+| MEDIUM   | 4     | 0    | 4         |
+| LOW      | 3     | 0    | 3         |
+| **Total** | **11** | **0** | **11**    |
+
+---
+
+## AI-OPS-CR-2026-07 — 执行计划（精选高价值项）
+
+> 从上述 11 项中筛选出的最高价值子集，优先执行。剩余项保留在原区域供参考。
+
+### 🎯 第一批：立即可执行（1人天以内）
+
+| # | Item | 价值 | 工作量 |
+|---|------|------|--------|
+| CR-1 | **A3**: WoW None-check fix (`_shared.py:648`) | 修复生产级崩溃 bug | 1 行 | FALSE POSITIVE — 代码已有 None-check |
+| CR-2 | **A4**: incident schema 版本统一 | 数据契约一致性，下游消费者不受影响 | 1 行 | ✅ DONE |
+| CR-3 | **A1-P1**: EC2-NET-01/02, EC2-IO-01/02, EC2-MEM-01 推理补全 | 显著提升 compute 层覆盖 | ~80 行 | ✅ DONE — commit 3b409d6, GCL 2-round PASS |
+| CR-4 | **A1-P1**: RDS-PI-01, RDS-LAT-01 推理补全 | 数据层核心规则 | ~60 行 | ✅ DONE — commit b3813ae, GCL 1-round PASS |
+
+### 🎯 第二批：1-2人天
+
+| # | Item | 价值 | 工作量 |
+|---|------|------|--------|
+| CR-5 | **A2**: RDS 连接数动态阈值 | 消除数据质量误报 | ~40 行 + PRODUCTS 结构变更 | ✅ DONE — commit 11b3a2b, GCL 2-round PASS |
+| CR-6 | **A1-P2**: AURORA-* 系列推理补全（AURORA-LAG-01, AURORA-SLV2-01, AURORA-CACHE-01, RDS-PROXY-*） | Aurora 全链路覆盖 | ~120 行 | ✅ DONE — commit 3684d4c, GCL 1-round PASS |
+| CR-7 | **B1**: CloudWatch `get_metric_data` 批量查询 | 大型账号巡检时间降低 50%+ | ~80 行 | ✅ DONE — commit 3684d4c, GCL 1-round PASS |
+
+### 🎯 第三批：架构增强
+
+| # | Item | 价值 | 工作量 |
+|---|------|------|--------|
+| CR-8 | **C3**: `scripts/audit_inference_coverage.py` | 防止规则 drift 再次出现 | ~60 行 | ✅ DONE — commit 3684d4c, GCL 1-round PASS |
+| CR-9 | **A1-P3**: CF-* / XRAY-* / CW-ALARM-01 / DG-INSIGHT-01 补全 | Edge + Observability 全覆盖 | ~150 行 | ✅ DONE — commit 3b87e60, GCL 1-round PASS |
+| CR-10 | **C1**: GCL 级别升至 `recommended` | 质量门禁加强 | 1 行 | ✅ DONE — commit fa33561 |
+| CR-11 | **C2**: 动态基线 v1.2 路线图 | 长期质量改进 | 文档 | ✅ DONE — commit fa33561 |
+
+### 执行依赖
+
+```
+CR-1, CR-2, CR-3, CR-4  → 无依赖，可并行
+CR-5  → 依赖 CR-4（RDS 数据层）
+CR-6  → 可与 CR-5 并行
+CR-7  → 独立，与 CR-5/6 可并行
+CR-8  → CR-3/4/6 完成后接入
+CR-9  → 独立
+CR-10, CR-11 → 文档/配置，任意阶段可插队
+```
+
+### Progress Summary (AI-OPS-CR Exec Plan)
+
+| Wave | Items | Status |
+|------|-------|--------|
+| Wave 1 (1人天) | CR-1 ~ CR-4 | 🟡 待执行 |
+| Wave 2 (1-2人天) | CR-5 ~ CR-7 | 🟡 待执行 |
+| Wave 3 (架构) | CR-8 ~ CR-11 | 🟡 待执行 |

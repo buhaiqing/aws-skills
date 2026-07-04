@@ -20,10 +20,12 @@ from collectors.edge import (
     audit_waf_blocked,
 )
 from collectors.governance import (
+    audit_acm_expiry,
     audit_cloudwatch_alarms,
     audit_compute_optimizer,
     audit_config_compliance,
     audit_devops_guru,
+    audit_guardduty,
     audit_security_hub,
 )
 
@@ -45,7 +47,9 @@ def collect_aws_native_insights(
 
     collectors = [
         ("cloudwatch_alarms", lambda: audit_cloudwatch_alarms(region, scope_ids, run_id, customer)),
+        ("acm", lambda: audit_acm_expiry(region, scope_ids, run_id, customer)),
         ("security_hub", lambda: audit_security_hub(region, run_id, customer)),
+        ("guardduty", lambda: audit_guardduty(region, run_id, customer)),
         ("config", lambda: audit_config_compliance(region, scope_ids, run_id, customer)),
         ("route53_hc", lambda: audit_route53_health_checks(run_id, customer)),
         ("waf", lambda: audit_waf_blocked(region, scope_ids, run_id, customer)),

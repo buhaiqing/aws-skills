@@ -268,8 +268,102 @@ original request. (Added in spec v1.11.0, 2026-06-27, see §11 changelog.)
 | 1.10.0 | 2026-06-13 | `aws-aurora-ops` AIOps delegate + `aws-aiops-cruise` / `aws-aiops-orchestrator` GCL disabled (meta) — final count 26 GCL-enabled + 2 meta read-only + 1 generator meta = 29 total `aws-<svc>-ops` |
 | 1.11.0 | 2026-06-27 | **Critic-isolation hardening.** Added §7.1 (User→Output placeholder mapping) and a new anti-pattern to §9 (`{{user.*}}` in Critic templates banned). Migrated all 22 affected skill prompt-templates.md to route `{{user.region}}` → `{{output.requested_region}}` and `{{user.safety_confirm}}` → `{{output.safety_confirm_token}}`. Added `scripts/gcl_runner.py` (Phase 2 reusable Orchestrator; see §10). Updated `aws-guardduty-ops` rubric to 0/0.5/1 discrete scale + ABORT clause. Spec now covers 31 `aws-<svc>-ops` skills; see `AGENTS.md` §11.5 for the Per-Skill Defaults table (also updated). |
 | 1.12.0 | 2026-06-27 | **A11–A16 added + prompt-skeleton extraction (O3).** §8 gained six new repo-wide rules: A11 (CloudFront delete must disable→poll Deployed first), A12 (ELB deregister-targets 50%/100% drain confirmation), A13 (VPC delete-vpc 8-describe pre-flight), A14 (RDS/Aurora `--skip-final-snapshot` guard), A15 (S3 `Principal: *` policy widening guard), A16 (ASG `--force-delete` requires scale-to-0 + InstanceProtection=false). Backfilled A-id labels into the 7 affected rubrics. Created `aws-skill-generator/references/prompt-skeletons.md` (canonical Generator/Critic/Orchestrator templates + shared Variable Convention). `scripts/_sync_prompt_skeletons.py` retro-migrated all 31 skill `prompt-templates.md` from ~5,800 lines of duplicated boilerplate to ~2,200 lines of thin deltas (-78%). `scripts/gcl_runner.py` now resolves the rendered Critic prompt at runtime via `render_critic_prompt()` and exposes `--print-critic` for inspection. Net repo diff: 48 files, -3,456 lines. |
+| 1.13.0 | 2026-07-04 | **Parallel GCL added (§12).** Documents the multi-Generator + single-Critic pattern for composite tasks that decompose into independent subtasks. Includes flow diagram, 5 rules, 4 anti-patterns, and WAF-ALB-01 example. Applicable to `aws-aiops-cruise` and `aws-aiops-orchestrator` composite rule development. |
 
-## 12. See also
+## 12. Parallel GCL (Multiple Generators + Single Critic)
+
+For **composite tasks** that decompose into independent subtasks, the
+Orchestrator MAY fan out to **multiple Generators in parallel**, then
+collect results and pass them all to a **single Critic** for audit.
+
+### 12.1 When to use Parallel GCL
+
+| Criterion | Parallel GCL | Sequential GCL |
+|-----------|-------------|----------------|
+| Subtasks are **independent** (no shared state) | ✅ Use parallel | ❌ Overhead not justified |
+| Subtasks modify **different files/resources** | ✅ Use parallel | ❌ Risk of conflicts |
+| Subtasks have **different domain expertise** | ✅ Use parallel (specialist agents) | ❌ Single G sufficient |
+| Subtasks are **sequential** (B depends on A) | ❌ Must be sequential | ✅ Use sequential |
+
+### 12.2 Flow
+
+```
+User Request
+     │
+     ▼
+[0] Decompose (Orchestrator)
+    - identify independent subtasks
+    - assign category + skills per subtask
+     │
+     ├──▶ [1a] Generator A ──┐
+     │                       │
+     ├──▶ [1b] Generator B ──┤   (parallel, isolated contexts)
+     │                       │
+     └──▶ [1c] Generator N ──┘
+              │
+              ▼
+[2] Collect Results (Orchestrator)
+    - gather all G outputs
+     │
+     ▼
+[3] Critique (C) ──────────────────┐
+    - single Critic session         │
+    - scores ALL G outputs          │
+    - cross-references between Gs   │
+     │                              │
+     ▼                              │
+[4] Decide (Orchestrator)          │
+    - Safety=0 on ANY G → ABORT    │
+    - all pass → RETURN composite   │
+    - else & iter<max → fix + loop  │
+     └──────────────────────────────┘
+```
+
+### 12.3 Rules
+
+1. **Isolation**: Each Generator runs in its own `task()` call with
+   `run_in_background=true` (or separate subagent sessions). No shared
+   mutable state between Generators.
+2. **File partitioning**: Generators MUST NOT modify the same file unless
+   the Orchestrator explicitly coordinates (e.g., Generator A edits
+   `file_a.py`, Generator B edits `file_b.py`).
+3. **Critic scope**: The single Critic receives ALL Generator outputs and
+   audits them as a composite. The Critic MUST cross-reference between
+   outputs (e.g., "Generator A's entry in `registry.py` imports from
+   Generator B's function in `governance.py`").
+4. **Failure handling**: If ANY Generator fails, the Orchestrator MAY
+   retry that subtask or abort the entire parallel GCL.
+5. **Termination**: Same as sequential GCL (§5): PASS / MAX_ITER /
+   SAFETY_FAIL. Safety=0 on ANY subtask → ABORT all.
+
+### 12.4 Anti-patterns specific to Parallel GCL
+
+- ❌ **Generators share mutable state** — race conditions → banned
+- ❌ **Generators modify the same file** — merge conflicts → banned
+- ❌ **Critic audits only one Generator output** — misses cross-reference
+  issues → must audit ALL
+- ❌ **Orchestrator executes without Critic** — defeats GCL → banned
+
+### 12.5 Example: WAF-ALB-01 composite rule
+
+```
+Decompose:
+  - Generator A: Add WAF to PRODUCTS + HTTPCode_ELB_5XX_Count to ALB
+    File: _shared.py
+  - Generator B: Implement WAF-ALB-01 inference rule
+    File: _inference.py
+
+  Both run in parallel (different files, no conflict).
+
+Critic:
+  - Audits both files
+  - Cross-references: WAF product name matches inference rule's signals["WAF"] key
+  - Scores all 5 rubric dimensions on both changes
+
+Result: PASS + 1 fix (WAF id field corrected from UUID to Name)
+```
+
+## 13. See also
 
 - `AGENTS.md` §11 — top-level index, Per-Skill Defaults table, current phase
 - Each pilot skill's `references/rubric.md` — the rubric instance

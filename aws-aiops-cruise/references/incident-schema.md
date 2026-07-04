@@ -9,6 +9,8 @@ status: mandatory
 
 All runbook outputs MUST emit findings conforming to this schema.
 
+> **Note**: The **report envelope** schema (v2.0.0) used by `daily-health-check.py` is a separate, higher-level contract that wraps incidents alongside inventory, risk evidence, and chain inference. It is documented in `runbooks/scripts/daily-health-check.py` (look for the `report = {...}` dict). Incident-level `schema_version` remains `1.1.0` per the table below.
+
 ## Required fields
 
 | Field | Type | Description |

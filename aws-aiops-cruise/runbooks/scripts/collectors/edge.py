@@ -3,18 +3,36 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from _shared import make_incident, resource_in_scope, run_aws
 
 from collectors._time import json_time
 
+def _list_all_health_checks() -> list[dict]:
+    """Paginate through all Route53 health checks (list-health-checks default max=100)."""
+    all_checks: list[dict] = []
+    marker = None
+    while True:
+        cmd = ["aws", "route53", "list-health-checks"]
+        if marker:
+            cmd.extend(["--marker", marker])
+        data = run_aws(cmd, "us-east-1")
+        if not data:
+            break
+        all_checks.extend(data.get("HealthChecks", []))
+        if data.get("IsTruncated") and data.get("Marker"):
+            marker = data["Marker"]
+        else:
+            break
+    return all_checks
+
+
 def audit_route53_health_checks(run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []
-    checks = run_aws(["aws", "route53", "list-health-checks"], "us-east-1")
+    checks = _list_all_health_checks()
     if not checks:
         return incidents
-    for hc in checks.get("HealthChecks", [])[:30]:
+    for hc in checks:
         hid = hc.get("Id", "")
         status = run_aws(
             ["aws", "route53", "get-health-check-status", "--health-check-id", hid],
@@ -65,7 +83,7 @@ def audit_waf_blocked(region: str, scope_ids: set[str], run_id: str, customer: s
                 "--dimensions",
                 f"Name=WebACL,Value={name}",
                 f"Name=Region,Value={region}",
-                f"Name=Rule,Value=ALL",
+                "Name=Rule,Value=ALL",
                 "--start-time",
                 json_time(start),
                 "--end-time",

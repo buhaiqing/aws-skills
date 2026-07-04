@@ -429,6 +429,15 @@ the blueprint and the matching `aws-*-ops` skills as the executors.
 - `assets/example-scope-graph.yaml` — sample scope graph definition.
 - `assets/cost-forecast-template.json` — cost forecast output template.
 
+### Parallel GCL
+
+When the Orchestrator decomposes a user request into independent subtasks
+(e.g., WAF rule update + ALB metric addition), use **Parallel GCL**: fan
+out to multiple Generators (each modifies different files/resources), then
+a single Critic audits all outputs with cross-referencing. See
+[`delegate-routing.md`](references/delegate-routing.md) §Parallel GCL
+and `gcl-spec.md` §12.
+
 ## Safety Gates (hard rules)
 
 1. No credential prompts to user. All `{{env.*}}` from runtime; fail

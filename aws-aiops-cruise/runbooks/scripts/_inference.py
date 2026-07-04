@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from _shared import W, C, make_incident
+from _shared import make_incident
 
 # Signals: resource_type -> resource_id -> metric -> value
 Signals = dict[str, dict[str, dict[str, float | None]]]
@@ -405,6 +405,151 @@ def apply_chain_inference(
                     )
                 )
 
+    # NLB traffic inference rules
+    for rid, metrics in signals.get("NLB", {}).items():
+        flow = metrics.get("ActiveFlowCount")
+        if flow is not None and flow >= 50000:
+            rule = "NLB-TRAFFIC-01"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: NLB `{rid}` active flows {flow:.0f} → near connection limit")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="NLB",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="NLB active flows near limit",
+                        level="CRITICAL",
+                        metric="ActiveFlowCount",
+                        current_value=flow,
+                        threshold_warning=10_000,
+                        threshold_critical=50_000,
+                        recommendation="Distribute across AZs or increase NLB count via aws-elb-ops",
+                    )
+                )
+
+    for rid, metrics in signals.get("NLB", {}).items():
+        bytes_proc = metrics.get("ProcessedBytes")
+        if bytes_proc is not None and bytes_proc >= 5e9:
+            rule = "NLB-TRAFFIC-02"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: NLB `{rid}` processed bytes {bytes_proc:.0f} → traffic surge detected")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="NLB",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="NLB traffic surge detected",
+                        level="CRITICAL",
+                        metric="ProcessedBytes",
+                        current_value=bytes_proc,
+                        threshold_warning=1e9,
+                        threshold_critical=5e9,
+                        recommendation="Review traffic patterns; delegate aws-elb-ops for scaling analysis",
+                    )
+                )
+
+    # ElastiCache inference rules
+    for rid, metrics in signals.get("ElastiCache", {}).items():
+        cpu = metrics.get("CPUUtilization")
+        if cpu is not None and cpu >= 85:
+            rule = "EC-CPU-01"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: ElastiCache `{rid}` CPU {cpu:.0f}% → compute bottleneck risk")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache CPU utilization critical",
+                        level="CRITICAL",
+                        metric="CPUUtilization",
+                        current_value=cpu,
+                        threshold_warning=70,
+                        threshold_critical=85,
+                        recommendation="Upgrade node type via aws-elasticache-ops; review Redis heavy commands",
+                    )
+                )
+
+    for rid, metrics in signals.get("ElastiCache", {}).items():
+        mem = metrics.get("DatabaseMemoryUsagePercentage")
+        if mem is not None and mem >= 90:
+            rule = "EC-MEM-01"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: ElastiCache `{rid}` memory {mem:.0f}% → eviction risk")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache memory usage critical",
+                        level="CRITICAL",
+                        metric="DatabaseMemoryUsagePercentage",
+                        current_value=mem,
+                        threshold_warning=75,
+                        threshold_critical=90,
+                        recommendation="Scale up or adjust maxmemory policy via aws-elasticache-ops",
+                    )
+                )
+
+    for rid, metrics in signals.get("ElastiCache", {}).items():
+        conn = metrics.get("CurrConnections")
+        max_conn = metrics.get("_max_connections", 0)
+        conn_pct = (conn / max_conn * 100) if max_conn > 0 else 0
+        if conn is not None and max_conn > 0 and conn_pct >= 70:
+            rule = "EC-CONN-01"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: ElastiCache `{rid}` connections {conn_pct:.0f}% of max ({conn:.0f}/{max_conn:.0f}) → connection leak risk")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache connections near limit",
+                        level="CRITICAL" if conn_pct >= 85 else "WARNING",
+                        metric="CurrConnections",
+                        current_value=conn_pct,
+                        threshold_warning=70,
+                        threshold_critical=85,
+                        recommendation="Review client connection pools and idle timeouts via aws-elasticache-ops",
+                    )
+                )
+        elif conn is not None and max_conn == 0 and conn >= 5000:
+            rule = "EC-CONN-FALLBACK-01"
+            if rule not in existing_rule_ids:
+                lines.append(f"- **{rule}**: ElastiCache `{rid}` connections {conn:.0f} (no max_connections data, hardcoded threshold)")
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache connections critically high (hardcoded threshold)",
+                        level="CRITICAL",
+                        metric="CurrConnections",
+                        current_value=conn,
+                        threshold_warning=1000,
+                        threshold_critical=5000,
+                        recommendation="Add max_connections collector; check client connection pools via aws-elasticache-ops",
+                    )
+                )
+
     # EC2 memory, I/O, and network chain rules
     for rid, metrics in signals.get("EC2", {}).items():
         mem = metrics.get("MemoryUtilization")
@@ -613,6 +758,95 @@ def apply_chain_inference(
                     )
                 )
 
+    # DynamoDB throttle detection
+    for rid, metrics in signals.get("DynamoDB", {}).items():
+        throttled = metrics.get("ThrottledRequests") or 0
+        if throttled >= 1:
+            rule = "DYNAMO-THROTTLE-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: DynamoDB `{rid}` throttled requests {throttled:.0f} "
+                    "→ RCU/WCU saturation or on-demand burst"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="DynamoDB",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="DynamoDB throttled requests detected",
+                        level="CRITICAL" if throttled >= 10 else "WARNING",
+                        metric="ThrottledRequests",
+                        current_value=throttled,
+                        threshold_warning=1,
+                        threshold_critical=10,
+                        recommendation="Check consumed vs provisioned capacity; enable auto scaling; review hot partition keys",
+                    )
+                )
+
+    # ElastiCache eviction detection
+    for rid, metrics in signals.get("ElastiCache", {}).items():
+        evictions = metrics.get("Evictions") or 0
+        if evictions >= 100:
+            rule = "CACHE-EVICT-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: ElastiCache `{rid}` evictions {evictions:.0f} "
+                    "→ memory pressure, hot keys, or TTL misconfiguration"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache evictions elevated",
+                        level="CRITICAL" if evictions >= 1000 else "WARNING",
+                        metric="Evictions",
+                        current_value=evictions,
+                        threshold_warning=100,
+                        threshold_critical=1000,
+                        recommendation="Scale node type; review key TTLs; check for hot keys via aws-elasticache-ops",
+                    )
+                )
+
+    # WAF-ALB-01: WAF blocked requests + ALB 5xx pattern
+    waf_high = _any_above(signals, "WAF", "BlockedRequests", 1000)
+    alb_elb5xx = _any_above(signals, "ALB", "HTTPCode_ELB_5XX_Count", 50)
+    if waf_high and alb_elb5xx:
+        rule = "WAF-ALB-01"
+        if rule not in existing_rule_ids:
+            waf_list = ", ".join(f"`{w}`" for w in waf_high[:3])
+            alb_list = ", ".join(f"`{a}`" for a in alb_elb5xx[:3])
+            lines.append(
+                f"- **{rule}**: WAF blocked spike ({waf_list}) + ALB 5xx ({alb_list}) "
+                "→ rate rule / geo block / false positive on API path"
+            )
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="WAF",
+                    resource_id=waf_high[0] if waf_high else "unknown",
+                    rule_id=rule,
+                    title="WAF blocks correlated with ALB 5xx",
+                    level="CRITICAL" if len(waf_high) >= 3 else "WARNING",
+                    metric="BlockedRequests",
+                    current_value=float(sum(
+                        (signals.get("WAF", {}).get(w, {}).get("BlockedRequests") or 0)
+                        for w in waf_high
+                    )),
+                    threshold_warning=1000,
+                    threshold_critical=5000,
+                    recommendation="wafv2 get-sampled-requests; tune rate/geo rules; delegate aws-waf-ops",
+                )
+            )
+
     # ALB 5xx + WAF blocks (edge path) — WAF in native audit; correlate if both in report metadata
     for rid, metrics in signals.get("ALB", {}).items():
         e5 = metrics.get("HTTPCode_Target_5XX_Count") or 0
@@ -712,6 +946,16 @@ def correlate_native_findings(
     if ("CF-EDGE-01" in rules or "CF-ORIGIN-01" in rules) and ("S3-4XX-01" in rules or "S3-5XX-01" in rules):
         lines.append(
             "- **CF-S3-COMPOSITE**: CloudFront errors + S3 origin issues → verify OAC/bucket policy/path"
+        )
+
+    acm_exp = [i for i in incidents if i["rule_id"] == "ACM-EXP-01"]
+    if acm_exp:
+        expiry_days = min((i.get("current_value") or 30) for i in acm_exp)
+        level_tag = "CRITICAL" if any(i["level"] == "CRITICAL" for i in acm_exp) else "WARNING"
+        domains = ", ".join(i["title"].split(": ")[-1] for i in acm_exp[:3])
+        lines.append(
+            f"- **ACM-EXP-01** [{level_tag}]: {len(acm_exp)} certificate(s) expiring "
+            f"(earliest in {expiry_days:.0f}d) — {domains}"
         )
 
     return extra, lines

@@ -65,6 +65,18 @@ See existing ALB → EC2 network path rules. Use **target group stickiness + hea
 | Inference | App returns 500 while passing TCP/HTTP shallow check |
 | Fix path | Deepen health check path; app logs; X-Ray trace if enabled |
 
+### NLB-TRAFFIC-01: Active flows near connection limit
+
+| Symptoms | `ActiveFlowCount` ≥ 50,000 (threshold: Warning 10K, Critical 50K) |
+| Inference | NLB approaching its connection capacity per AZ |
+| Fix path | Distribute across AZs or increase NLB count via `aws-elb-ops` |
+
+### NLB-TRAFFIC-02: Traffic surge detected
+
+| Symptoms | `ProcessedBytes` ≥ 5 GB (threshold: Warning 1 GB, Critical 5 GB) |
+| Inference | NLB experiencing elevated traffic volume |
+| Fix path | Review traffic patterns; delegate `aws-elb-ops` for scaling analysis |
+
 ### ACM-EXP-01
 
 ALB listener using cert expiring < 30d → TLS handshake failures masquerading as 502.
@@ -79,7 +91,7 @@ ALB listener using cert expiring < 30d → TLS handshake failures masquerading a
 
 ### EC2 Memory & IO (AIOps)
 
-**EC2-MEM-01**: CloudWatch Agent memory > 85% sustained + OOM kills in `/var/log/messages` or `dmesg`
+**EC2-MEM-01**: CloudWatch Agent memory > 85% sustained + OOM kills in `/var/log/messages` or `dmesg` (requires CloudWatch Agent installed on instance)
 - **Inference**: Memory leak or undersized instance. Check process-level memory via `ps aux --sort=-%mem`.
 - **Fix path**: Identify top memory consumer process; consider instance resize or application memory tuning. Delegate `aws-ec2-ops`.
 

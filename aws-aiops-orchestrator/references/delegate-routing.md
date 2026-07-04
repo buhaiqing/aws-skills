@@ -330,3 +330,12 @@ These skills are **not** `aws-*-ops` service skills but participate in the same
 re-delegate to the appropriate `aws-*-ops` skill with `action_mode: recommend` or `manual` first.
 
 See also: [`aws-aiops-cruise/references/orchestrator-integration.md`](../../aws-aiops-cruise/references/orchestrator-integration.md).
+
+## Parallel GCL (composite orchestration)
+
+When the Orchestrator decomposes a user request into independent subtasks
+(e.g., WAF rule update + ALB metric addition), use **Parallel GCL**: fan
+out to multiple Generators (each modifies different files/resources), then
+a single Critic audits all outputs with cross-referencing.
+
+See `gcl-spec.md` §12 for the full pattern, rules, and anti-patterns.

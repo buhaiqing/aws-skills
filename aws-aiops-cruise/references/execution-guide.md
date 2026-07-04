@@ -126,6 +126,12 @@ Brief mode without overlay skips per-distribution config fetch.
 python3 aws-topo-discovery/scripts/baseline-manager.py --apply-retention --retention-days 90
 ```
 
+## Parallel GCL (composite rules)
+
+For composite rules that decompose into independent subtasks (e.g., WAF-ALB-01 requiring both `_shared.py` PRODUCTS entry and `_inference.py` rule), use **Parallel GCL**: fan out to multiple Generators (each edits a different file), then a single Critic audits all outputs with cross-referencing.
+
+See `gcl-spec.md` §12 for the full pattern, rules, and anti-patterns.
+
 ## Credential convention
 
 Use `{{env.AWS_ACCESS_KEY_ID}}`, `{{env.AWS_SECRET_ACCESS_KEY}}`, `{{env.AWS_PROFILE}}`, `{{env.AWS_DEFAULT_REGION}}` — never ask user to paste secrets.

@@ -246,3 +246,7 @@ Index: [`runbooks/00-index.md`](runbooks/00-index.md).
 ## Reference Index
 
 See [`runbooks/00-index.md`](runbooks/00-index.md) for runbooks 01–09. Key references: [`execution-guide.md`](references/execution-guide.md), [`threshold-definitions.md`](references/threshold-definitions.md), [`inference-rules.md`](references/inference-rules.md), [`incident-schema.md`](references/incident-schema.md), [`orchestrator-integration.md`](references/orchestrator-integration.md), [`topo-overlay-integration.md`](references/topo-overlay-integration.md), [`changelog.md`](references/changelog.md).
+
+### Parallel GCL
+
+For composite rules that decompose into independent subtasks (e.g., WAF-ALB-01 requiring both `_shared.py` PRODUCTS entry and `_inference.py` rule), use **Parallel GCL**: fan out to multiple Generators (each edits a different file), then a single Critic audits all outputs with cross-referencing. See [`execution-guide.md`](references/execution-guide.md) §Parallel GCL and `gcl-spec.md` §12.

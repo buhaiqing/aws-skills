@@ -157,6 +157,61 @@ def audit_config_compliance(region: str, scope_ids: set[str], run_id: str, custo
                 break
     return incidents[:10]
 
+def audit_guardduty(region: str, run_id: str, customer: str) -> list[dict]:
+    incidents: list[dict] = []
+    detectors = run_aws(["aws", "guardduty", "list-detectors"], region)
+    if not detectors:
+        return incidents
+    for det_id in detectors.get("DetectorIds", []):
+        findings = run_aws(
+            [
+                "aws", "guardduty", "list-findings",
+                "--detector-id", det_id,
+                "--finding-criteria",
+                json.dumps({
+                    "Criterion": {
+                        "Severity": {"Gte": 7},
+                        "RecordState": {"Eq": "ACTIVE"},
+                    }
+                }),
+                "--max-results", "20",
+            ],
+            region,
+        )
+        if not findings:
+            continue
+        fids = findings.get("FindingIds", [])
+        if not fids:
+            continue
+        detail = run_aws(
+            [
+                "aws", "guardduty", "get-findings",
+                "--finding-ids", *fids[:5],
+            ],
+            region,
+        )
+        for f in (detail or {}).get("Findings", []):
+            sev = f.get("Severity", 0)
+            title = f.get("Title", "")[:120]
+            ftype = f.get("Type", "")
+            level = "CRITICAL" if sev >= 8 else "WARNING"
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="GuardDuty",
+                    resource_id=f.get("Id", det_id)[:128],
+                    rule_id="GD-HIGH-01",
+                    title=f"GuardDuty HIGH+ finding: {title}",
+                    level=level,
+                    metric="FindingSeverity",
+                    current_value=float(sev),
+                    recommendation=f"Type: {ftype}; delegate aws-guardduty-ops for investigation",
+                )
+            )
+    return incidents
+
 def audit_compute_optimizer(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []
     status = run_aws(["aws", "compute-optimizer", "get-enrollment-status"], region)
@@ -189,5 +244,50 @@ def audit_compute_optimizer(region: str, scope_ids: set[str], run_id: str, custo
                     f"{(r.get('recommendationOptions') or [{}])[0].get('instanceType', 'N/A')}",
                 )
             )
+    return incidents
+
+def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+    """ACM certificate expiry detection — DaysToExpiry <= 30 (WARNING) or <= 7 (CRITICAL)."""
+    from datetime import datetime, timezone
+
+    incidents: list[dict] = []
+    data = run_aws(["aws", "acm", "list-certificates"], region)
+    if not data:
+        return incidents
+    now = datetime.now(timezone.utc)
+    for cert in data.get("CertificateSummaryList", []):
+        not_after_str = cert.get("NotAfter")
+        if not not_after_str:
+            continue
+        not_after = datetime.fromisoformat(not_after_str.replace("Z", "+00:00"))
+        days = (not_after - now).days
+        if days > 30:
+            continue
+        cert_arn = cert.get("CertificateArn", "")
+        domain = cert.get("DomainName", "")
+        in_use = cert.get("InUseBy", [])
+        if scope_ids:
+            if domain in scope_ids:
+                pass
+            elif any(resource_in_scope(u, scope_ids) for u in in_use):
+                pass
+            else:
+                continue
+        level = "CRITICAL" if days <= 7 else "WARNING"
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="ACM",
+                resource_id=cert_arn,
+                rule_id="ACM-EXP-01",
+                title=f"ACM certificate expiring in {days} days: {domain}",
+                level=level,
+                metric="DaysToExpiry",
+                current_value=float(days),
+                recommendation="Request renewal via aws-acm-ops; delegate to aws-route53-ops for DNS validation",
+            )
+        )
     return incidents
 

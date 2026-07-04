@@ -25,6 +25,9 @@ if _env.exists():
 W = "w"
 C = "c"
 
+# Bump when inference rules or metric thresholds change.
+INFERENCE_RULE_VERSION = "1.0.0"
+
 PRODUCTS: list[dict[str, Any]] = [
     {
         "category": "compute",
@@ -34,6 +37,7 @@ PRODUCTS: list[dict[str, Any]] = [
         "id": "InstanceId",
         "metrics": {
             "CPUUtilization": {W: 70, C: 85},
+            "MemoryUtilization": {W: 85, C: 95},
             "StatusCheckFailed": {W: 0.5, C: 1},
         },
         "namespace": "AWS/EC2",
@@ -49,11 +53,12 @@ PRODUCTS: list[dict[str, Any]] = [
             "UnHealthyHostCount": {W: 1, C: 3},
             "TargetResponseTime": {W: 1.0, C: 3.0},
             "HTTPCode_Target_5XX_Count": {W: 10, C: 50},
+            "HTTPCode_ELB_5XX_Count": {W: 10, C: 50},
         },
         "namespace": "AWS/ApplicationELB",
         "dim": "LoadBalancer",
         "dim_from_arn": True,
-        "statistic": {"HTTPCode_Target_5XX_Count": "Sum"},
+        "statistic": {"HTTPCode_Target_5XX_Count": "Sum", "HTTPCode_ELB_5XX_Count": "Sum"},
     },
     {
         "category": "network",
@@ -96,9 +101,11 @@ PRODUCTS: list[dict[str, Any]] = [
             "CPUUtilization": {W: 70, C: 85},
             "DatabaseMemoryUsagePercentage": {W: 75, C: 90},
             "CurrConnections": {W: 1000, C: 5000},
+            "Evictions": {W: 100, C: 1000},
         },
         "namespace": "AWS/ElastiCache",
         "dim": "CacheClusterId",
+        "statistic": {"Evictions": "Sum"},
     },
     {
         "category": "network",
@@ -157,6 +164,19 @@ PRODUCTS: list[dict[str, Any]] = [
         "namespace": "AWS/DynamoDB",
         "dim": "TableName",
         "statistic": {"ThrottledRequests": "Sum"},
+    },
+    {
+        "category": "security",
+        "name": "WAF",
+        "list": ["aws", "wafv2", "list-web-acls", "--scope", "REGIONAL"],
+        "jq": ".WebACLs[]",
+        "id": "Name",
+        "metrics": {
+            "BlockedRequests": {W: 100, C: 1000},
+        },
+        "namespace": "AWS/WAFV2",
+        "dim": "WebACL",
+        "statistic": {"BlockedRequests": "Sum"},
     },
 ]
 
@@ -482,18 +502,25 @@ def get_metric_data_batch(
         mdqs: list[dict[str, Any]] = []
         id_map: dict[str, tuple[str, str, str]] = {}  # qid → (metric, dim_value, statistic)
 
+        seen: set[tuple[str, str]] = set()
         for ns, metric, dim_name, dim_value, statistic in batch:
-            qid = _sanitize_query_id(ns, metric, dim_value)
-            # Deduplicate: if same (metric, dim_value) already added, skip
             key = (metric, dim_value)
-            if qid in id_map:
+            if key in seen:
                 continue
-            id_map[qid] = (metric, dim_value, statistic)
+            seen.add(key)
 
-            stat_field = "Average" if statistic not in ("Sum", "Maximum", "Minimum") else statistic
+            stat_primary = "Average" if statistic not in ("Sum", "Maximum", "Minimum") else statistic
+            stat_secondary = "Maximum" if stat_primary != "Maximum" else "Average"
+
+            qid_p = _sanitize_query_id(ns, metric, dim_value) + "_p"
+            qid_s = _sanitize_query_id(ns, metric, dim_value) + "_s"
+
+            id_map[qid_p] = (metric, dim_value, stat_primary)
+            id_map[qid_s] = (metric, dim_value, stat_secondary)
+
             mdqs.append(
                 {
-                    "Id": qid,
+                    "Id": qid_p,
                     "MetricStat": {
                         "Metric": {
                             "Namespace": ns,
@@ -501,7 +528,21 @@ def get_metric_data_batch(
                             "Dimensions": [{"Name": dim_name, "Value": dim_value}],
                         },
                         "Period": 300,
-                        "Stat": stat_field,
+                        "Stat": stat_primary,
+                    },
+                }
+            )
+            mdqs.append(
+                {
+                    "Id": qid_s,
+                    "MetricStat": {
+                        "Metric": {
+                            "Namespace": ns,
+                            "MetricName": metric,
+                            "Dimensions": [{"Name": dim_name, "Value": dim_value}],
+                        },
+                        "Period": 300,
+                        "Stat": stat_secondary,
                     },
                 }
             )
@@ -528,32 +569,27 @@ def get_metric_data_batch(
             # Batch failed — caller should fall back to individual calls
             return {}
 
-        # Process each metric result
         for result in data["MetricDataResults"]:
             qid = result.get("Id", "")
             info = id_map.get(qid)
             if not info:
                 continue
-            metric, dim_value, statistic = info
+            metric, dim_value, stat = info
             values = result.get("Values", [])
+
+            key = (metric, dim_value)
+            if key not in results:
+                results[key] = {"avg": None, "max": None, "sum": None}
+
             if not values:
-                results[(metric, dim_value)] = {"avg": None, "max": None, "sum": None}
                 continue
 
-            stat_val = values[0] if len(values) == 1 else sum(values) / len(values)
-            avg_val = stat_val if statistic not in ("Sum", "Maximum") else None
-            max_val = stat_val if statistic == "Maximum" else None
-            sum_val = stat_val if statistic == "Sum" else None
-
-            # For Average stats, also track max from available datapoints
-            if statistic not in ("Sum", "Maximum"):
-                max_val = max(values) if len(values) > 1 else None
-
-            results[(metric, dim_value)] = {
-                "avg": avg_val,
-                "max": max_val,
-                "sum": sum_val,
-            }
+            if stat == "Maximum":
+                results[key]["max"] = max(values)
+            elif stat == "Average":
+                results[key]["avg"] = sum(values) / len(values)
+            elif stat == "Sum":
+                results[key]["sum"] = sum(values)
 
     return results
 
@@ -650,7 +686,7 @@ def make_incident(
         "resource_id": resource_id,
         "region": region,
         "rule_id": rule_id,
-        "rule_version": "1.0.0",
+        "rule_version": INFERENCE_RULE_VERSION,
         "title": title,
         "dedup_key": dedup_key,
         "metric": metric,
@@ -774,7 +810,7 @@ def parallel_metric_scan(
             val = stats.get("sum")
         else:
             val = stats.get("max") if stats.get("max") is not None else stats.get("avg")
-        return prod, rid, metric, thr, val
+        return prod, rid, dim_value, metric, thr, val
 
     # Run individual fallback in parallel
     individual_results: dict[tuple[str, str], float | None] = {}
@@ -783,9 +819,7 @@ def parallel_metric_scan(
             futs = [pool.submit(_one_individual, t) for t in tasks_needing_individual]
             for fut in as_completed(futs):
                 try:
-                    prod, rid, metric, thr, val = fut.result()
-                    stat_map = prod.get("statistic", {})
-                    stat = stat_map.get(metric, "Average")
+                    prod, rid, dim_value, metric, thr, val = fut.result()
                     individual_results[(metric, dim_value)] = val
                 except Exception as e:
                     log("WARN", f"individual metric fallback failed: {e}")
@@ -816,13 +850,25 @@ def parallel_metric_scan(
             if db_data and db_data.get("DBInstances"):
                 pg_name = db_data["DBInstances"][0].get("DBParameterGroups", [{}])[0].get("DBParameterGroupName", "")
                 if pg_name:
-                    max_conn = _parameter_max_connections(region, pg_name) or 0
+                    max_conn = _parameter_max_connections(region, pg_name, cluster=False) or 0
 
         pname = prod["name"]
         signals.setdefault(pname, {}).setdefault(rid, {})[metric] = val
 
+        # ElastiCache CurrConnections → percentage of maxclients
+        if pname == "ElastiCache" and metric == "CurrConnections" and val is not None:
+            from collectors._elasticache_helpers import _elasticache_max_connections
+
+            max_conn = _elasticache_max_connections(region, rid) or 0
+            if max_conn > 0:
+                signals[pname][rid]["_max_connections"] = max_conn
+
         if pname == "RDS" and metric == "DatabaseConnections" and max_conn > 0:
             signals[pname][rid]["_max_connections"] = max_conn
+            val_pct = (val / max_conn * 100) if val is not None else None
+            level = level_for_value(val_pct, thr)
+        elif pname == "ElastiCache" and metric == "CurrConnections" and signals.get(pname, {}).get(rid, {}).get("_max_connections", 0) > 0:
+            max_conn = signals[pname][rid]["_max_connections"]
             val_pct = (val / max_conn * 100) if val is not None else None
             level = level_for_value(val_pct, thr)
         else:

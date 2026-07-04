@@ -96,6 +96,41 @@ means the skill is invalid and must be auto-fixed:
 - `.omc/` holds OpenCode session state and project memory — do not commit
   changes there as part of skill edits.
 
+## Operational Guidelines (agent workflow)
+
+### Task Tracking for Multi-Step Work
+
+For any work involving 3+ distinct steps, create tasks via `TaskCreate`
+before starting. This provides:
+- Progress visibility to the user
+- A checklist that prevents skipping steps
+- A natural "next task" prompt when the user says "继续"
+
+After completing each task, immediately mark it `completed` and check
+`TaskList` for the next item. Do not batch completions.
+
+### GCL Skip Threshold
+
+GCL (Generator-Critic-Loop) is required for >5 line code changes,
+but can be skipped for:
+- Single-line constant additions (e.g., adding a metric to a dict)
+- Import list updates (e.g., expanding `__init__.py` exports)
+- Documentation-only changes (adding notes, clarifying existing text)
+
+The判断标准: if the change is purely additive (no logic changes,
+no control flow, no error handling), GCL overhead exceeds its value.
+
+### Pre-existing Lint Baseline
+
+When running `ruff check` / `eslint` after changes, always run the
+linter on the **entire file** first to establish which errors are
+pre-existing. Only errors on **new or modified lines** count as
+regressions. Report pre-existing errors separately if the user asks
+for a full lint report.
+
+This prevents false-positive code reviews where the reviewer flags
+errors that existed before the change.
+
 ## Self-reflection rule (project policy)
 
 > **Rule**: After every skill update, auto-run **2 rounds** of self-review
@@ -299,6 +334,9 @@ copy-paste template; run `--dry-run` before merging.
 - ❌ **`aws --output json` placed before subcommand** — non-portable;
   convention is `aws <svc> <op> --output json` (see CLAUDE.md) → banned
   in GCL traces and examples
+- ❌ **Parallel GCL: Generators share mutable state** — race conditions → banned
+- ❌ **Parallel GCL: Generators modify the same file** — merge conflicts → banned
+- ❌ **Parallel GCL: Critic audits only one Generator output** — must audit ALL
 
 ### 11.9 AWS-specific rules (repo-wide)
 
@@ -353,6 +391,7 @@ Codified in `gcl-spec.md` §8. Highlights:
 | 1.11.0 | 2026-06-27 | **GCL hardening pass.** (a) Migrated 22 skill `prompt-templates.md` files to route `{{user.region}}` → `{{output.requested_region}}` and `{{user.safety_confirm}}` → `{{output.safety_confirm_token}}` inside the Critic section, eliminating the rubber-stamp vector (`gcl-spec.md` §9 anti-pattern); added §7.1 to `gcl-spec.md` documenting the placeholder mapping. (b) Shipped `scripts/gcl_runner.py` (Phase 2 reusable Orchestrator: §4 loop, §5 termination, §6 trace schema, 30-day prune, `--self-test` mode for unit verification). (c) `aws-guardduty-ops` rubric migrated from continuous 1.0/0.8/0.7 weights to spec-mandated 0/0.5/1 discrete scale + explicit ABORT-on-Safety-0 clause; `aws-guardduty-ops` prompt templates migrated from bare `{{cli_command}}` / `{{boto3_code}}` / `{{generator_output}}` to spec-compliant `{{output.*}}` namespaces. (d) `aws-iam-ops` rubric now explicitly references rules **A3** / **A7** / **A8** / **A9** / **A10** by id; `aws-vpc-ops` rubric added A9 (`UserData` / `KeyMaterial` masking) clause. (e) `gcl-spec.md` changelog extended to v1.11.0; "22 skills" references corrected to the actual 31-skill scope (28 required/recommended + 2 meta read-only + 1 generator meta). |
 | 1.12.0 | 2026-06-27 | **O1 (A11–A16) + O3 (prompt-skeleton extraction) + `--print-critic` runtime.** `gcl-spec.md` §8 gained six new repo-wide safety rules: **A11** (CloudFront distribution delete requires disable→Deployed first), **A12** (ELB `deregister-targets` 50%/100% drain confirmation), **A13** (VPC `delete-vpc` 8-describe pre-flight), **A14** (RDS/Aurora `--skip-final-snapshot` guard, supersedes legacy A5 in `aws-aurora-ops`), **A15** (S3 `Principal: *` policy widening), **A16** (ASG `--force-delete` requires scale-to-0 + `InstanceProtection=false`). Backfilled A-id labels into the 7 affected rubrics (cloudfront/elb/vpc/rds/aurora/s3/autoscaling). Created `aws-skill-generator/references/prompt-skeletons.md` (canonical Generator/Critic/Orchestrator templates + shared Variable Convention table; 231 lines). New `scripts/_sync_prompt_skeletons.py` retro-migrated all 31 skill `prompt-templates.md` files from ~5,800 lines of duplicated boilerplate to **~2,200 lines of thin deltas (-78%)**; idempotent; supports `--skill <name>`, `--all`, `--dry-run`, `--restore`. `scripts/gcl_runner.py` now exposes `render_critic_prompt()` + `--print-critic` for inspecting the merged Critic prompt at runtime. All three termination paths (PASS / SAFETY_FAIL / MAX_ITER) verified end-to-end via `--self-test` after migration. Net repo diff vs pre-v1.11.0: 48 files changed, **-3,456 lines**. |
 | 1.13.0 | 2026-06-27 | **§11.7 updated to reflect shared skeleton architecture (prompt-templates.md is now a thin specialization, not self-contained) + §11.9 extended with A11–A16 highlights + §11.5 Per-Skill Defaults table annotated with A-rules for 7 skills (cloudfront/elb/vpc/rds/aurora/s3/autoscaling). New copy-paste template at `aws-skill-generator/assets/new-skill-template/prompt-templates.md` for new skill creators.** |
+| 1.14.0 | 2026-07-04 | **Parallel GCL added (§12 in gcl-spec.md).** Documents the multi-Generator + single-Critic pattern for composite tasks that decompose into independent subtasks (e.g., WAF-ALB-01). Includes flow diagram, 5 rules, 4 anti-patterns, and worked example. Applicable to `aws-aiops-cruise` and `aws-aiops-orchestrator` composite rule development. |
 
 ### 11.12 See also
 
@@ -383,3 +422,9 @@ Codified in `gcl-spec.md` §8. Highlights:
 - [`aws-securityhub-ops/references/rubric.md`](aws-securityhub-ops/references/rubric.md) — Group 7 rubric
 - [`aws-securityhub-ops/references/prompt-templates.md`](aws-securityhub-ops/references/prompt-templates.md) — Group 7 G/C/O skeletons
 - Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-07-04 | Added §Operational Guidelines: Task Tracking, GCL Skip Threshold, Pre-existing Lint Baseline |
