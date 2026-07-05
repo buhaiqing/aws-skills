@@ -487,11 +487,11 @@ aws sts get-caller-identity --output json
 | 技能 | 服务 | 状态 |
 |------|------|------|
 | aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
-| aws-skill-generator | Meta Skill | ✅ 完成 v1.0.0 |
+| aws-skill-generator | Meta Skill | ✅ 完成 v1.1.0 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.4.0 |
-| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.0.0 |
+| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.1.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
-| aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.0.0 |
+| aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.1.0 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 v1.1.0 |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.5.0 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 v1.1.0 |
@@ -520,7 +520,7 @@ aws sts get-caller-identity --output json
 | aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.1.0 |
 | aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.3.0 |
 | aws-topo-discovery | 跨产品拓扑发现 | ✅ 完成 v1.1.0 |
-| aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.0.0** — 见 [§AIOps 巡检](#aiops-巡检) |
+| aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.1.0** — 见 [§AIOps 巡检](#aiops-巡检) |
 
 ## AIOps 巡检
 

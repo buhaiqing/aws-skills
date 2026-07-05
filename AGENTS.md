@@ -92,7 +92,17 @@ means the skill is invalid and must be auto-fixed:
   `.env` is git-ignored; `.env.example` is the template.
 - `README.md` and `README_cn.md` must be kept in sync when adding,
   removing, or version-bumping a skill (the "Existing Skills" table and
-  the AIOps section both reference per-skill versions).
+  the AIOps section both reference per-skill versions). **Verify after
+  every version bump:**
+  ```bash
+  for d in aws-*-ops; do
+    v=$(grep -m1 'version:' "$d/SKILL.md" | awk '{print $2}' | tr -d '"');
+    grep -q "$v" README.md README_cn.md || echo "MISMATCH: $d=$v";
+  done
+  ```
+  Empty output = all synced. Alternatively, the CI workflow
+  `.github/workflows/version-sync.yml` auto-fixes mismatches and opens a PR
+  on push to `main`.
 - `.omc/` holds OpenCode session state and project memory — do not commit
   changes there as part of skill edits.
 

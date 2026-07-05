@@ -25,7 +25,21 @@ metadata:
 
 This **meta-skill** scaffolds new AWS operational skills (`aws-[service]-ops`) for this repository. It does NOT execute live AWS operations—use the generated skills for that.
 
-## When to Use
+## Trigger & Scope
+
+### SHOULD Use When
+- Creating a new AWS service skill from scratch
+- Aligning an existing skill to the current template structure
+- Updating a skill after AWS API changes or new service capabilities
+- User mentions "skill generator", "scaffold", "new aws skill", or "update skill template"
+
+### SHOULD NOT Use When
+- Executing live AWS operations — use the generated `aws-[service]-ops` skills
+- Billing-only or cost-analysis tasks
+- Non-AWS cloud work (Azure, GCP, etc.)
+- Modifying SKILL.md frontmatter structure without understanding Charter C1–C6
+
+## When to Use (Quick Reference)
 
 | Use This Skill | Do NOT Use |
 |----------------|------------|

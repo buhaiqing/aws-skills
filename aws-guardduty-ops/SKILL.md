@@ -43,9 +43,9 @@ AWS GuardDuty is a threat detection service that continuously monitors for malic
 - Keywords: guardduty, detector, filter, ip-set, threat-intel-set, findings, admin, member, organization
 
 ### SHOULD NOT Use When
-- Billing only → delegate to: `aws-cost-ops`
 - IAM only → delegate to: `aws-iam-ops`
 - Related service → delegate to: `aws-securityhub-ops`
+- Cost/Billing analysis → delegate to: `aws-cost-ops` (if available) or AWS Cost Explorer
 
 ## Variable Convention
 

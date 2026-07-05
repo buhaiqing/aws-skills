@@ -487,11 +487,11 @@ aws sts get-caller-identity --output json
 | Skill | Service | Status |
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
-| aws-skill-generator | Meta Skill | ✅ Complete v1.0.0 |
+| aws-skill-generator | Meta Skill | ✅ Complete v1.1.0 |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
-| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.0.0 |
+| aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.1.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
-| aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.0.0 |
+| aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.1.0 |
 | aws-s3-ops | S3 (Object Storage) | ✅ Complete v1.1.0 |
 | aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.5.0 |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete v1.1.0 |
@@ -512,6 +512,7 @@ aws sts get-caller-identity --output json
 | aws-cloudfront-ops | CloudFront (CDN) | ✅ Complete v1.1.0 |
 | aws-ssm-ops | SSM (Systems Manager) | ✅ Complete v1.0.0 |
 | aws-stepfunctions-ops | Step Functions | ✅ Complete v1.1.0 |
+| aws-opensearch-ops | OpenSearch (Managed Elasticsearch) | ✅ Complete v1.0.0 |
 | aws-waf-ops | WAF (Web Application Firewall) | ✅ Complete v1.0.0 |
 | aws-acm-ops | ACM (Certificate Manager) | ✅ Complete v1.0.0 |
 | aws-guardduty-ops | GuardDuty (threat detection) | ✅ Complete v1.0.0 |
@@ -519,7 +520,7 @@ aws sts get-caller-identity --output json
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.1.0 |
 | aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.3.0 |
 | aws-topo-discovery | Cross-product Topology Discovery | ✅ Complete v1.1.0 |
-| aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.0.0** — see [§AIOps Cruise](#aiops-cruise) |
+| aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.1.0** — see [§AIOps Cruise](#aiops-cruise) |
 
 ## AIOps Cruise
 
