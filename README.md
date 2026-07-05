@@ -487,8 +487,10 @@ aws sts get-caller-identity --output json
 | Skill | Service | Status |
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
+| aws-apigateway-ops | API Gateway (REST/HTTP APIs) | ✅ Complete v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ Complete v1.1.0 |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
+| aws-ecs-ops | ECS (Container Orchestration) | ✅ Complete v1.0.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.1.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
 | aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.1.0 |
@@ -503,6 +505,7 @@ aws sts get-caller-identity --output json
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL clusters) | ✅ Complete v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.1.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.3.0 |
+| aws-ebs-ops | EBS (Block Storage) | ✅ Complete v1.0.0 |
 | aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.1.0 |
 | aws-kms-ops | KMS (Encryption) | ✅ Complete v2.1.0 |
 | aws-route53-ops | Route53 (DNS) | ✅ Complete v1.2.0 |

@@ -288,6 +288,9 @@ total score. Full rules in spec §3.
 | `aws-acm-ops` | required | 2 | `delete-certificate` (in-use guard) |
 | `aws-eks-ops` | required | 2 | `delete-cluster` (irreversible) |
 | `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% drain confirmation (rule A12) — shipped v2.2.0 |
+| `aws-ecs-ops` | **required** | 2 | `delete-service` (scale-to-0, rule A16), `delete-cluster`, `deregister-task-definition` |
+| `aws-ebs-ops` | **required** | 2 | `delete-volume` (data loss), `detach-volume`, `delete-snapshot` |
+| `aws-apigateway-ops` | **required** | 2 | `delete-rest-api` (irreversible), `delete-stage`, `delete-api-key` |
 | `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |
 | `aws-athena-ops` | **required** | 2 | `delete-work-group`, `delete-named-query`, `delete-data-catalog`, `delete-prepared-statement` — shipped v1.0.0 |
 | `aws-guardduty-ops` | **required** | 2 | `delete-detector`, `delete-filter`, `delete-ip-set`, `delete-threat-intel-set`, `delete-publishing-destination` — shipped v1.0.0 |

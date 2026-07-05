@@ -487,8 +487,10 @@ aws sts get-caller-identity --output json
 | 技能 | 服务 | 状态 |
 |------|------|------|
 | aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
+| aws-apigateway-ops | API Gateway (REST/HTTP API) | ✅ 完成 v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ 完成 v1.1.0 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.4.0 |
+| aws-ecs-ops | ECS (容器编排) | ✅ 完成 v1.0.0 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.1.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
 | aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.1.0 |
@@ -503,6 +505,7 @@ aws sts get-caller-identity --output json
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL 集群) | ✅ 完成 v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ 完成 v1.1.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.3.0 |
+| aws-ebs-ops | EBS (块存储) | ✅ 完成 v1.0.0 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.1.0 |
 | aws-kms-ops | KMS (加密) | ✅ 完成 v2.1.0 |
 | aws-route53-ops | Route53 (DNS) | ✅ 完成 v1.2.0 |

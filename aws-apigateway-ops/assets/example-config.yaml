@@ -1,0 +1,16 @@
+# API Gateway example: REST API with Lambda proxy
+# Usage: substitute placeholders, then use as reference
+
+api: &api
+  name: "{{user.api_name | default('my-api')}}"
+  endpoint_type: REGIONAL
+
+proxy: &proxy
+  resource_path: "{proxy+}"
+  http_method: ANY
+  integration_type: AWS_PROXY
+  lambda_arn: "{{user.lambda_arn}}"
+
+stage: &stage
+  name: "{{user.stage_name | default('prod')}}"
+  cache_cluster_enabled: false
