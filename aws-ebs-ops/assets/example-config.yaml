@@ -1,0 +1,18 @@
+# EBS example: volume and snapshot configuration
+# Usage: substitute placeholders, then use as reference
+
+volume: &volume
+  type: gp3
+  size: "{{user.size_gib | default('100')}}"
+  encrypted: true
+
+volume_io2: &volume_io2
+  type: io2
+  size: "{{user.size_gib | default('100')}}"
+  iops: 3000
+  encrypted: true
+
+snapshot: &snapshot
+  description: "Snapshot via AIOps"
+  tags:
+    ManagedBy: aiops

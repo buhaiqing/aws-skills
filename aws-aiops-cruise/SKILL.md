@@ -36,6 +36,9 @@ metadata:
     - aws-aurora-ops
     - aws-elb-ops
     - aws-ec2-ops
+    - aws-ecs-ops
+    - aws-apigateway-ops
+    - aws-ebs-ops
     - aws-aiops-orchestrator
   orchestrator_aware: true
   orchestrator_compat: ">=0.1.0"
@@ -61,10 +64,10 @@ Patrol follows the **AWS reference stack** in [`references/aws-aiops-stack.md`](
 
 | Layer | AWS services | Native AIOps signal |
 |-------|--------------|---------------------|
-| Edge | Route53 HC, CloudFront (+ S3 static origin OAC), WAFv2 | HC failure, OriginLatency/5xxErrorRate, S3 OAC/PAB, BlockedRequests |
+| Edge | Route53 HC, CloudFront (+ S3 static origin OAC), WAFv2, API Gateway REST/HTTP | HC failure, OriginLatency/5xxErrorRate, S3 OAC/PAB, BlockedRequests, API GW 5xx/throttle |
 | Entry | ALB/NLB, ACM | Target health, 5xx, cert expiry |
-| Compute | EC2, ECS, EKS, Lambda, API GW | ASG cap, task drift, throttles |
-| Data | RDS+Aurora (PI), RDS Proxy→Aurora targets, ElastiCache, DynamoDB | db.load, connections, proxy target health, cluster status |
+| Compute | EC2, ECS (Fargate/EC2), EKS, Lambda, API Gateway (REST/HTTP) | ASG cap, task drift, throttles, ECS task deficit, API GW latency/errors |
+| Data | RDS+Aurora (PI), RDS Proxy→Aurora targets, ElastiCache, DynamoDB, EBS volumes (AttachState, VolumeQueueLength) | db.load, connections, proxy target health, cluster status, volume performance |
 | Egress | NAT Gateway | Port allocation errors |
 | Governance | Config, Security Hub, GuardDuty | Compliance + threats |
 | Insight | CloudWatch Alarms, DevOps Guru, Compute Optimizer, X-Ray | Customer + ML + trace graph (`--enable-xray`) |

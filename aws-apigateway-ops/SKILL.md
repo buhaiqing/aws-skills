@@ -31,6 +31,9 @@ metadata:
     - aws-iam-ops
     - aws-lambda-ops
     - aws-kms-ops
+    - aws-vpc-ops            # VPC links and networking
+    - aws-cloudwatch-ops     # API Gateway metrics and alarms
+    - aws-cloudfront-ops     # CloudFront + API GW edge integration
   orchestrator_aware: true
   orchestrator_compat: ">=0.1.0"
   delegate:
@@ -242,6 +245,16 @@ Type 'DELETE_API {{user.api_id}}' to confirm.
 ```bash
 aws apigateway delete-rest-api --rest-api-id "{{user.api_id}}"
 ```
+
+## Recover
+
+| Error | Action |
+|-------|--------|
+| `ConflictException` | Resource/method already exists; use update instead of create |
+| `NotFoundException` | Verify REST API ID and resource ID exist |
+| `LimitExceededException` | Delete unused APIs or request quota increase |
+| `ThrottlingException` | Backoff and retry |
+| `AccessDeniedException` | Check IAM permissions for apigateway actions |
 
 ## Reference Files
 

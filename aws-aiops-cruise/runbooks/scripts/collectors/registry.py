@@ -12,6 +12,8 @@ from collectors.compute import (
     audit_eks_nodes,
     audit_xray_service_graph,
 )
+from collectors.block import audit_ebs_volumes
+from collectors.apigw import audit_apigw_health
 from collectors.data import audit_rds_performance_insights, audit_rds_proxy
 from collectors.edge import (
     audit_cloudfront,
@@ -57,6 +59,8 @@ def collect_aws_native_insights(
         ("eks", lambda: audit_eks_nodes(region, scope_ids, run_id, customer)),
         ("asg", lambda: audit_autoscaling_headroom(region, scope_ids, run_id, customer)),
         ("compute_optimizer", lambda: audit_compute_optimizer(region, scope_ids, run_id, customer)),
+        ("ebs", lambda: audit_ebs_volumes(region, scope_ids, run_id, customer)),
+        ("apigw", lambda: audit_apigw_health(region, scope_ids, run_id, customer)),
     ]
     if enable_pi:
         collectors.append(("rds_pi", lambda: audit_rds_performance_insights(region, scope_ids, run_id, customer)))

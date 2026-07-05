@@ -34,20 +34,7 @@ def create_key(
     tags: list = None,
     multi_region: bool = False
 ):
-    """
-    Create a KMS key.
-    
-    Args:
-        description: Key description
-        key_usage: 'ENCRYPT_DECRYPT' or 'SIGN_VERIFY'
-        key_spec: 'SYMMETRIC_DEFAULT', 'RSA_2048', 'RSA_3072', 'RSA_4096', 'ECC_NIST_P256', etc.
-        policy: Key policy JSON string
-        tags: List of tag dicts [{'TagKey': 'key', 'TagValue': 'value'}]
-        multi_region: Create multi-region key
-    
-    Returns:
-        dict: Key metadata
-    """
+    # Create a KMS key, return KeyMetadata
     try:
         params = {
             'Description': description,
@@ -74,15 +61,7 @@ def create_key(
 ### Describe Key
 ```python
 def describe_key(key_id: str) -> dict:
-    """
-    Get key metadata.
-    
-    Args:
-        key_id: Key ID, ARN, or alias
-    
-    Returns:
-        dict: Key metadata
-    """
+    # Get key metadata, return KeyMetadata
     try:
         response = kms.describe_key(KeyId=key_id)
         return response['KeyMetadata']
@@ -90,12 +69,12 @@ def describe_key(key_id: str) -> dict:
         handle_kms_error(e)
 
 def get_key_state(key_id: str) -> str:
-    """Get key state (Enabled, Disabled, PendingDeletion, etc.)."""
+    # Get key state (Enabled, Disabled, PendingDeletion, etc.)
     key = describe_key(key_id)
     return key['KeyState']
 
 def is_key_enabled(key_id: str) -> bool:
-    """Check if key is enabled."""
+    # Check if key is enabled
     key = describe_key(key_id)
     return key['Enabled']
 ```
@@ -103,15 +82,7 @@ def is_key_enabled(key_id: str) -> bool:
 ### List Keys
 ```python
 def list_keys(limit: int = None) -> list:
-    """
-    List all KMS keys.
-    
-    Args:
-        limit: Max keys to return
-    
-    Returns:
-        list: Key metadata list
-    """
+    # List all KMS keys, return Keys list
     try:
         params = {}
         if limit:
@@ -123,7 +94,7 @@ def list_keys(limit: int = None) -> list:
         handle_kms_error(e)
 
 def list_keys_all() -> list:
-    """List all keys with pagination."""
+    # List all keys with pagination
     keys = []
     marker = None
     
@@ -145,18 +116,14 @@ def list_keys_all() -> list:
 ### Enable/Disable Key
 ```python
 def enable_key(key_id: str):
-    """Enable a KMS key."""
+    # Enable a KMS key
     try:
         kms.enable_key(KeyId=key_id)
     except ClientError as e:
         handle_kms_error(e)
 
 def disable_key(key_id: str):
-    """
-    Disable a KMS key.
-    
-    WARNING: Affects all services using this key.
-    """
+    # Disable a KMS key — WARNING: affects all services using this key
     try:
         kms.disable_key(KeyId=key_id)
     except ClientError as e:
@@ -166,19 +133,7 @@ def disable_key(key_id: str):
 ### Schedule Key Deletion
 ```python
 def schedule_key_deletion(key_id: str, pending_window: int = 30) -> dict:
-    """
-    Schedule key for deletion.
-    
-    SAFETY: Key will be permanently deleted after pending window.
-    All data encrypted with this key will be UNRECOVERABLE.
-    
-    Args:
-        key_id: Key ID or ARN
-        pending_window: Days before deletion (7-30)
-    
-    Returns:
-        dict: Deletion schedule info
-    """
+    # Schedule key for deletion — SAFETY: permanently deleted after window, data UNRECOVERABLE
     try:
         response = kms.schedule_key_deletion(
             KeyId=key_id,
@@ -189,7 +144,7 @@ def schedule_key_deletion(key_id: str, pending_window: int = 30) -> dict:
         handle_kms_error(e)
 
 def cancel_key_deletion(key_id: str) -> dict:
-    """Cancel scheduled key deletion."""
+    # Cancel scheduled key deletion
     try:
         response = kms.cancel_key_deletion(KeyId=key_id)
         return response
@@ -201,21 +156,21 @@ def cancel_key_deletion(key_id: str) -> dict:
 
 ```python
 def enable_key_rotation(key_id: str):
-    """Enable automatic annual key rotation."""
+    # Enable automatic annual key rotation
     try:
         kms.enable_key_rotation(KeyId=key_id)
     except ClientError as e:
         handle_kms_error(e)
 
 def disable_key_rotation(key_id: str):
-    """Disable automatic key rotation."""
+    # Disable automatic key rotation
     try:
         kms.disable_key_rotation(KeyId=key_id)
     except ClientError as e:
         handle_kms_error(e)
 
 def get_key_rotation_status(key_id: str) -> bool:
-    """Check if key rotation is enabled."""
+    # Check if key rotation is enabled
     try:
         response = kms.get_key_rotation_status(KeyId=key_id)
         return response['KeyRotationEnabled']
@@ -227,13 +182,7 @@ def get_key_rotation_status(key_id: str) -> bool:
 
 ```python
 def create_alias(alias_name: str, key_id: str):
-    """
-    Create alias for key.
-    
-    Args:
-        alias_name: Alias name (e.g., 'alias/my-key')
-        key_id: Target key ID
-    """
+    # Create alias for key
     try:
         kms.create_alias(
             AliasName=alias_name,
@@ -243,7 +192,7 @@ def create_alias(alias_name: str, key_id: str):
         handle_kms_error(e)
 
 def update_alias(alias_name: str, new_key_id: str):
-    """Update alias to point to different key."""
+    # Update alias to point to different key
     try:
         kms.update_alias(
             AliasName=alias_name,
@@ -253,14 +202,14 @@ def update_alias(alias_name: str, new_key_id: str):
         handle_kms_error(e)
 
 def delete_alias(alias_name: str):
-    """Delete alias (does not delete key)."""
+    # Delete alias (does not delete key)
     try:
         kms.delete_alias(AliasName=alias_name)
     except ClientError as e:
         handle_kms_error(e)
 
 def list_aliases(key_id: str = None) -> list:
-    """List aliases, optionally filtered by key."""
+    # List aliases, optionally filtered by key
     try:
         params = {}
         if key_id:
@@ -276,12 +225,7 @@ def list_aliases(key_id: str = None) -> list:
 
 ```python
 def get_key_policy(key_id: str) -> str:
-    """
-    Get key policy.
-    
-    Returns:
-        str: Policy JSON string
-    """
+    # Get key policy JSON string
     try:
         response = kms.get_key_policy(
             KeyId=key_id,
@@ -292,13 +236,7 @@ def get_key_policy(key_id: str) -> str:
         handle_kms_error(e)
 
 def put_key_policy(key_id: str, policy: str):
-    """
-    Update key policy.
-    
-    Args:
-        key_id: Key ID
-        policy: Policy JSON string
-    """
+    # Update key policy
     try:
         kms.put_key_policy(
             KeyId=key_id,
@@ -319,19 +257,7 @@ def create_grant(
     constraints: dict = None,
     grant_name: str = None
 ):
-    """
-    Create grant for key access.
-    
-    Args:
-        key_id: Key ID
-        grantee_principal: Grantee IAM principal ARN
-        operations: List of operations ['Encrypt', 'Decrypt', ...]
-        constraints: Encryption context constraints
-        grant_name: Human-readable name
-    
-    Returns:
-        dict: Grant info
-    """
+    # Create grant for key access, return grant info
     try:
         params = {
             'KeyId': key_id,
@@ -351,7 +277,7 @@ def create_grant(
         handle_kms_error(e)
 
 def list_grants(key_id: str) -> list:
-    """List grants for a key."""
+    # List grants for a key
     try:
         response = kms.list_grants(KeyId=key_id)
         return response['Grants']
@@ -359,7 +285,7 @@ def list_grants(key_id: str) -> list:
         handle_kms_error(e)
 
 def retire_grant(key_id: str, grant_id: str = None, grant_token: str = None):
-    """Retire grant."""
+    # Retire grant
     try:
         params = {'KeyId': key_id}
         if grant_id:
@@ -372,7 +298,7 @@ def retire_grant(key_id: str, grant_id: str = None, grant_token: str = None):
         handle_kms_error(e)
 
 def revoke_grant(key_id: str, grant_id: str):
-    """Revoke grant."""
+    # Revoke grant
     try:
         kms.revoke_grant(KeyId=key_id, GrantId=grant_id)
     except ClientError as e:
@@ -383,17 +309,7 @@ def revoke_grant(key_id: str, grant_id: str):
 
 ```python
 def encrypt_data(key_id: str, plaintext: bytes, encryption_context: dict = None) -> bytes:
-    """
-    Encrypt data with KMS key.
-    
-    Args:
-        key_id: Key ID
-        plaintext: Data to encrypt (max 4096 bytes)
-        encryption_context: Optional encryption context
-    
-    Returns:
-        bytes: Encrypted ciphertext
-    """
+    # Encrypt data with KMS key (max 4096 bytes), return CiphertextBlob
     try:
         params = {
             'KeyId': key_id,
@@ -409,16 +325,7 @@ def encrypt_data(key_id: str, plaintext: bytes, encryption_context: dict = None)
         handle_kms_error(e)
 
 def decrypt_data(ciphertext: bytes, encryption_context: dict = None) -> bytes:
-    """
-    Decrypt data.
-    
-    Args:
-        ciphertext: Encrypted data
-        encryption_context: Must match encryption context used
-    
-    Returns:
-        bytes: Decrypted plaintext
-    """
+    # Decrypt data — encryption_context must match what was used for encrypt
     try:
         params = {'CiphertextBlob': ciphertext}
         
@@ -431,16 +338,7 @@ def decrypt_data(ciphertext: bytes, encryption_context: dict = None) -> bytes:
         handle_kms_error(e)
 
 def re_encrypt(ciphertext: bytes, new_key_id: str) -> bytes:
-    """
-    Re-encrypt data with new key.
-    
-    Args:
-        ciphertext: Existing ciphertext
-        new_key_id: New encryption key
-    
-    Returns:
-        bytes: New ciphertext
-    """
+    # Re-encrypt data with new key, return new CiphertextBlob
     try:
         response = kms.re_encrypt(
             CiphertextBlob=ciphertext,
@@ -455,18 +353,7 @@ def re_encrypt(ciphertext: bytes, new_key_id: str) -> bytes:
 
 ```python
 def generate_data_key(key_id: str, key_spec: str = 'AES_256') -> dict:
-    """
-    Generate data key for envelope encryption.
-    
-    Args:
-        key_id: KMS key ID
-        key_spec: 'AES_128', 'AES_256', or use number_of_bytes
-    
-    Returns:
-        dict: Contains Plaintext (clear key) and CiphertextBlob (encrypted key)
-    
-    SECURITY: Plaintext key should be used immediately and removed from memory
-    """
+    # Generate data key for envelope encryption — SECURITY: Plaintext must be cleared from memory after use
     try:
         response = kms.generate_data_key(
             KeyId=key_id,
@@ -477,14 +364,7 @@ def generate_data_key(key_id: str, key_spec: str = 'AES_256') -> dict:
         handle_kms_error(e)
 
 def generate_data_key_without_plaintext(key_id: str, key_spec: str = 'AES_256') -> bytes:
-    """
-    Generate data key without returning plaintext.
-    
-    Use for external systems that will receive the key.
-    
-    Returns:
-        bytes: Encrypted data key
-    """
+    # Generate data key without returning plaintext — use for external systems
     try:
         response = kms.generate_data_key_without_plaintext(
             KeyId=key_id,
@@ -495,7 +375,7 @@ def generate_data_key_without_plaintext(key_id: str, key_spec: str = 'AES_256') 
         handle_kms_error(e)
 
 def generate_random(number_of_bytes: int = 32) -> bytes:
-    """Generate cryptographically secure random bytes."""
+    # Generate cryptographically secure random bytes
     try:
         response = kms.generate_random(NumberOfBytes=number_of_bytes)
         return response['Plaintext']
@@ -508,16 +388,7 @@ def generate_random(number_of_bytes: int = 32) -> bytes:
 ### Envelope Encryption
 ```python
 def envelope_encrypt(plaintext: bytes, kms_key_id: str) -> dict:
-    """
-    Encrypt large data using envelope encryption.
-    
-    Args:
-        plaintext: Data to encrypt
-        kms_key_id: KMS key ID
-    
-    Returns:
-        dict: Contains encrypted_data and encrypted_key
-    """
+    # Encrypt large data using envelope encryption (generate data key + local encrypt), return encrypted_data + encrypted_key
     import os
     from cryptography.fernet import Fernet
     
@@ -539,7 +410,7 @@ def envelope_encrypt(plaintext: bytes, kms_key_id: str) -> dict:
     }
 
 def envelope_decrypt(encrypted_data: bytes, encrypted_key: bytes, kms_key_id: str) -> bytes:
-    """Decrypt data using envelope encryption."""
+    # Decrypt data using envelope encryption
     from cryptography.fernet import Fernet
     
     # Decrypt data key
@@ -555,15 +426,7 @@ def envelope_decrypt(encrypted_data: bytes, encrypted_key: bytes, kms_key_id: st
 ### Key Creation Complete Flow
 ```python
 def create_key_complete(config: dict) -> dict:
-    """
-    Complete key creation with alias and policy.
-    
-    Args:
-        config: Dict with key parameters
-    
-    Returns:
-        dict: Key details
-    """
+    # Complete key creation with alias and rotation
     # Create key
     key = create_key(
         description=config['description'],
@@ -595,7 +458,7 @@ def create_key_complete(config: dict) -> dict:
 
 ```python
 def handle_kms_error(error: ClientError):
-    """Handle KMS errors with recovery guidance."""
+    # Handle KMS errors with recovery guidance
     error_code = error.response['Error']['Code']
     error_message = error.response['Error']['Message']
     
@@ -623,7 +486,7 @@ def handle_kms_error(error: ClientError):
 ## AIOps Automation Functions
 
 def heal_disabled_key(key_id: str) -> dict:
-    """[AUTO_HEAL] Re-enable a disabled key."""
+    # [AUTO_HEAL] Re-enable a disabled key
     try:
         key = kms.describe_key(KeyId=key_id)['KeyMetadata']
         if key['KeyState'] == 'Disabled':
@@ -634,7 +497,7 @@ def heal_disabled_key(key_id: str) -> dict:
         return {'action': 'failed', 'error': str(e)}
 
 def heal_pending_deletion(key_id: str) -> dict:
-    """[AUTO_HEAL] Cancel scheduled key deletion."""
+    # [AUTO_HEAL] Cancel scheduled key deletion
     try:
         key = kms.describe_key(KeyId=key_id)['KeyMetadata']
         if key['KeyState'] == 'PendingDeletion':
@@ -645,7 +508,7 @@ def heal_pending_deletion(key_id: str) -> dict:
         return {'action': 'failed', 'error': str(e)}
 
 def enable_rotation_if_needed(key_id: str) -> dict:
-    """[AUTO_HEAL] Enable rotation for symmetric keys without rotation."""
+    # [AUTO_HEAL] Enable rotation for symmetric keys without rotation
     try:
         key = kms.describe_key(KeyId=key_id)['KeyMetadata']
         if key['KeySpec'] != 'SYMMETRIC_DEFAULT':
@@ -659,7 +522,7 @@ def enable_rotation_if_needed(key_id: str) -> dict:
         return {'action': 'failed', 'error': str(e)}
 
 def scan_rotation_compliance() -> list:
-    """[AI_ASSIST] Scan all keys for rotation compliance."""
+    # [AI_ASSIST] Scan all keys for rotation compliance
     non_compliant = []
     try:
         paginator = kms.get_paginator('list_keys')
@@ -680,7 +543,7 @@ def scan_rotation_compliance() -> list:
         return [{'error': str(e)}]
 
 def diagnose_key_issue(key_id: str, principal_arn: str = None) -> dict:
-    """[RCA] Systematic diagnosis of key issues."""
+    # [RCA] Systematic diagnosis of key issues
     diagnosis = {'key_id': key_id, 'checks': {}}
     
     # Check 1: Key state
@@ -717,7 +580,7 @@ def diagnose_key_issue(key_id: str, principal_arn: str = None) -> dict:
 ## P3 Maintenance Functions (Low Priority)
 
 def find_keys_missing_tags(required_tags: list = ['Environment']) -> list:
-    """[AI_ASSIST] P3 - Find keys missing required tags."""
+    # [AI_ASSIST] P3 - Find keys missing required tags
     missing_tags = []
     try:
         paginator = kms.get_paginator('list_keys')
@@ -739,7 +602,7 @@ def find_keys_missing_tags(required_tags: list = ['Environment']) -> list:
         return [{'error': str(e)}]
 
 def find_orphaned_aliases() -> list:
-    """[AI_ASSIST] P3 - Find aliases pointing to deleted keys."""
+    # [AI_ASSIST] P3 - Find aliases pointing to deleted keys
     orphaned = []
     try:
         paginator = kms.get_paginator('list_aliases')
@@ -762,7 +625,7 @@ def find_orphaned_aliases() -> list:
         return [{'error': str(e)}]
 
 def find_keys_without_description() -> list:
-    """[AI_ASSIST] P3 - Find keys with empty description."""
+    # [AI_ASSIST] P3 - Find keys with empty description
     no_desc = []
     try:
         paginator = kms.get_paginator('list_keys')
@@ -782,7 +645,7 @@ def find_keys_without_description() -> list:
         return [{'error': str(e)}]
 
 def audit_grant_usage(threshold: int = 400) -> list:
-    """[AI_ASSIST] P3 - Audit keys with high grant count."""
+    # [AI_ASSIST] P3 - Audit keys with high grant count
     high_grant_keys = []
     try:
         paginator = kms.get_paginator('list_keys')
@@ -804,7 +667,7 @@ def audit_grant_usage(threshold: int = 400) -> list:
         return [{'error': str(e)}]
 
 def quarterly_health_check() -> dict:
-    """[AI_ASSIST] P3 - Comprehensive quarterly key health check."""
+    # [AI_ASSIST] P3 - Comprehensive quarterly key health check
     report = {
         'total_keys': 0,
         'healthy': 0,

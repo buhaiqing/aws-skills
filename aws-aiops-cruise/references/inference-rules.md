@@ -81,6 +81,40 @@ See existing ALB → EC2 network path rules. Use **target group stickiness + hea
 
 ALB listener using cert expiring < 30d → TLS handshake failures masquerading as 502.
 
+### ECS-TASK-01: ECS service task deficit
+
+| Symptoms | desiredCount > 0, runningCount < desiredCount |
+| Inference | Task failed to start due to capacity, image error, or health check |
+| Metrics | AWS/ECS namespace — Service.{RunningTaskCount,DesiredTaskCount} |
+| Fix path | `aws-ecs-ops` — check stopped tasks, ECS events, service events |
+
+### APIGW-5XX-01: API Gateway elevated 5XX errors
+
+| Symptoms | `5XXError` metric > 0 or throttling (4XXClientErrors spike) |
+| Inference | Integration timeout, upstream failure, or misconfigured backend |
+| Metrics | AWS/APIGateway or AWS/APIGatewayV2 namespace — 5XXError, ThrottleRate |
+| Fix path | `aws-apigateway-ops` — check stage, deployment, integration config |
+
+### APIGW-DEPLOY-01: API Gateway no active deployment
+
+| Symptoms | API exists but has no active stages |
+| Inference | API created but never deployed — not accessible |
+| Fix path | `aws-apigateway-ops` — create deployment and stage |
+
+### EBS-VOL-01: Orphan EBS volume (> 30 days available)
+
+| Symptoms | Volume in `available` state > 30 days without attachment |
+| Inference | Failed deployment or manual detach — potential orphan cost |
+| Metrics | AWS/EC2 — VolumeState = available |
+| Fix path | `aws-ebs-ops` — review for reattachment or deletion |
+
+### EBS-VOL-02: EBS volume queue depth elevated
+
+| Symptoms | VolumeQueueLength > 0 for sustained period (I/O bottleneck) |
+| Inference | EBS-optimized instance or volume throughput exhausted |
+| Metrics | AWS/EBS — VolumeQueueLength |
+| Fix path | `aws-ebs-ops` — upgrade volume type, enable Provisioned IOPS |
+
 ## Compute paths
 
 ### EC2 + ASG

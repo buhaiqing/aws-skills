@@ -15,7 +15,7 @@ route53 = boto3.client('route53', region_name='{{env.AWS_DEFAULT_REGION}}')
 
 ```python
 def create_hosted_zone(name: str, caller_reference: str, vpc_id: str = None, comment: str = None):
-    """Create a hosted zone."""
+    # Create a hosted zone
     try:
         params = {
             'Name': name,
@@ -31,7 +31,7 @@ def create_hosted_zone(name: str, caller_reference: str, vpc_id: str = None, com
         handle_route53_error(e)
 
 def get_hosted_zone(zone_id: str) -> dict:
-    """Get hosted zone details."""
+    # Get hosted zone details, return HostedZone
     try:
         response = route53.get_hosted_zone(Id=zone_id)
         return response['HostedZone']
@@ -39,7 +39,7 @@ def get_hosted_zone(zone_id: str) -> dict:
         handle_route53_error(e)
 
 def list_hosted_zones() -> list:
-    """List all hosted zones."""
+    # List all hosted zones, return HostedZones
     try:
         response = route53.list_hosted_zones()
         return response['HostedZones']
@@ -47,7 +47,7 @@ def list_hosted_zones() -> list:
         handle_route53_error(e)
 
 def delete_hosted_zone(zone_id: str):
-    """Delete a hosted zone."""
+    # Delete a hosted zone
     try:
         route53.delete_hosted_zone(Id=zone_id)
     except ClientError as e:
@@ -58,13 +58,7 @@ def delete_hosted_zone(zone_id: str):
 
 ```python
 def change_resource_record_sets(zone_id: str, changes: list) -> dict:
-    """
-    Change resource record sets.
-    
-    Args:
-        zone_id: Hosted zone ID
-        changes: List of change dicts with Action and ResourceRecordSet
-    """
+    # Change resource record sets, return ChangeInfo
     try:
         response = route53.change_resource_record_sets(
             HostedZoneId=zone_id,
@@ -75,7 +69,7 @@ def change_resource_record_sets(zone_id: str, changes: list) -> dict:
         handle_route53_error(e)
 
 def upsert_record(zone_id: str, name: str, record_type: str, values: list, ttl: int = 300):
-    """Create or update a record."""
+    # Create or update a record
     change = {
         'Action': 'UPSERT',
         'ResourceRecordSet': {
@@ -88,7 +82,7 @@ def upsert_record(zone_id: str, name: str, record_type: str, values: list, ttl: 
     return change_resource_record_sets(zone_id, [change])
 
 def delete_record(zone_id: str, name: str, record_type: str, values: list, ttl: int = 300):
-    """Delete a record."""
+    # Delete a record
     change = {
         'Action': 'DELETE',
         'ResourceRecordSet': {
@@ -101,7 +95,7 @@ def delete_record(zone_id: str, name: str, record_type: str, values: list, ttl: 
     return change_resource_record_sets(zone_id, [change])
 
 def list_resource_record_sets(zone_id: str) -> list:
-    """List all resource record sets in a zone."""
+    # List all resource record sets, return ResourceRecordSets
     try:
         response = route53.list_resource_record_sets(HostedZoneId=zone_id)
         return response['ResourceRecordSets']
@@ -120,7 +114,7 @@ def create_health_check(
     resource_path: str = '/',
     fqdn: str = None
 ) -> dict:
-    """Create a health check."""
+    # Create a health check
     try:
         config = {
             'Type': check_type,
@@ -145,7 +139,7 @@ def create_health_check(
         handle_route53_error(e)
 
 def get_health_check(health_check_id: str) -> dict:
-    """Get health check details."""
+    # Get health check details, return HealthCheck
     try:
         response = route53.get_health_check(HealthCheckId=health_check_id)
         return response['HealthCheck']
@@ -153,7 +147,7 @@ def get_health_check(health_check_id: str) -> dict:
         handle_route53_error(e)
 
 def update_health_check(health_check_id: str, **kwargs) -> dict:
-    """Update health check configuration."""
+    # Update health check configuration
     try:
         response = route53.update_health_check(
             HealthCheckId=health_check_id,
@@ -164,7 +158,7 @@ def update_health_check(health_check_id: str, **kwargs) -> dict:
         handle_route53_error(e)
 
 def delete_health_check(health_check_id: str):
-    """Delete a health check."""
+    # Delete a health check
     try:
         route53.delete_health_check(HealthCheckId=health_check_id)
     except ClientError as e:
@@ -175,7 +169,7 @@ def delete_health_check(health_check_id: str):
 
 ```python
 def handle_route53_error(error: ClientError):
-    """Handle Route53 errors with recovery guidance."""
+    # Handle Route53 errors with recovery guidance
     error_code = error.response['Error']['Code']
     error_message = error.response['Error']['Message']
     
@@ -196,15 +190,7 @@ def handle_route53_error(error: ClientError):
 
 ```python
 def create_alias_record(zone_id: str, name: str, target: str, hosted_zone_id: str) -> dict:
-    """
-    Create an alias record for AWS resources.
-    
-    Args:
-        zone_id: Hosted zone ID
-        name: Record name
-        target: Target resource (e.g., ALB DNS name)
-        hosted_zone_id: Target hosted zone ID
-    """
+    # Create an alias record for AWS resources (ALB, CloudFront, etc.)
     change = {
         'Action': 'UPSERT',
         'ResourceRecordSet': {

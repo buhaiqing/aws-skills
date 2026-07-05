@@ -27,7 +27,7 @@
 
 | Operation | Confirmation token |
 |---|---|
-| delete-rest-api | `confirm=DELETE_REST_API {{user.rest_api_id}}` |
+| delete-rest-api | `confirm=DELETE_REST_API {{user.api_id}}` |
 | delete-stage | `confirm=DELETE_STAGE {{user.stage_name}}` |
 
 ## Variable Convention (deltas)

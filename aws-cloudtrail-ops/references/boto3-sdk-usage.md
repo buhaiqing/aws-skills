@@ -36,22 +36,7 @@ def create_trail(
     is_organization_trail: bool = False,
     tags: list = None
 ):
-    """
-    Create a CloudTrail trail.
-    
-    Args:
-        name: Trail name (unique per region)
-        s3_bucket_name: S3 bucket for log delivery
-        s3_key_prefix: Optional prefix for log files
-        is_multi_region: Enable multi-region trail
-        enable_log_validation: Enable log file validation (recommended)
-        kms_key_id: Optional KMS key for encryption
-        is_organization_trail: Enable for AWS Organization
-        tags: List of tag dicts [{'Key': 'Name', 'Value': 'value'}]
-    
-    Returns:
-        dict: Trail details
-    """
+    # Create trail, return TrailInfo
     try:
         params = {
             'Name': name,
@@ -84,15 +69,7 @@ def create_trail(
 ### Describe Trails
 ```python
 def describe_trails(trail_names: list = None) -> list:
-    """
-    Get details of CloudTrail trails.
-    
-    Args:
-        trail_names: Optional list of trail names to filter
-    
-    Returns:
-        list: Trail details
-    """
+    # Describe trails, return trail list
     try:
         params = {}
         if trail_names:
@@ -113,15 +90,7 @@ def get_trail_details(trail_name: str) -> dict:
 ### Get Trail Status
 ```python
 def get_trail_status(trail_name: str) -> dict:
-    """
-    Get logging status of a trail.
-    
-    Args:
-        trail_name: Trail name
-    
-    Returns:
-        dict: Status including IsLogging, delivery info
-    """
+    # Get trail logging status (IsLogging, delivery info)
     try:
         response = cloudtrail.get_trail_status(Name=trail_name)
         return response
@@ -143,19 +112,7 @@ def update_trail(
     kms_key_id: str = None,
     enable_log_validation: bool = None
 ):
-    """
-    Update trail configuration.
-    
-    Args:
-        name: Trail name
-        s3_bucket_name: New S3 bucket name
-        s3_key_prefix: New S3 key prefix
-        kms_key_id: New KMS key ID
-        enable_log_validation: Enable/disable log validation
-    
-    Returns:
-        dict: Updated trail details
-    """
+    # Update trail config, return updated TrailInfo
     try:
         params = {'Name': name}
         
@@ -178,14 +135,7 @@ def update_trail(
 ### Delete Trail
 ```python
 def delete_trail(name: str):
-    """
-    Delete a CloudTrail trail.
-    
-    SAFETY: Stops all logging for this trail.
-    
-    Args:
-        name: Trail name to delete
-    """
+    # SAFETY: Stops all logging for this trail
     try:
         cloudtrail.delete_trail(Name=name)
     except ClientError as e:
@@ -220,19 +170,7 @@ def lookup_events(
     max_results: int = 50,
     next_token: str = None
 ):
-    """
-    Query CloudTrail events.
-    
-    Args:
-        lookup_attributes: List of {'AttributeKey': '...', 'AttributeValue': '...'}
-        start_time: Start of time range
-        end_time: End of time range
-        max_results: Max events to return (1-50)
-        next_token: Pagination token
-    
-    Returns:
-        dict: Events and next token
-    """
+    # Query events, return results + pagination token
     try:
         params = {'MaxResults': max_results}
         
@@ -300,15 +238,7 @@ def lookup_events_all(lookup_attributes: list = None, start_time: datetime = Non
 ### Get Event Selectors
 ```python
 def get_event_selectors(trail_name: str) -> list:
-    """
-    Get event selectors for a trail.
-    
-    Args:
-        trail_name: Trail name
-    
-    Returns:
-        list: Event selectors
-    """
+    # Get event selectors for trail
     try:
         response = cloudtrail.get_event_selectors(TrailName=trail_name)
         return response.get('EventSelectors', [])
@@ -322,30 +252,7 @@ def put_event_selectors(
     trail_name: str,
     event_selectors: list
 ):
-    """
-    Configure event selectors for data events.
-    
-    Args:
-        trail_name: Trail name
-        event_selectors: List of event selector dicts
-    
-    Example event_selectors:
-        [
-            {
-                'ReadWriteType': 'All',
-                'IncludeManagementEvents': True,
-                'DataResources': [
-                    {
-                        'Type': 'AWS::S3::Object',
-                        'Values': ['arn:aws:s3:::bucket/*']
-                    }
-                ]
-            }
-        ]
-    
-    Returns:
-        dict: Updated event selectors
-    """
+    # Configure event selectors, return updated selectors
     try:
         response = cloudtrail.put_event_selectors(
             TrailName=trail_name,
@@ -394,16 +301,7 @@ def enable_lambda_data_events(trail_name: str, function_arns: list = None):
 ### Create Trail Complete
 ```python
 def create_trail_complete(config: dict) -> dict:
-    """
-    Complete trail creation flow.
-    
-    Args:
-        config: Dict with trail parameters
-    
-    Returns:
-        dict: Trail details with status
-    """
-    # Create trail
+    # Create trail, start logging, return trail details with status
     trail = create_trail(
         name=config['name'],
         s3_bucket_name=config['s3_bucket'],
@@ -414,10 +312,7 @@ def create_trail_complete(config: dict) -> dict:
         is_organization_trail=config.get('is_org_trail', False)
     )
     
-    # Start logging
     start_logging(config['name'])
-    
-    # Get final status
     status = get_trail_status(config['name'])
     
     return {
@@ -436,17 +331,7 @@ def query_user_activity(
     start_time: datetime = None,
     end_time: datetime = None
 ) -> list:
-    """
-    Query all activity by a specific user.
-    
-    Args:
-        username: IAM username
-        start_time: Start time
-        end_time: End time
-    
-    Returns:
-        list: User events
-    """
+    # Query all activity by user, return structured event list
     if not end_time:
         end_time = datetime.utcnow()
     if not start_time:
@@ -479,15 +364,7 @@ def query_user_activity(
 
 ```python
 def handle_cloudtrail_error(error: ClientError):
-    """
-    Handle CloudTrail errors with recovery guidance.
-    
-    Args:
-        error: ClientError from boto3
-    
-    Raises:
-        Exception with recovery guidance
-    """
+    # Map error code to recovery guidance, raise with message
     error_code = error.response['Error']['Code']
     error_message = error.response['Error']['Message']
     

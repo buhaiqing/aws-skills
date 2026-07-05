@@ -1,1424 +1,229 @@
 # EKS Example Configurations
 
-## Basic EKS Cluster
+### Cluster Configurations
 
 ```yaml
-cluster:
+x-subnets: &subnets [subnet-aaa, subnet-bbb, subnet-ccc]
+x-sg: &sg [sg-eks-cluster]
+x-role: &eks-role arn:aws:iam::123456789012:role/eksClusterRole
+
+# Basic cluster
+cluster: &basic-cluster
   name: my-eks-cluster
   version: "1.30"
-  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
-
+  role_arn: *eks-role
   vpc_config:
-    subnet_ids:
-      - subnet-aaa  # us-east-1a
-      - subnet-bbb  # us-east-1b
-      - subnet-ccc  # us-east-1c
-    security_group_ids:
-      - sg-eks-cluster
+    subnet_ids: *subnets
+    security_group_ids: *sg
     endpoint_public_access: true
     endpoint_private_access: true
-    public_access_cidrs:
-      - "10.0.0.0/8"  # Restrict to known IPs
-
-  kubernetes_network_config:
-    service_ipv4_cidr: "10.100.0.0/16"
-    ip_family: ipv4
-
   logging:
     cluster_logging:
-      - types:
-          - api
-          - audit
-          - authenticator
+      - types: [api, audit]
         enabled: true
 
-  tags:
-    Environment: production
-    Team: platform
+# With encryption
+cluster:
+  <<: *basic-cluster
+  name: secure-eks-cluster
+  encryption_config:
+    - resources: [secrets]
+      provider:
+        key_arn: arn:aws:kms:us-east-1:123456789012:key/abc-123-def-456
+  logging:
+    cluster_logging:
+      - types: [api, audit, authenticator, controllerManager, scheduler]
+        enabled: true
+
+# Private endpoint only
+cluster:
+  <<: *basic-cluster
+  name: private-eks-cluster
+  vpc_config:
+    subnet_ids: [subnet-private-aaa, subnet-private-bbb]
+    security_group_ids: *sg
+    endpoint_private_access: true
+    endpoint_public_access: false
+  logging:
+    cluster_logging:
+      - types: [api, audit]
+        enabled: true
 ```
 
-## Managed Node Group
+### Managed Node Groups
 
 ```yaml
-nodegroup:
+x-ng-common: &ng-common
   cluster_name: my-eks-cluster
-  nodegroup_name: production-ng
-  scaling_config:
-    min_size: 2
-    max_size: 10
-    desired_size: 3
+  node_role: arn:aws:iam::123456789012:role/eksNodeRole
+  subnets: [subnet-aaa, subnet-bbb, subnet-ccc]
 
-  instance_types:
-    - t3.medium
-    - t3.large
-
+# On-demand
+nodegroup:
+  <<: *ng-common
+  nodegroup_name: ondemand-ng
+  scaling_config: {min_size: 2, max_size: 10, desired_size: 3}
+  instance_types: [t3.medium, t3.large]
   ami_type: AL2_x86_64
   capacity_type: ON_DEMAND
   disk_size: 50
 
-  node_role: arn:aws:iam::123456789012:role/eksNodeRole
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-    - subnet-ccc
-
-  labels:
-    env: production
-    node-type: general
-
-  tags:
-    Environment: production
-    NodeGroup: production-ng
-```
-
-## Node Group with Spot Instances
-
-```yaml
+# Spot
 nodegroup:
-  cluster_name: my-eks-cluster
+  <<: *ng-common
   nodegroup_name: spot-ng
-  scaling_config:
-    min_size: 0
-    max_size: 20
-    desired_size: 5
-
-  instance_types:
-    - m5.large
-    - m5a.large
-    - m5d.large
-    - m5n.large
-    - m5dn.large
-
+  scaling_config: {min_size: 0, max_size: 20, desired_size: 5}
+  instance_types: [m5.large, m5a.large, m5d.large]
   capacity_type: SPOT
-  ami_type: AL2_x86_64
-
-  node_role: arn:aws:iam::123456789012:role/eksNodeRole
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-    - subnet-ccc
-
-  labels:
-    env: production
-    capacity-type: spot
-
   taints:
-    - key: spot
-      value: true
-      effect: NO_SCHEDULE
-```
+    - {key: spot, value: "true", effect: NO_SCHEDULE}
 
-## GPU Node Group
-
-```yaml
+# GPU
 nodegroup:
-  cluster_name: my-eks-cluster
+  <<: *ng-common
   nodegroup_name: gpu-ng
-  scaling_config:
-    min_size: 1
-    max_size: 5
-    desired_size: 2
-
-  instance_types:
-    - g4dn.xlarge
-    - g4dn.2xlarge
-
+  scaling_config: {min_size: 1, max_size: 5, desired_size: 2}
+  instance_types: [g4dn.xlarge, g4dn.2xlarge]
   ami_type: AL2_x86_64_GPU
-
-  node_role: arn:aws:iam::123456789012:role/eksNodeRole
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-
-  labels:
-    gpu: nvidia
-    node-type: gpu
-
   taints:
-    - key: nvidia.com/gpu
-      value: present
-      effect: NO_SCHEDULE
-```
+    - {key: nvidia.com/gpu, value: "true", effect: NO_SCHEDULE}
 
-## ARM64 Node Group (Graviton)
-
-```yaml
+# Graviton
 nodegroup:
-  cluster_name: my-eks-cluster
-  nodegroup_name: arm-ng
-  scaling_config:
-    min_size: 1
-    max_size: 10
-    desired_size: 3
-
-  instance_types:
-    - m6g.medium
-    - m6g.large
-    - c6g.large
-
+  <<: *ng-common
+  nodegroup_name: graviton-ng
+  scaling_config: {min_size: 1, max_size: 10, desired_size: 3}
+  instance_types: [m6g.medium, m6g.large, c6g.large]
   ami_type: AL2_ARM_64
 
-  node_role: arn:aws:iam::123456789012:role/eksNodeRole
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-    - subnet-ccc
-
-  labels:
-    arch: arm64
-    processor: graviton
-```
-
-## Bottlerocket Node Group
-
-```yaml
+# Bottlerocket
 nodegroup:
   cluster_name: my-eks-cluster
   nodegroup_name: bottlerocket-ng
-  scaling_config:
-    min_size: 2
-    max_size: 10
-    desired_size: 3
-
+  scaling_config: {min_size: 2, max_size: 10, desired_size: 3}
   ami_type: BOTTLEROCKET_x86_64
-
   node_role: arn:aws:iam::123456789012:role/eksNodeRole
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-
-  labels:
-    os: bottlerocket
-    security: hardened
-
-  launch_template:
-    id: lt-xxx
-    version: "1"
+  subnets: [subnet-aaa, subnet-bbb]
 ```
 
-## Custom Launch Template Node Group
+### Fargate Profiles
 
 ```yaml
-launch_template:
-  name: eks-custom-node
-  version: "1"
-  instance_type: t3.medium
-  iam_instance_profile:
-    name: eksNodeProfile
-  block_device_mappings:
-    - device_name: /dev/xvda
-      ebs:
-        volume_size: 100
-        volume_type: gp3
-        encrypted: true
-  user_data: |
-    #!/bin/bash
-    /etc/eks/bootstrap.sh my-eks-cluster
-
-nodegroup:
+x-fargate-common: &fg-common
   cluster_name: my-eks-cluster
-  nodegroup_name: custom-ng
-  launch_template:
-    id: "{{launch_template_id}}"
-    version: "1"
-  node_role: arn:aws:iam::123456789012:role/eksNodeRole
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-```
+  pod_execution_role_arn: arn:aws:iam::123456789012:role/eksFargateRole
+  subnets: [subnet-aaa, subnet-bbb]
 
-## Fargate Profile
-
-```yaml
 fargate_profile:
-  cluster_name: my-eks-cluster
+  <<: *fg-common
   profile_name: default-profile
-  pod_execution_role_arn: arn:aws:iam::123456789012:role/eksFargateRole
-
   selectors:
-    - namespace: default
-      labels:
-        app: web-service
-    - namespace: backend
-      labels:
-        tier: application
+    - {namespace: default, labels: {app: web-service}}
+    - {namespace: backend}
 
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
-
-  tags:
-    Profile: serverless
-```
-
-## Fargate Profile for CoreDNS
-
-```yaml
 fargate_profile:
-  cluster_name: my-eks-cluster
+  <<: *fg-common
   profile_name: coredns-profile
-  pod_execution_role_arn: arn:aws:iam::123456789012:role/eksFargateRole
-
   selectors:
-    - namespace: kube-system
-      labels:
-        k8s-app: coredns
-
-  subnets:
-    - subnet-aaa
-    - subnet-bbb
+    - {namespace: kube-system, labels: {k8s-app: coredns}}
 ```
 
-## EKS Addons
+### Addons
 
 ```yaml
+# Use resolve_conflicts: OVERWRITE for all
 addons:
-  - addon_name: vpc-cni
+  - &addon-overwrite
+    resolve_conflicts: OVERWRITE
+  - <<: *addon-overwrite
+    addon_name: vpc-cni
     addon_version: v1.12.6-eksbuild.1
     service_account_role_arn: arn:aws:iam::123456789012:role/eksVPCCniRole
-    resolve_conflicts: OVERWRITE
-    configuration_values: |
-      {
-        "env": {
-          "AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG": "true",
-          "ENI_CONFIG_LABEL_DEF": "topology.kubernetes.io/zone"
-        }
-      }
-
-  - addon_name: coredns
+  - <<: *addon-overwrite
+    addon_name: coredns
     addon_version: v1.9.3-eksbuild.5
-    resolve_conflicts: OVERWRITE
-
-  - addon_name: kube-proxy
+  - <<: *addon-overwrite
+    addon_name: kube-proxy
     addon_version: v1.28.4-eksbuild.1
-    resolve_conflicts: OVERWRITE
-
-  - addon_name: aws-ebs-csi-driver
+  - <<: *addon-overwrite
+    addon_name: aws-ebs-csi-driver
     addon_version: v1.24.0-eksbuild.1
     service_account_role_arn: arn:aws:iam::123456789012:role/eksEbsCsiRole
-    resolve_conflicts: OVERWRITE
-
-  - addon_name: aws-efs-csi-driver
+  - <<: *addon-overwrite
+    addon_name: aws-efs-csi-driver
     addon_version: v1.5.8-eksbuild.1
     service_account_role_arn: arn:aws:iam::123456789012:role/eksEfsCsiRole
-    resolve_conflicts: OVERWRITE
 ```
 
-## Cluster with Encryption
+### IAM Roles
 
 ```yaml
-cluster:
-  name: secure-eks-cluster
-  version: "1.30"
-  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
+x-eks-stmt: &eks-stmt
+  Version: "2012-10-17"
+  Statement:
+    - Effect: Allow
+      Principal: {Service: eks.amazonaws.com}
+      Action: sts:AssumeRole
+x-ec2-stmt: &ec2-stmt
+  Version: "2012-10-17"
+  Statement:
+    - Effect: Allow
+      Principal: {Service: ec2.amazonaws.com}
+      Action: sts:AssumeRole
+x-fg-stmt: &fg-stmt
+  Version: "2012-10-17"
+  Statement:
+    - Effect: Allow
+      Principal: {Service: eks-fargate-pods.amazonaws.com}
+      Action: sts:AssumeRole
 
-  vpc_config:
-    subnet_ids:
-      - subnet-aaa
-      - subnet-bbb
-    security_group_ids:
-      - sg-eks-cluster
-
-  encryption_config:
-    - resources:
-        - secrets
-      provider:
-        key_arn: arn:aws:kms:us-east-1:123456789012:key/abc-123-def-456
-
-  logging:
-    cluster_logging:
-      - types:
-          - api
-          - audit
-          - authenticator
-          - controllerManager
-          - scheduler
-        enabled: true
-```
-
-## Cluster with Private Endpoint Only
-
-```yaml
-cluster:
-  name: private-eks-cluster
-  version: "1.30"
-  role_arn: arn:aws:iam::123456789012:role/eksClusterRole
-
-  vpc_config:
-    subnet_ids:
-      - subnet-private-aaa
-      - subnet-private-bbb
-    security_group_ids:
-      - sg-eks-cluster
-    endpoint_public_access: false
-    endpoint_private_access: true
-
-  logging:
-    cluster_logging:
-      - types:
-          - api
-          - audit
-        enabled: true
-```
-
-## IAM Role Definitions
-
-### Cluster IAM Role
-
-```yaml
 cluster_role:
   role_name: eksClusterRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Service": "eks.amazonaws.com"
-          },
-          "Action": "sts:AssumeRole"
-        }
-      ]
-    }
-  managed_policies:
-    - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-    - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
-  inline_policies:
-    - name: CloudWatchLogs
-      policy: |
-        {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Action": [
-                "logs:CreateLogGroup",
-                "logs:DescribeLogGroups",
-                "logs:PutRetentionPolicy"
-              ],
-              "Resource": "*"
-            }
-          ]
-        }
-```
+  assume_role_policy: *eks-stmt
+  managed_policies: [arn:aws:iam::aws:policy/AmazonEKSClusterPolicy]
 
-### Node IAM Role
-
-```yaml
 node_role:
   role_name: eksNodeRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Service": "ec2.amazonaws.com"
-          },
-          "Action": "sts:AssumeRole"
-        }
-      ]
-    }
+  assume_role_policy: *ec2-stmt
   managed_policies:
     - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
     - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
     - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-    - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-```
 
-### Fargate Pod Execution Role
-
-```yaml
 fargate_role:
   role_name: eksFargateRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Service": "eks-fargate-pods.amazonaws.com"
-          },
-          "Action": "sts:AssumeRole"
-        }
-      ]
-    }
-  managed_policies:
-    - arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
-  inline_policies:
-    - name: ECRAccess
-      policy: |
-        {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Action": [
-                "ecr:GetAuthorizationToken",
-                "ecr:BatchCheckLayerAvailability",
-                "ecr:GetDownloadUrlForLayer",
-                "ecr:BatchGetImage"
-              ],
-              "Resource": "*"
-            }
-          ]
-        }
-```
+  assume_role_policy: *fg-stmt
+  managed_policies: [arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy]
 
-### VPC CNI Addon Role (IRSA)
-
-```yaml
 vpc_cni_role:
   role_name: eksVPCCniRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
-          },
-          "Action": "sts:AssumeRoleWithWebIdentity",
-          "Condition": {
-            "StringEquals": {
-              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:aws-node",
-              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:aud": "sts.amazonaws.com"
-            }
-          }
-        }
-      ]
-    }
-  managed_policies:
-    - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+  assume_role_policy:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Principal:
+          Federated: "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
+        Action: sts:AssumeRoleWithWebIdentity
+        Condition:
+          StringEquals:
+            "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:aws-node"
+  managed_policies: [arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy]
 ```
 
-### EBS CSI Driver Addon Role (IRSA)
-
-```yaml
-ebs_csi_role:
-  role_name: eksEbsCsiRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
-          },
-          "Action": "sts:AssumeRoleWithWebIdentity",
-          "Condition": {
-            "StringEquals": {
-              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"
-            }
-          }
-        }
-      ]
-    }
-  managed_policies:
-    - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
-```
-
-## Kubernetes Deployment Example
-
-```yaml
-# Example Kubernetes Deployment (for reference)
-deployment:
-  name: web-app
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-        - name: web-container
-          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/web-app:v1.0
-          ports:
-            - containerPort: 8080
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-          env:
-            - name: AWS_REGION
-              value: "us-east-1"
-
-service:
-  name: web-service
-  type: LoadBalancer
-  selector:
-    app: web-app
-  ports:
-    - port: 80
-      targetPort: 8080
-```
-
-## Update kubeconfig Command
+### EKS Access Entries
 
 ```bash
-# After cluster creation, update local kubeconfig
-aws eks update-kubeconfig \
-  --name my-eks-cluster \
-  --region us-east-1 \
-  --role-arn arn:aws:iam::123456789012:role/eksAdminRole
-
-# Verify
-kubectl cluster-info
-kubectl get nodes
-kubectl get pods -A
-```
-
----
-
-## New Configuration Examples (2024+)
-
-## EKS Access Entries Configuration
-
-### Create Access Entry for IAM User
-
-```bash
-# Create access entry
-aws eks create-access-entry \
-  --cluster-name my-eks-cluster \
-  --region us-east-1 \
+# Admin
+aws eks create-access-entry --cluster-name my-eks-cluster \
+  --principal-arn arn:aws:iam::123456789012:user/admin
+aws eks associate-access-policy --cluster-name my-eks-cluster \
   --principal-arn arn:aws:iam::123456789012:user/admin \
-  --type STANDARD
-
-# Associate cluster admin policy
-aws eks associate-access-policy \
-  --cluster-name my-eks-cluster \
-  --region us-east-1 \
-  --principal-arn arn:aws:iam::123456789012:user/admin \
-  --policy-arn arn:aws:eks:us-east-1:123456789012:access-policy/AmazonEKSClusterAdminPolicy \
+  --policy-arn arn:aws:eks::123456789012:access-policy/AmazonEKSClusterAdminPolicy \
   --access-scope type=cluster
 
-# Associate namespace-specific policy
-aws eks associate-access-policy \
-  --cluster-name my-eks-cluster \
-  --region us-east-1 \
-  --principal-arn arn:aws:iam::123456789012:user/developer \
-  --policy-arn arn:aws:eks:us-east-1:123456789012:access-policy/AmazonEKSViewPolicy \
+# Developer (namespace-scoped)
+aws eks associate-access-policy --cluster-name my-eks-cluster \
+  --principal-arn arn:aws:iam::123456789012:role/developer \
+  --policy-arn arn:aws:eks::123456789012:access-policy/AmazonEKSEditPolicy \
   --access-scope type=namespace,namespaces=dev
-```
-
-### Create Access Entry for IAM Role
-
-```bash
-# Create access entry for role
-aws eks create-access-entry \
-  --cluster-name my-eks-cluster \
-  --region us-east-1 \
-  --principal-arn arn:aws:iam::123456789012:role/eks-admin \
-  --type STANDARD
-
-# Associate edit policy
-aws eks associate-access-policy \
-  --cluster-name my-eks-cluster \
-  --region us-east-1 \
-  --principal-arn arn:aws:iam::123456789012:role/eks-admin \
-  --policy-arn arn:aws:eks:us-east-1:123456789012:access-policy/AmazonEKSEditPolicy \
-  --access-scope type=cluster
-```
-
-## Cluster Autoscaler Configuration
-
-### Cluster Autoscaler Deployment (Helm)
-
-```yaml
-# values.yaml for Cluster Autoscaler Helm chart
-clusterAutoscaler:
-  enabled: true
-  autoDiscovery:
-    clusterName: my-eks-cluster
-  awsRegion: us-east-1
-  rbac:
-    create: true
-    serviceAccount:
-      create: true
-      name: cluster-autoscaler
-      annotations:
-        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/ClusterAutoscalerRole
-  image:
-    tag: v9.30.0
-  extraArgs:
-    balance-similar-node-groups: true
-    skip-nodes-with-local-storage: false
-    expander: priority
-    scale-down-unneeded-time: 10m
-    scale-down-delay-after-add: 10m
-    scale-down-delay-after-delete: 10m
-```
-
-### Node Group with Auto-Discovery Tags
-
-```yaml
-nodegroup:
-  cluster_name: my-eks-cluster
-  nodegroup_name: autoscale-ng
-  scaling_config:
-    min_size: 1
-    max_size: 10
-    desired_size: 3
-
-  instance_types:
-    - t3.medium
-    - t3.large
-
-  labels:
-    k8s.io/cluster-autoscaler/enabled: "true"
-    k8s.io/cluster-autoscaler/my-eks-cluster: "true"
-
-  tags:
-    k8s.io/cluster-autoscaler/enabled: "true"
-    k8s.io/cluster-autoscaler/my-eks-cluster: "true"
-    cluster-autoscaler.kubernetes.io/priority: "10"  # Priority for expander
-```
-
-### Cluster Autoscaler IAM Role (IRSA)
-
-```yaml
-cluster_autoscaler_role:
-  role_name: ClusterAutoscalerRole
-  assume_role_policy: |
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Principal": {
-            "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}"
-          },
-          "Action": "sts:AssumeRoleWithWebIdentity",
-          "Condition": {
-            "StringEquals": {
-              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:sub": "system:serviceaccount:kube-system:cluster-autoscaler",
-              "oidc.eks.us-east-1.amazonaws.com/id/{{cluster_oidc}}:aud": "sts.amazonaws.com"
-            }
-          }
-        }
-      ]
-    }
-  managed_policies:
-    - arn:aws:iam::aws:policy/AutoScalingFullAccess
-```
-
-## Pod Security Standards Configuration
-
-### Namespace with PSS
-
-```yaml
-# Apply PSS to namespace
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: secure-namespace
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-```
-
-### Restricted Pod Example
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: restricted-pod
-  namespace: secure-namespace
-spec:
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-  - name: secure-container
-    image: nginx:latest
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - ALL
-      readOnlyRootFilesystem: true
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
-```
-
-## Network Policies Configuration
-
-### Default Deny All
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-ingress
-  namespace: default
-spec:
-  podSelector: {}
-  policyTypes:
-  - Ingress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-egress
-  namespace: default
-spec:
-  podSelector: {}
-  policyTypes:
-  - Egress
-```
-
-### Allow Same Namespace
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-same-namespace
-  namespace: default
-spec:
-  podSelector: {}
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - podSelector: {}
-  egress:
-  - to:
-    - podSelector: {}
-```
-
-### Allow Specific Services
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-frontend-to-backend
-  namespace: backend
-spec:
-  podSelector:
-    matchLabels:
-      app: backend
-  policyTypes:
-  - Ingress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: frontend
-    ports:
-    - protocol: TCP
-      port: 8080
-```
-
-## Horizontal Pod Autoscaler (HPA)
-
-### HPA Configuration
-
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: web-app-hpa
-  namespace: production
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: web-app
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 50
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 70
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 30
-```
-
-## Vertical Pod Autoscaler (VPA)
-
-### VPA Configuration
-
-```yaml
-apiVersion: autoscaling.k8s.io/v1
-kind: VerticalPodAutoscaler
-metadata:
-  name: web-app-vpa
-  namespace: production
-spec:
-  targetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: web-app
-  updatePolicy:
-    updateMode: "Auto"
-  resourcePolicy:
-    containerPolicies:
-    - containerName: "*"
-      minAllowed:
-        cpu: 100m
-        memory: 100Mi
-      maxAllowed:
-        cpu: 2
-        memory: 4Gi
-      controlledResources: ["cpu", "memory"]
-```
-
-## Cost Optimization Configuration
-
-### Spot Instance Node Group with Priority
-
-```yaml
-nodegroup:
-  cluster_name: my-eks-cluster
-  nodegroup_name: spot-priority-high
-  scaling_config:
-    min_size: 0
-    max_size: 20
-    desiredSize: 5
-
-  instance_types:
-    - m5.large
-    - m5a.large
-    - m5d.large
-
-  capacity_type: SPOT
-  ami_type: AL2_x86_64
-
-  labels:
-    capacity-type: spot
-    cluster-autoscaler.kubernetes.io/priority: "10"  # High priority
-
-  taints:
-    - key: spot
-      value: "true"
-      effect: NoSchedule
-
-  tags:
-    cluster-autoscaler.kubernetes.io/priority: "10"
-```
-
-### Mixed Capacity (On-Demand + Spot)
-
-```yaml
-# On-Demand node group
-nodegroup_ondemand:
-  cluster_name: my-eks-cluster
-  nodegroup_name: ondemand-ng
-  instance_type: t3.large
-  scaling_config:
-    min_size: 2
-    max_size: 5
-    desiredSize: 2
-  capacity_type: ON_DEMAND
-  labels:
-    capacity-type: ondemand
-    cluster-autoscaler.kubernetes.io/priority: "1"
-
-# Spot node group
-nodegroup_spot:
-  cluster_name: my-eks-cluster
-  nodegroup_name: spot-ng
-  instance_types:
-    - t3.large
-    - t3a.large
-  scaling_config:
-    min_size: 0
-    maxSize: 20
-    desiredSize: 8
-  capacity_type: SPOT
-  labels:
-    capacity-type: spot
-    cluster-autoscaler.kubernetes.io/priority: "10"
-  taints:
-    - key: spot
-      value: "true"
-      effect: NoSchedule
-```
-
-### Graviton Node Group (Cost + Performance)
-
-```yaml
-nodegroup:
-  cluster_name: my-eks-cluster
-  nodegroup_name: graviton-ng
-  scaling_config:
-    min_size: 2
-    max_size: 10
-    desiredSize: 3
-
-  instance_types:
-    - m6g.medium
-    - m6g.large
-    - m6g.xlarge
-
-  ami_type: AL2_ARM_64
-
-  labels:
-    arch: arm64
-    processor: graviton
-    cost-optimized: "true"
-```
-
-## Monitoring Configuration
-
-### CloudWatch Container Insights
-
-```yaml
-# Fluent Bit configuration for CloudWatch
-fluent_bit:
-  enabled: true
-  namespace: amazon-cloudwatch
-  config:
-    service:
-      flush: 1
-      log_level: info
-    inputs:
-      - name: tail
-        path: /var/log/containers/*.log
-        parser: docker
-        tag: kube.*
-        refresh_interval: 5
-    filters:
-      - name: kubernetes
-        match: kube.*
-        kube_url: https://kubernetes.default.svc:443
-        merge_log: true
-        keep_log: false
-    outputs:
-      - name: cloudwatch
-        match: "*"
-        region: us-east-1
-        log_group_name: /aws/eks/my-cluster/application
-        log_stream_prefix: from-fluent-bit-
-        auto_create_group: true
-```
-
-### Prometheus Stack
-
-```yaml
-# Helm values for Prometheus Operator
-prometheus:
-  prometheusSpec:
-    resources:
-      requests:
-        cpu: 1000m
-        memory: 2Gi
-    retention: 15d
-    storageSpec:
-      volumeClaimTemplate:
-        spec:
-          storageClassName: gp3
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: 50Gi
-    serviceMonitorSelectorNilUsesHelmValues: false
-
-grafana:
-  adminPassword: admin
-  persistence:
-    enabled: true
-    size: 10Gi
-  service:
-    type: LoadBalancer
-```
-
-## Bottlerocket Configuration (Enhanced)
-
-### Bottlerocket with Control Settings
-
-```yaml
-nodegroup:
-  cluster_name: my-eks-cluster
-  nodegroup_name: bottlerocket-secure-ng
-  scaling_config:
-    min_size: 2
-    maxSize: 10
-    desiredSize: 3
-
-  ami_type: BOTTLEROCKET_x86_64
-
-  labels:
-    os: bottlerocket
-    security: hardened
-
-  launch_template:
-    id: lt-bottlerocket
-    version: "2"
-```
-
-### Bottlerocket Launch Template with User Data
-
-```yaml
-launch_template:
-  name: bottlerocket-launch-template
-  version: "1"
-  instance_type: t3.medium
-  image_id: ami-bottlerocket-xxx
-  iam_instance_profile:
-    name: eksNodeProfile
-  user_data: |
-    [settings.kubernetes]
-    cluster-name = "my-eks-cluster"
-    cluster-certificate = "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
-    api-server = "https://API_ENDPOINT"
-    [settings.kubernetes.node-labels]
-    os = "bottlerocket"
-    security = "hardened"
-    [settings.kubernetes.node-taints]
-    special = "dedicated:NoSchedule"
-    [settings.updates]
-    ignore-waves = false
-    seed = 12345
-```
-
-## Multi-Region Configuration
-
-### Primary Region Cluster
-
-```yaml
-# primary-region-cluster.yaml
-apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
-
-metadata:
-  name: primary-cluster
-  region: us-east-1
-  version: "1.30"
-
-vpc:
-  id: "vpc-primary"
-  cidr: "10.0.0.0/16"
-  subnets:
-    private:
-      us-east-1a:
-        id: "subnet-private-1a"
-        cidr: "10.0.1.0/24"
-      us-east-1b:
-        id: "subnet-private-1b"
-        cidr: "10.0.2.0/24"
-      us-east-1c:
-        id: "subnet-private-1c"
-        cidr: "10.0.3.0/24"
-
-managedNodeGroups:
-  - name: primary-ng
-    instanceType: t3.large
-    minSize: 2
-    maxSize: 10
-    desiredSize: 3
-    labels:
-      role: primary
-      region: us-east-1
-    tags:
-      Environment: production
-      Region: us-east-1
-```
-
-### Backup Region Cluster
-
-```yaml
-# backup-region-cluster.yaml
-apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
-
-metadata:
-  name: backup-cluster
-  region: us-west-2
-  version: "1.30"
-
-vpc:
-  id: "vpc-backup"
-  cidr: "10.1.0.0/16"
-  subnets:
-    private:
-      us-west-2a:
-        id: "subnet-private-1a"
-        cidr: "10.1.1.0/24"
-      us-west-2b:
-        id: "subnet-private-1b"
-        cidr: "10.1.2.0/24"
-      us-west-2c:
-        id: "subnet-private-1c"
-        cidr: "10.1.3.0/24"
-
-managedNodeGroups:
-  - name: backup-ng
-    instanceType: t3.large
-    minSize: 1
-    maxSize: 5
-    desiredSize: 2
-    labels:
-      role: backup
-      region: us-west-2
-    tags:
-      Environment: production
-      Region: us-west-2
-```
-
-### Route 53 Failover Configuration
-
-```yaml
-route53:
-  hosted_zone_id: Z1234567890ABC
-  health_checks:
-    primary:
-      id: <primary-health-check-id>
-      ip_address: "10.0.1.100"
-      port: 80
-      type: HTTP
-      resource_path: /health
-    backup:
-      id: <backup-health-check-id>
-      ip_address: "10.1.1.100"
-      port: 80
-      type: HTTP
-      resource_path: /health
-  records:
-    - name: app.example.com
-      type: A
-      set_identifier: primary
-      region: us-east-1
-      failover: PRIMARY
-      health_check_id: <primary-health-check-id>
-    - name: app.example.com
-      type: A
-      set_identifier: backup
-      region: us-west-2
-      failover: SECONDARY
-      health_check_id: <backup-health-check-id>
-```
-
-## Pod Disruption Budget Configuration
-
-### Protect Critical Application
-
-```yaml
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: critical-app-pdb
-  namespace: production
-spec:
-  minAvailable: 2
-  selector:
-    matchLabels:
-      app: critical-app
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: stateful-app-pdb
-  namespace: production
-spec:
-  minAvailable: 50%
-  selector:
-    matchLabels:
-      app: stateful-app
-```
-
-## Resource Quota Configuration
-
-### Namespace Resource Limits
-
-```yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: compute-quota
-  namespace: production
-spec:
-  hard:
-    requests.cpu: "10"
-    requests.memory: 20Gi
-    limits.cpu: "20"
-    limits.memory: 40Gi
-    persistentvolumeclaims: "10"
-```
-
-```yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: object-counts
-  namespace: production
-spec:
-  hard:
-    configmaps: "10"
-    persistentvolumeclaims: "10"
-    replicationcontrollers: "10"
-    secrets: "10"
-    services: "10"
-    services.loadbalancers: "2"
-```
-
-## Limit Range Configuration
-
-### Default Resource Limits
-
-```yaml
-apiVersion: v1
-kind: LimitRange
-metadata:
-  name: resource-limits
-  namespace: production
-spec:
-  limits:
-  - type: Container
-    default:
-      cpu: 500m
-      memory: 512Mi
-    defaultRequest:
-      cpu: 250m
-      memory: 256Mi
-    max:
-      cpu: "2"
-      memory: 2Gi
-    min:
-      cpu: 100m
-      memory: 128Mi
-```
-
-## Complete Production Example
-
-### Production-Ready EKS Configuration
-
-```yaml
-# Full production cluster configuration
-apiVersion: eksctl.io/v1alpha5
-kind: ClusterConfig
-
-metadata:
-  name: production-cluster
-  region: us-east-1
-  version: "1.30"
-
-vpc:
-  cidr: "10.0.0.0/16"
-  clusterEndpoints:
-    publicAccess: true
-    privateAccess: true
-
-managedNodeGroups:
-  # On-demand for critical workloads
-  - name: critical-ng
-    instanceType: t3.large
-    minSize: 3
-    maxSize: 10
-    desiredSize: 3
-    capacityType: ON_DEMAND
-    labels:
-      node-type: critical
-      cluster-autoscaler.kubernetes.io/priority: "1"
-    tags:
-      Environment: production
-      NodeGroup: critical
-
-  # Spot for batch workloads
-  - name: batch-ng
-    instanceTypes:
-      - m5.large
-      - m5a.large
-    minSize: 0
-    maxSize: 20
-    desiredSize: 5
-    capacityType: SPOT
-    labels:
-      node-type: batch
-      capacity-type: spot
-      cluster-autoscaler.kubernetes.io/priority: "10"
-    taints:
-      - key: spot
-        value: "true"
-        effect: NoSchedule
-    tags:
-      Environment: production
-      NodeGroup: batch
-
-  # Graviton for cost-optimized workloads
-  - name: graviton-ng
-    instanceTypes:
-      - m6g.medium
-      - m6g.large
-    minSize: 2
-    maxSize: 10
-    desiredSize: 3
-    amiType: AL2_ARM_64
-    labels:
-      node-type: graviton
-      arch: arm64
-      cluster-autoscaler.kubernetes.io/priority: "5"
-    tags:
-      Environment: production
-      NodeGroup: graviton
-
-addons:
-  - name: vpc-cni
-    version: latest
-  - name: coredns
-    version: latest
-  - name: kube-proxy
-    version: latest
-  - name: aws-ebs-csi-driver
-    version: latest
-  - name: aws-efs-csi-driver
-    version: latest
-
-# Enable CloudWatch logging
-cloudWatch:
-  clusterLogging:
-    enableTypes:
-      - api
-      - audit
-      - authenticator
-      - controllerManager
-      - scheduler
 ```

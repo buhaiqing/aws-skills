@@ -28,7 +28,7 @@
 
 | Operation | Confirmation token |
 |---|---|
-| delete-service | `confirm=DELETE {{user.service_name}}` |
+| delete-service | `confirm=DELETE_SERVICE {{user.service_name}}` |
 | delete-cluster | `confirm=DELETE_CLUSTER {{user.cluster_name}}` |
 
 ## Variable Convention (deltas)

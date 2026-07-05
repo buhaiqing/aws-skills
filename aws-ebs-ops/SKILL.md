@@ -30,6 +30,7 @@ metadata:
     pilot: false
   cross_skill_deps:
     - aws-ec2-ops            # Instance operations
+    - aws-cloudwatch-ops     # EBS metrics (VolumeWriteOps, VolumeReadOps, VolumeQueueLength)
   orchestrator_aware: true
   orchestrator_compat: ">=0.1.0"
   delegate:

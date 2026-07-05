@@ -1,615 +1,152 @@
 # Lambda Configuration Examples
 
-Sample configurations for AWS Lambda functions, layers, and event sources.
-
-## Function Configurations
-
-### Python Function - Basic
+### Function Examples
 
 ```yaml
+x-code: &code {s3_bucket: deployment-artifacts}
+x-tags: &tags {Project: data-platform, Environment: production}
+x-exec-role: &exec-role arn:aws:iam::123456789012:role/lambda-execution-role
+
+# Python — basic
 function:
   name: data-processor
   runtime: python3.11
   handler: lambda_function.process_data
   timeout: 60
   memory_size: 512
-  description: "Process incoming data records"
-
-  code:
-    s3_bucket: deployment-artifacts
-    s3_key: functions/data-processor/v1.0.zip
-
-  execution_role: arn:aws:iam::123456789012:role/lambda-execution-role
-
+  code: {<<: *code, s3_key: functions/data-processor/v1.0.zip}
   environment_variables:
     LOG_LEVEL: INFO
     BATCH_SIZE: 100
     MAX_RETRIES: 3
+  execution_role: *exec-role
+  tags: {<<: *tags, Owner: data-team}
 
-  tags:
-    Project: data-platform
-    Environment: production
-    Owner: data-team
-```
-
-### Python Function - With VPC
-
-```yaml
+# Python — with VPC
 function:
   name: database-sync
   runtime: python3.11
   handler: app.sync_database
   timeout: 120
   memory_size: 1024
-  description: "Sync data with internal database"
-
-  code:
-    s3_bucket: deployment-artifacts
-    s3_key: functions/database-sync/v2.1.zip
-
+  code: {<<: *code, s3_key: functions/database-sync/v2.1.zip}
   execution_role: arn:aws:iam::123456789012:role/lambda-vpc-role
-
   vpc_config:
-    subnet_ids:
-      - subnet-0a1b2c3d4e5f6g7h
-      - subnet-1a2b3c4d5e6f7g8h
-    security_group_ids:
-      - sg-0123456789abcdef0
-
+    subnet_ids: [subnet-0a1b2c3d4e5f6g7h, subnet-1a2b3c4d5e6f7g8h]
+    security_group_ids: [sg-0123456789abcdef0]
   environment_variables:
-    DB_HOST: "{{secrets.RDS_HOST}}"  # Reference to Secrets Manager
+    DB_HOST: "{{secrets.RDS_HOST}}"
     DB_PORT: 5432
-    DB_NAME: production_db
-    CONNECTION_TIMEOUT: 30
+    DB_NAME: production-db
+  tags: {<<: *tags, Network: private}
 
-  tags:
-    Project: database-operations
-    Environment: production
-    Network: private
-```
-
-### Node.js Function - API Backend
-
-```yaml
+# Node.js — API handler
 function:
   name: api-handler
   runtime: nodejs20.x
   handler: index.handler
   timeout: 30
   memory_size: 256
-  description: "API Gateway request handler"
-
-  code:
-    s3_bucket: deployment-artifacts
-    s3_key: functions/api-handler/v3.0.zip
-
+  code: {<<: *code, s3_key: functions/api-handler/v3.0.zip}
   execution_role: arn:aws:iam::123456789012:role/lambda-api-role
-
   environment_variables:
     API_VERSION: v3
     CORS_ORIGIN: https://app.example.com
-    JWT_SECRET: "{{secrets.JWT_SECRET}}"
-    RATE_LIMIT: 100
+  tags: {<<: *tags, Type: backend}
 
-  tags:
-    Project: api-platform
-    Environment: production
-    Type: backend
-```
-
-### Java Function - Event Processing
-
-```yaml
-function:
-  name: event-processor
-  runtime: java21
-  handler: com.example.EventProcessor::handleRequest
-  timeout: 300
-  memory_size: 2048
-  description: "Complex event processing with Java"
-
-  code:
-    s3_bucket: deployment-artifacts
-    s3_key: functions/event-processor/v1.5.jar
-
-  execution_role: arn:aws:iam::123456789012:role/lambda-java-role
-
-  environment_variables:
-    JAVA_OPTS: "-XX:+UseG1GC -XX:MaxHeapSize=512m"
-    LOG_FORMAT: JSON
-
-  tags:
-    Project: event-system
-    Runtime: java
-    Environment: production
-```
-
-### Function with Layers
-
-```yaml
+# Python — with layers
 function:
   name: analytics-processor
   runtime: python3.11
   handler: analytics.process
   timeout: 90
   memory_size: 1024
-  description: "Analytics processing with shared dependencies"
-
-  code:
-    s3_bucket: deployment-artifacts
-    s3_key: functions/analytics-processor/v1.2.zip
-
+  code: {<<: *code, s3_key: functions/analytics-processor/v1.2.zip}
   execution_role: arn:aws:iam::123456789012:role/lambda-analytics-role
-
   layers:
     - arn:aws:lambda:us-east-1:123456789012:layer:data-utils:5
     - arn:aws:lambda:us-east-1:123456789012:layer:logging-framework:3
-    - arn:aws:lambda:us-east-1:123456789012:layer:analytics-sdk:2
-
   environment_variables:
-    ANALYTICS_API_KEY: "{{secrets.API_KEY}}"
     DATA_FORMAT: parquet
     OUTPUT_BUCKET: analytics-results
-
-  tags:
-    Project: analytics
-    Environment: production
+  tags: {<<: *tags, Project: analytics}
 ```
 
-## Layer Configurations
-
-### Python Utilities Layer
+### Layers
 
 ```yaml
-layer:
-  name: python-utils
-  description: "Common Python utilities for Lambda functions"
-
+x-layer-base: &layer-base
   content:
     s3_bucket: layer-artifacts
     s3_key: layers/python-utils/v5.0.zip
+  compatible_architectures: [x86_64, arm64]
 
-  compatible_runtimes:
-    - python3.9
-    - python3.10
-    - python3.11
-    - python3.12
-
-  compatible_architectures:
-    - x86_64
-    - arm64
-
-  license_info: "MIT"
-
-  # Layer content structure:
-  # python-utils.zip
-  # └── python/
-  #     └── lib/
-  #         └── python3.11/
-  #             └── site-packages/
-  #                 ├── requests/
-  #                 ├── boto3/
-  #                 ├── numpy/
-  #                 └── pandas/
-```
-
-### Node.js Common Layer
-
-```yaml
 layer:
-  name: nodejs-common
-  description: "Shared Node.js modules for Lambda functions"
-
-  content:
-    s3_bucket: layer-artifacts
-    s3_key: layers/nodejs-common/v4.0.zip
-
-  compatible_runtimes:
-    - nodejs18.x
-    - nodejs20.x
-
-  compatible_architectures:
-    - x86_64
-
-  # Layer content structure:
-  # nodejs-common.zip
-  # └── nodejs/
-  #     └── node_modules/
-  #         ├── axios/
-  #         ├── lodash/
-  #         ├── moment/
-  #         └── winston/
+  <<: *layer-base
+  name: python-utils
+  description: "Common Python utilities"
+  compatible_runtimes: [python3.9, python3.10, python3.11, python3.12]
 ```
 
-### Custom Runtime Layer
+### Event Source Mappings
 
 ```yaml
-layer:
-  name: custom-runtime-rust
-  description: "Rust runtime for Lambda functions"
-
-  content:
-    s3_bucket: layer-artifacts
-    s3_key: layers/rust-runtime/v1.0.zip
-
-  compatible_runtimes:
-    - provided.al2
-    - provided.al2023
-
-  compatible_architectures:
-    - x86_64
-    - arm64
-
-  # Layer provides bootstrap binary for Rust execution
-```
-
-## Event Source Mappings
-
-### SQS Event Source
-
-```yaml
+# SQS
 event_source_mapping:
   function_name: sqs-processor
   event_source_arn: arn:aws:sqs:us-east-1:123456789012:message-queue
-
   batch_size: 10
-  maximum_batching_window_in_seconds: 5
-
-  function_response_types:
-    - ReportBatchItemFailures  # Enable partial batch failure
-
   enabled: true
+  # IAM: sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes
 
-  # IAM permissions required:
-  # - sqs:ReceiveMessage
-  # - sqs:DeleteMessage
-  # - sqs:GetQueueAttributes
-  # On the SQS queue resource
-
-  # DLQ for failed messages (optional)
-  # destination_config:
-  #   on_failure:
-  #     destination: arn:aws:sqs:us-east-1:123456789012:dlq-queue
-```
-
-### DynamoDB Stream Event Source
-
-```yaml
+# DynamoDB Stream
 event_source_mapping:
   function_name: stream-processor
   event_source_arn: arn:aws:dynamodb:us-east-1:123456789012:table/orders/stream/2024-01-01T00:00:00
-
   batch_size: 100
-  maximum_batching_window_in_seconds: 0
-
-  starting_position: LATEST  # Options: TRIM_HORIZON, LATEST, AT_TIMESTAMP
-
-  parallelization_factor: 2  # Process 2 shards concurrently per function instance
-
+  starting_position: LATEST
+  parallelization_factor: 2
   enabled: true
 
-  # IAM permissions required:
-  # - dynamodb:DescribeStream
-  # - dynamodb:GetRecords
-  # - dynamodb:GetShardIterator
-  # - dynamodb:ListStreams
-  # On the DynamoDB stream resource
-
-  # On-failure configuration (optional)
-  # on_failure:
-  #   destination: arn:aws:sqs:us-east-1:123456789012:stream-dlq
-```
-
-### Kinesis Stream Event Source
-
-```yaml
+# Kinesis Stream
 event_source_mapping:
   function_name: kinesis-consumer
   event_source_arn: arn:aws:kinesis:us-east-1:123456789012:stream/events-stream
-
-  batch_size: 100
-  maximum_batching_window_in_seconds: 0
-
-  starting_position: TRIM_HORIZON  # Process all historical data
-
-  parallelization_factor: 5  # Scale processing capacity
-
-  enabled: true
-
-  # IAM permissions required:
-  # - kinesis:DescribeStream
-  # - kinesis:GetRecords
-  # - kinesis:GetShardIterator
-  # - kinesis:ListStreams
-  # On the Kinesis stream resource
-
-  # For bisect on error (advanced)
-  # bisect_batch_on_error: true
-```
-
-### MSK (Kafka) Event Source
-
-```yaml
-event_source_mapping:
-  function_name: kafka-consumer
-  event_source_arn: arn:aws:kafka:us-east-1:123456789012:cluster/my-cluster
-
-  topics:
-    - orders-topic
-    - inventory-topic
-
-  source_access_configuration:
-    - Type: VPC_SECURITY_GROUP
-      URI: sg-0123456789abcdef0
-    - Type: VPC_SUBNET
-      URI: subnet-0a1b2c3d4e5f6g7h
-    - Type: SASL_SCRAM_512_AUTH
-      URI: arn:aws:secretsmanager:us-east-1:123456789012:secret:kafka-credentials
-
   batch_size: 100
   starting_position: TRIM_HORIZON
-
+  parallelization_factor: 5
   enabled: true
 ```
 
-## IAM Execution Role Examples
-
-### Basic Execution Role
+### Concurrency
 
 ```yaml
-iam_role:
-  name: lambda-basic-execution-role
-
-  assume_role_policy:
-    Version: "2012-10-17"
-    Statement:
-      - Effect: Allow
-        Principal:
-          Service: lambda.amazonaws.com
-        Action: sts:AssumeRole
-
-  policies:
-    - name: basic-execution
-      policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-```
-
-### VPC Execution Role
-
-```yaml
-iam_role:
-  name: lambda-vpc-execution-role
-
-  assume_role_policy:
-    Version: "2012-10-17"
-    Statement:
-      - Effect: Allow
-        Principal:
-          Service: lambda.amazonaws.com
-        Action: sts:AssumeRole
-
-  policies:
-    - name: vpc-execution
-      policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-          - Effect: Allow
-            Action:
-              - ec2:CreateNetworkInterface
-              - ec2:DescribeNetworkInterfaces
-              - ec2:DeleteNetworkInterface
-            Resource: "*"
-```
-
-### S3 Access Role
-
-```yaml
-iam_role:
-  name: lambda-s3-access-role
-
-  assume_role_policy:
-    Version: "2012-10-17"
-    Statement:
-      - Effect: Allow
-        Principal:
-          Service: lambda.amazonaws.com
-        Action: sts:AssumeRole
-
-  policies:
-    - name: s3-access
-      policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - s3:GetObject
-              - s3:PutObject
-              - s3:ListBucket
-            Resource:
-              - arn:aws:s3:::data-bucket
-              - arn:aws:s3:::data-bucket/*
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-```
-
-### DynamoDB Stream Role
-
-```yaml
-iam_role:
-  name: lambda-stream-role
-
-  assume_role_policy:
-    Version: "2012-10-17"
-    Statement:
-      - Effect: Allow
-        Principal:
-          Service: lambda.amazonaws.com
-        Action: sts:AssumeRole
-
-  policies:
-    - name: dynamodb-stream-access
-      policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - dynamodb:DescribeStream
-              - dynamodb:GetRecords
-              - dynamodb:GetShardIterator
-              - dynamodb:ListStreams
-            Resource: arn:aws:dynamodb:*:*:table/*/stream/*
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-```
-
-## Concurrency Configurations
-
-### Reserved Concurrency
-
-```yaml
+# Reserved concurrency — guarantees 100 concurrent executions
 concurrency:
   function_name: critical-function
   reserved_concurrent_executions: 100
 
-  # Guarantees 100 concurrent executions for this function
-  # Cannot be exceeded (throttles above 100)
-  # Remaining account capacity available to other functions
-```
-
-### Provisioned Concurrency
-
-```yaml
+# Provisioned concurrency — eliminates cold start for latency-sensitive
 provisioned_concurrency:
   function_name: latency-sensitive-function
-  qualifier: prod  # Alias or version
+  qualifier: "prod"
   provisioned_concurrent_executions: 50
-
-  # Pre-initializes 50 execution environments
-  # Eliminates cold start latency
-  # Additional cost: $0.015/hour per unit + $0.0004/GB-second
 ```
 
-## Alias Configurations
-
-### Simple Alias
+### Alias
 
 ```yaml
-alias:
+# Simple alias
+alias: &prod-alias
   function_name: api-function
   name: prod
-  function_version: 10
-  description: "Production alias pointing to version 10"
-```
+  function_version: "10"
+  description: "Production alias"
 
-### Weighted Alias (Canary Deployment)
-
-```yaml
+# Weighted alias (canary: 10% to v11)
 alias:
-  function_name: api-function
-  name: prod
-  function_version: 10  # Primary version
-
+  <<: *prod-alias
   routing_config:
     additional_version_weights:
-      11: 0.1  # 10% traffic to version 11
-
-  description: "Production with 90% v10, 10% v11 canary"
-
-  # Gradually shift traffic:
-  # v11: 0.1 → 0.25 → 0.5 → 0.75 → 1.0
-  # Once fully on v11, update alias to single version
-```
-
-## Deployment Package Examples
-
-### Python Package Structure
-
-```yaml
-package:
-  runtime: python3.11
-  structure:
-    - lambda_function.py  # Handler file
-    - requirements.txt    # Dependencies
-    - utils/              # Helper modules
-      - __init__.py
-      - helpers.py
-    - config/
-      - settings.py
-
-  # Build process:
-  # 1. pip install -r requirements.txt -t .
-  # 2. zip -r function.zip lambda_function.py utils/ config/ <installed_packages>
-
-  # Handler format: lambda_function.lambda_handler
-```
-
-### Node.js Package Structure
-
-```yaml
-package:
-  runtime: nodejs20.x
-  structure:
-    - index.js            # Handler file
-    - package.json        # Dependencies manifest
-    - package-lock.json   # Locked versions
-    - node_modules/       # Dependencies (npm install)
-    - lib/
-      - utils.js
-
-  # Build process:
-  # 1. npm install
-  # 2. zip -r function.zip index.js node_modules/ lib/
-
-  # Handler format: index.handler
-```
-
-## Environment Variable Secrets
-
-### Using Secrets Manager
-
-```yaml
-environment_variables:
-  # Reference Secrets Manager (runtime resolution)
-  DB_PASSWORD: "{{secrets.DB_PASSWORD}}"  # Secret ARN or name
-
-  # Lambda code retrieves secret:
-  # import boto3
-  # secrets = boto3.client('secretsmanager')
-  # response = secrets.get_secret_value(SecretId='DB_PASSWORD')
-  # password = json.loads(response['SecretString'])['password']
-```
-
-### Using Parameter Store
-
-```yaml
-environment_variables:
-  # Reference SSM Parameter
-  API_KEY: "{{ssm.API_KEY}}"  # Parameter name
-
-  # Lambda code retrieves parameter:
-  # import boto3
-  # ssm = boto3.client('ssm')
-  # response = ssm.get_parameter(Name='API_KEY', WithDecryption=True)
-  # api_key = response['Parameter']['Value']
+      "11": 0.1
 ```

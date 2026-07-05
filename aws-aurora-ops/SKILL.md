@@ -188,6 +188,16 @@ Runbooks: [aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-or
 
 Incident output MUST conform to [aws-aiops-cruise/references/incident-schema.md](../aws-aiops-cruise/references/incident-schema.md) (`resource_type: Aurora`, `delegate_skill: aws-aurora-ops`).
 
+## Token Efficiency
+
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
+- TE-1: No hardcoded engine versions/ports — use `describe-db-engine-versions` / `describe-db-clusters`
+- TE-2: Inline comments only in boto3 code (no docstrings)
+- TE-3: Compact error tables throughout
+- TE-4: JSON paths centralized in `## Common JSON Paths` block above
+- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
+- TE-6: Flows only in SKILL.md (no duplicate in references/)
+
 ## Reference Files
 
 - [Prompt Examples (AIOps)](references/prompt-examples.md)

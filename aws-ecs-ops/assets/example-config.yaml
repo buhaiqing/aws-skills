@@ -1,0 +1,22 @@
+# ECS example: Fargate service configuration
+# Usage: substitute placeholders, then use as reference
+
+cluster: &cluster
+  name: "{{user.cluster_name | default('my-cluster')}}"
+  capacity_provider: FARGATE
+
+task_def: &task_def
+  family: "{{user.task_family | default('my-task')}}"
+  network_mode: awsvpc
+  cpu: "256"
+  memory: "512"
+  launch_type: FARGATE
+
+service: &service
+  desired_count: 2
+  health_check_grace_period_seconds: 30
+
+network: &network
+  subnets: ["{{user.subnet_ids}}"]
+  security_groups: ["{{user.sg_ids}}"]
+  assign_public_ip: ENABLED

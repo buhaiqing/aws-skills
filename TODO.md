@@ -297,10 +297,10 @@ aws-aiops-cruise 是跨服务全链路巡检，覆盖 AWS 核心服务，GCL 设
 
 | Priority | Total | Done | Remaining |
 |----------|-------|------|-----------|
-| HIGH     | 4     | 0    | 4         |
-| MEDIUM   | 4     | 0    | 4         |
-| LOW      | 3     | 0    | 3         |
-| **Total** | **11** | **0** | **11**    |
+| HIGH     | 4     | 4    | 0         |
+| MEDIUM   | 4     | 4    | 0         |
+| LOW      | 3     | 3    | 0         |
+| **Total** | **11** | **11** | **0**    |
 
 ---
 
@@ -350,6 +350,6 @@ CR-10, CR-11 → 文档/配置，任意阶段可插队
 
 | Wave | Items | Status |
 |------|-------|--------|
-| Wave 1 (1人天) | CR-1 ~ CR-4 | 🟡 待执行 |
-| Wave 2 (1-2人天) | CR-5 ~ CR-7 | 🟡 待执行 |
-| Wave 3 (架构) | CR-8 ~ CR-11 | 🟡 待执行 |
+| Wave 1 (1人天) | CR-1 ~ CR-4 | ✅ DONE |
+| Wave 2 (1-2人天) | CR-5 ~ CR-7 | ✅ DONE |
+| Wave 3 (架构) | CR-8 ~ CR-11 | ✅ DONE |

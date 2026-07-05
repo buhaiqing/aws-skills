@@ -115,6 +115,9 @@ below maps intents to (skill, primary CLI command(s)). All commands assume
 | Resource-level health overview | `aws-cloudwatch-ops` | `describe-alarms`, `get-metric-statistics` |
 | LB health & 5xx | `aws-elb-ops` | `describe-target-health`, `describe-load-balancers` |
 | EC2 health | `aws-ec2-ops` | `describe-instance-status`, `describe-instances` |
+| ECS cluster/service health | `aws-ecs-ops` | `describe-clusters`, `describe-services` |
+| API Gateway health | `aws-apigateway-ops` | `get-rest-apis`, `get-stages` |
+| EBS volume health | `aws-ebs-ops` | `describe-volumes`, `describe-snapshots` |
 | DB health (standalone RDS) | `aws-rds-ops` | `describe-db-instances` |
 | Aurora cluster health | `aws-aurora-ops` | `describe-db-clusters`, cluster CW metrics |
 | Cache health | `aws-elasticache-ops` | `describe-replication-groups` |
@@ -193,6 +196,9 @@ aiops_delegate:
 | Cert expired | `aws-acm-ops` | acm → route53 (DNS validation?) → cloudtrail |
 | KMS decrypt fail | `aws-kms-ops` | kms → iam (grants?) → cloudtrail |
 | Lambda throttling | `aws-lambda-ops` | lambda → event-source (sqs/sns/ddb/kinesis) → cloudwatch |
+| ECS task deficit | `aws-ecs-ops` | ecs → ecs (stopped tasks/events) → iam (task role) → vpc (subnet capacity) |
+| API Gateway 5XX | `aws-apigateway-ops` | apigw → lambda/ecs (upstream) → cloudwatch (logs) |
+| EBS volume issues | `aws-ebs-ops` | ebs → ec2 (attachment state) → cloudwatch (volume metrics) |
 
 ### 3.3 Self-heal intents
 

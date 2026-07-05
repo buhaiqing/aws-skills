@@ -231,4 +231,6 @@ audit-results/
 .omc/
 .opencode/
 .pi/
+.pi-subagent-orchestrator/
+.pi-subagents/
 .vscode/

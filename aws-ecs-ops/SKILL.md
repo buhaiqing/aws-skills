@@ -218,7 +218,7 @@ aws ecs delete-service \
 
 ```
 [WARN] Deleting service {{user.service_name}} will stop all running tasks.
-Type 'DELETE {{user.service_name}}' to confirm.
+Type 'DELETE_SERVICE {{user.service_name}}' to confirm.
 ```
 
 ### Operation: Deregister Task Definition
@@ -244,8 +244,18 @@ aws ecs delete-cluster --cluster "{{user.cluster_name}}" --output json
 
 ```
 [WARN] Deleting cluster {{user.cluster_name}} will remove all associated resources.
-Type 'DELETE {{user.cluster_name}}' to confirm.
+Type 'DELETE_CLUSTER {{user.cluster_name}}' to confirm.
 ```
+
+## Recover
+
+| Error | Action |
+|-------|--------|
+| `ClusterNotFoundException` | Verify cluster name/ARN; list existing clusters |
+| `ServiceNotActiveException` | Service must be ACTIVE to update/delete |
+| `InvalidParameterException` | Check CPU/memory valid combos for Fargate |
+| `ThrottlingException` | Backoff and retry; reduce API call rate |
+| `AccessDeniedException` | Check IAM execution role permissions |
 
 ## Reference Files
 
