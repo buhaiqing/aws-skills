@@ -230,7 +230,7 @@ Full diagnoses tables in [references/troubleshooting.md](references/troubleshoot
 ## Related Skills
 - `aws-ec2-ops` — Security groups | `aws-iam-ops` — IAM roles | `aws-kms-ops` — Encryption
 - `aws-cloudwatch-ops` — Performance Insights, alarms, **slow query log query** | `aws-s3-ops` — Import/export
-- `aws-secrets-manager-ops` — Credential management
+- `aws-secretsmanager-ops` — Credential management
 
 ## Cross-Skill Orchestration
 | Scenario | Chain |

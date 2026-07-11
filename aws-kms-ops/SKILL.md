@@ -80,7 +80,7 @@ Operational runbook for AWS KMS — key lifecycle, encryption, grants, policies,
 - S3 bucket encryption → `aws-s3-ops`
 - RDS encryption → `aws-rds-ops`
 - EBS volume encryption → `aws-ec2-ops`
-- Secrets Manager operations → `aws-secrets-manager-ops`
+- Secrets Manager operations → `aws-secretsmanager-ops`
 
 ### Delegation
 - IAM policy editing → `aws-iam-ops` (IAM policies for key access)
@@ -331,7 +331,7 @@ Auto-heal **downgrades** to AI_ASSIST or MANUAL when:
 - `aws-ec2-ops` - EBS volume encryption
 - `aws-cloudtrail-ops` - Trail encryption
 - `aws-lambda-ops` - Lambda env var encryption
-- `aws-secrets-manager-ops` - Secrets encryption
+- `aws-secretsmanager-ops` - Secrets encryption
 
 ## Token Efficiency
 
