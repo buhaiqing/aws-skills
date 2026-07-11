@@ -58,7 +58,7 @@ AWS Elastic Block Store (EBS) provides block-level storage volumes for use with 
 - EC2 instance management → delegate to: `aws-ec2-ops`
 - Instance store volumes → ephemeral, not EBS
 - S3 object storage → delegate to: `aws-s3-ops`
-- EFS file system → delegate to AWS EFS (if a dedicated EFS skill is available)
+- EFS file system → delegate to: `aws-efs-ops`
 
 ## Variable Convention
 

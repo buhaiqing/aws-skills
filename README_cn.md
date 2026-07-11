@@ -507,6 +507,7 @@ aws sts get-caller-identity --output json
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ 完成 v1.3.0 |
 | aws-ecr-ops | ECR (容器镜像仓库) | ✅ 完成 v1.0.0 |
 | aws-ebs-ops | EBS (块存储) | ✅ 完成 v1.0.0 |
+| aws-efs-ops | EFS (弹性文件系统) | ✅ 完成 v1.0.0 |
 | aws-cloudtrail-ops | CloudTrail (审计) | ✅ 完成 v1.1.0 |
 | aws-kms-ops | KMS (加密) | ✅ 完成 v2.1.0 |
 | aws-route53-ops | Route53 (DNS) | ✅ 完成 v1.2.0 |
