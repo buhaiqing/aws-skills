@@ -111,6 +111,17 @@ Patrol follows the **AWS reference stack** in [`references/aws-aiops-stack.md`](
 | RAM diagnosis | `aws-ram-ops` | Resource share status, principal association |
 | Secrets Manager diagnosis | `aws-secretsmanager-ops` | Rotation age, secret access |
 
+## EKS Node & Pod Detection
+
+Phase-3 inference adds two EKS signal rules (details in `references/inference-rules-addendum.md`):
+
+| Rule | Severity | Trigger | Source |
+|------|----------|---------|--------|
+| EKS-NODE-01 | WARNING | `node_status_condition_ready` Minimum < 1.0 over window → a node is NotReady | CloudWatch Container Insights (`EKS/ContainerInsights`) |
+| EKS-OOM-01 | CRITICAL | `pod_container_status_terminated_reason_oom_killed` Sum > 0 → a pod was OOM-killed | CloudWatch Container Insights (`EKS/ContainerInsights`) |
+
+**Production prerequisite**: both rules read kube-state-metrics published by the CloudWatch agent. EKS-OOM-01 only fires if the agent DaemonSet runs with `securityContext.privileged: true` (required to capture OOM events); otherwise the OOM metric is not emitted. Node-ready detection has no such constraint.
+
 ## Perceive Layer — 7 Agents
 
 Agents live under `scripts/agents/perceive/`; orchestrated via `__init__.sh --mode`.
