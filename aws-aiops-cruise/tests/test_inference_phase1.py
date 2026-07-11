@@ -9,7 +9,8 @@ Note: OpenSearch / CloudFront / Athena / RAM / SecretsManager inference rules
 remain DEFERRED — `signals["<svc>"]` is never populated because those services
 have no PRODUCTS entry in `_shared.py`, so inference blocks would be dead code.
 EKS is the exception: `audit_eks_nodes` (native collector) populates
-`signals["EKS"]` at runtime, so `EKS-NG-02` fires. See
+`signals["EKS"]` at runtime, so `EKS-NG-02` fires; the EKS_NODE layer
+(CloudWatch Container Insights) drives `EKS-NODE-01` / `EKS-OOM-01`. See
 `references/inference-rules-addendum.md`.
 """
 
@@ -124,3 +125,46 @@ def test_eks_ng02_no_false_positive_on_clean_signal():
         clean, run_id="r1", customer="c", region="us-east-1", existing_rule_ids=set()
     )
     assert [i for i in inc if i["rule_id"] == "EKS-NG-02"] == []
+
+
+def _eks_node_signals() -> dict:
+    # signals["EKS_NODE"] is populated by the Container Insights collector
+    # (compute.py audit_eks_nodes), keyed by cluster name.
+    return {
+        "EKS_NODE": {
+            "prod/cluster-1": {"NodeNotReadyMin": 0.5, "PodOOMKilledSum": 3.0},
+            "prod/cluster-2": {"NodeNotReadyMin": 3.0, "PodOOMKilledSum": 0.0},
+        },
+    }
+
+
+def test_eks_node_01_and_oom_01_fire():
+    inc, lines = apply_chain_inference(
+        _eks_node_signals(), run_id="r1", customer="c", region="us-east-1", existing_rule_ids=set()
+    )
+    by_rule = {i["rule_id"]: i for i in inc}
+    assert "EKS-NODE-01" in by_rule
+    assert "EKS-OOM-01" in by_rule
+    # node NotReady -> WARNING; pod OOM -> CRITICAL
+    assert by_rule["EKS-NODE-01"]["level"] == "WARNING"
+    assert by_rule["EKS-OOM-01"]["level"] == "CRITICAL"
+    # only cluster-1 is unhealthy; cluster-2 must not raise either rule
+    assert by_rule["EKS-NODE-01"]["resource_id"] == "prod/cluster-1"
+    assert by_rule["EKS-OOM-01"]["resource_id"] == "prod/cluster-1"
+    assert len(lines) >= 2
+
+
+def test_eks_node_rules_suppressed_by_existing_rule_ids():
+    inc, lines = apply_chain_inference(
+        _eks_node_signals(), run_id="r1", customer="c", region="us-east-1",
+        existing_rule_ids={"EKS-NODE-01", "EKS-OOM-01"},
+    )
+    assert [i for i in inc if i["rule_id"] in ("EKS-NODE-01", "EKS-OOM-01")] == []
+    assert all("EKS-NODE-01" not in ln and "EKS-OOM-01" not in ln for ln in lines)
+
+
+def test_eks_node_clean_no_false_positive():
+    inc, _ = apply_chain_inference(
+        {}, run_id="r1", customer="c", region="us-east-1", existing_rule_ids=set()
+    )
+    assert [i for i in inc if i["rule_id"] in ("EKS-NODE-01", "EKS-OOM-01")] == []

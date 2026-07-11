@@ -449,10 +449,12 @@ def get_metric_stats(
     dps = sorted(data["Datapoints"], key=lambda x: x["Timestamp"])
     avgs = [p["Average"] for p in dps if "Average" in p]
     maxs = [p["Maximum"] for p in dps if "Maximum" in p]
+    mins = [p["Minimum"] for p in dps if "Minimum" in p]
     sums = [p["Sum"] for p in dps if "Sum" in p]
     return {
         "avg": sum(avgs) / len(avgs) if avgs else None,
         "max": max(maxs) if maxs else None,
+        "min": min(mins) if mins else None,
         "sum": sum(sums) if sums else None,
     }
 
@@ -579,7 +581,7 @@ def get_metric_data_batch(
 
             key = (metric, dim_value)
             if key not in results:
-                results[key] = {"avg": None, "max": None, "sum": None}
+                results[key] = {"avg": None, "max": None, "min": None, "sum": None}
 
             if not values:
                 continue
@@ -590,6 +592,8 @@ def get_metric_data_batch(
                 results[key]["avg"] = sum(values) / len(values)
             elif stat == "Sum":
                 results[key]["sum"] = sum(values)
+            elif stat == "Minimum":
+                results[key]["min"] = min(values)
 
     return results
 

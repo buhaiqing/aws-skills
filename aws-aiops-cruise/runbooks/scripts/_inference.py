@@ -420,6 +420,55 @@ def apply_chain_inference(
             )
         )
 
+    # EKS node/Pod-level inference via CloudWatch Container Insights (EKS_NODE layer).
+    for cluster, node_metrics in signals.get("EKS_NODE", {}).items():
+        node_not_ready = node_metrics.get("NodeNotReadyMin")
+        if node_not_ready is not None and node_not_ready < 1.0:
+            rule = "EKS-NODE-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: EKS node NotReady in cluster `{cluster}` (min ready={node_not_ready:.2f})"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="EKS",
+                        resource_id=cluster,
+                        rule_id=rule,
+                        title=f"EKS node NotReady in cluster {cluster}",
+                        level="WARNING",
+                        metric="NodeNotReadyMin",
+                        current_value=node_not_ready,
+                        threshold_warning=1.0,
+                        recommendation="A node is NotReady: check kubelet, ASG launch/health, capacity, or node bootstrap",
+                    )
+                )
+        oom = node_metrics.get("PodOOMKilledSum")
+        if oom is not None and oom > 0:
+            rule = "EKS-OOM-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: EKS pod OOM-killed in cluster `{cluster}` (events sum={oom:.0f})"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="EKS",
+                        resource_id=cluster,
+                        rule_id=rule,
+                        title=f"EKS pod OOM-killed in cluster {cluster}",
+                        level="CRITICAL",
+                        metric="PodOOMKilledSum",
+                        current_value=oom,
+                        threshold_critical=0,
+                        recommendation="Pod OOM-killed: inspect memory requests/limits and node memory pressure; right-size or scale",
+                    )
+                )
+
     for rid, metrics in signals.get("NAT", {}).items():
         err = metrics.get("ErrorPortAllocation")
         if err is not None and err >= 1:

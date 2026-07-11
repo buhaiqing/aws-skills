@@ -22,7 +22,8 @@ mutating AWS calls (consistent with GCL fail-closed).
 >
 > **EKS is the exception**: it has no PRODUCTS entry, but `audit_eks_nodes`
 > (native collector) populates `signals["EKS"]` with per-nodegroup scalingConfig
-> metrics, so `EKS-NG-02` fires at runtime. Implemented as a live rule.
+> metrics, so `EKS-NG-02` fires at runtime; the EKS_NODE layer (CloudWatch
+> Container Insights) drives `EKS-NODE-01` / `EKS-OOM-01`. Implemented as live rules.
 
 ## Routing status (all 8 wired into cruise/orchestrator SKILL.md)
 
@@ -32,7 +33,7 @@ mutating AWS calls (consistent with GCL fail-closed).
 | aws-elasticache-ops | ✅ added | ✅ live (EC-MEM-01 / EC-FAILOVER-01 / CACHE-EVICT-01) |
 | aws-opensearch-ops | ✅ added | ⏳ deferred (no `OpenSearch` PRODUCTS entry → signals never populated) |
 | aws-cloudfront-ops | ✅ added | ⏳ deferred (no `CloudFront` PRODUCTS entry; `CF-*` only referenced in cross-links) |
-| aws-eks-ops | ✅ added | ✅ live (EKS-NG-02 via `signals["EKS"]` from `audit_eks_nodes`) |
+| aws-eks-ops | ✅ added | ✅ live (EKS-NG-02 via `signals["EKS"]`; EKS-NODE-01 / EKS-OOM-01 via `signals["EKS_NODE"]` from Container Insights) |
 | aws-athena-ops | ✅ added | ⏳ deferred (no `Athena` PRODUCTS entry) |
 | aws-ram-ops | ✅ added | ⏳ deferred (no `RAM` PRODUCTS entry) |
 | aws-secretsmanager-ops | ✅ added | ⏳ deferred (no `SecretsManager` PRODUCTS entry) |
@@ -69,14 +70,14 @@ mutating AWS calls (consistent with GCL fail-closed).
 - Trigger: `ClusterIndexWritesBlocked` = true OR `UnassignedShards` > 0
 - Action: delegate `aws-opensearch-ops`
 
-### EKS-NODE-01 (Phase 2)
-- Trigger: EKS node `NotReady` count > 0
-- Logic: >0 WARNING
+### EKS-NODE-01 (implemented)
+- Trigger: EKS node `NotReady` (CloudWatch Container Insights `node_status_condition_ready`, summarized as `NodeNotReadyMin`) < 1.0
+- Logic: min ready < 1.0 → WARNING
 - Action: delegate `aws-eks-ops`
 
-### EKS-OOM-01 (Phase 2)
-- Trigger: pod OOM / eviction events > 0
-- Logic: >0 CRITICAL
+### EKS-OOM-01 (implemented)
+- Trigger: pod OOM-killed events (Container Insights `pod_container_status_terminated_reason_oom_killed`, summarized as `PodOOMKilledSum`) > 0
+- Logic: sum > 0 → CRITICAL
 - Action: delegate `aws-eks-ops`
 
 ### EKS-NG-02 (implemented)

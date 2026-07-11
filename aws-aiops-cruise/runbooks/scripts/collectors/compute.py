@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from _shared import make_incident, resource_in_scope, run_aws, log
+from _shared import make_incident, resource_in_scope, run_aws, log, get_metric_data_batch
 
 from collectors._time import json_time
 
@@ -51,12 +51,29 @@ def audit_ecs_drift(region: str, scope_ids: set[str], run_id: str, customer: str
 def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, float]]]:
     incidents: list[dict] = []
     signals: dict[str, dict[str, float]] = {}
+    node_signals: dict[str, dict[str, float]] = {}
     clusters = run_aws(["aws", "eks", "list-clusters"], region)
     if not clusters:
-        return incidents, signals
+        return incidents, {"EKS": signals, "EKS_NODE": node_signals}
     for name in clusters.get("clusters", []):
         if scope_ids and not resource_in_scope(name, scope_ids):
             continue
+        # Container Insights: node NotReady + pod OOM-kill (cluster-level)
+        ci = get_metric_data_batch(
+            region,
+            [
+                ("EKS/ContainerInsights", "node_status_condition_ready", "ClusterName", name, "Minimum"),
+                ("EKS/ContainerInsights", "pod_container_status_terminated_reason_oom_killed", "ClusterName", name, "Sum"),
+            ],
+            hours=6,
+        )
+        ready = ci.get(("node_status_condition_ready", name))
+        oom = ci.get(("pod_container_status_terminated_reason_oom_killed", name))
+        if ready or oom:
+            node_signals[name] = {
+                "NodeNotReadyMin": (ready or {}).get("min") or 0.0,
+                "PodOOMKilledSum": (oom or {}).get("sum") or 0.0,
+            }
         ng = run_aws(["aws", "eks", "list-nodegroups", "--cluster-name", name], region)
         if not ng:
             continue
@@ -92,7 +109,7 @@ def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str
                         recommendation="eks describe-nodegroup health; check ASG, subnet, IAM, max pods",
                     )
                 )
-    return incidents, {"EKS": signals}
+    return incidents, {"EKS": signals, "EKS_NODE": node_signals}
 
 def audit_autoscaling_headroom(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []
