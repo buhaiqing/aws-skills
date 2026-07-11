@@ -22,6 +22,7 @@ metadata:
   cli_applicability: dual-path
   aiops_level: full-chain
   version: "2.4.0"
+  destructive_ops_require_confirm: true
   environment:
   - AWS_ACCESS_KEY_ID
   - AWS_SECRET_ACCESS_KEY

@@ -14,6 +14,7 @@ metadata:
   last_updated: "2026-07-06"
   runtime: Harness AI Agent
   cli_applicability: dual-path
+  destructive_ops_require_confirm: true
   environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
