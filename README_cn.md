@@ -523,7 +523,7 @@ aws sts get-caller-identity --output json
 | aws-athena-ops | Athena (无服务器 SQL 查询) | ✅ 完成 v1.1.0 |
 | aws-ram-ops | RAM (跨账户资源共享) | ✅ 完成 v1.3.0 |
 | aws-topo-discovery | 跨产品拓扑发现 | ✅ 完成 v1.1.0 |
-| aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.1.0** — 见 [§AIOps 巡检](#aiops-巡检) |
+| aws-aiops-cruise | **全链路 AIOps 巡检（只读）** | ✅ **完成 v2.2.0** — 见 [§AIOps 巡检](#aiops-巡检) |
 
 ## AIOps 巡检
 

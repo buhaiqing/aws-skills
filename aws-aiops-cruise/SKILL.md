@@ -17,8 +17,8 @@ compatibility: >-
   Read-only Describe/List/Get APIs strictly enforced.
 metadata:
   author: aws
-  version: "2.1.0"
-  last_updated: "2026-07-04"
+  version: "2.2.0"
+  last_updated: "2026-07-11"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: cross-product-aiops-cruise
   cli_applicability: dual-path

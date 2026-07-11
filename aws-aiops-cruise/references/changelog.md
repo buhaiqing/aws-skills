@@ -2,6 +2,7 @@
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.2.0 | 2026-07-11 | EKS node/Pod inference: `EKS-NODE-01` (node NotReady) + `EKS-OOM-01` (pod OOM-kill) via CloudWatch Container Insights; `audit_eks_nodes` collector; `EKS_NODE` signal layer; Prometheus/kube-state-metrics alt telemetry docs |
 | 2.1.0 | 2026-07-04 | GCL compliance: shared skeleton prompt-templates migration; frontmatter GCL/cross_skill_deps/delegate metadata; TE-1 threshold disclaimer; TE-6 execution flow consolidation; TE checklist section; `{{user.safety_confirm}}` added |
 |---------|------|--------|
 | 1.9.0 | 2026-06-13 | P1: SKILL slim; boto3 CLI fallback; aiops_context `facts_info`; markdown topology link; Perceive `_cruise_env.sh`; TopoScan auto overlay; Mermaid health only WARNING+ |

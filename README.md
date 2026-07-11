@@ -523,7 +523,7 @@ aws sts get-caller-identity --output json
 | aws-athena-ops | Athena (serverless SQL queries) | ✅ Complete v1.1.0 |
 | aws-ram-ops | RAM (cross-account resource sharing) | ✅ Complete v1.3.0 |
 | aws-topo-discovery | Cross-product Topology Discovery | ✅ Complete v1.1.0 |
-| aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.1.0** — see [§AIOps Cruise](#aiops-cruise) |
+| aws-aiops-cruise | **Full-chain AIOps patrol (read-only)** | ✅ **Complete v2.2.0** — see [§AIOps Cruise](#aiops-cruise) |
 
 ## AIOps Cruise
 
