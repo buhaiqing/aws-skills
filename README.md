@@ -505,6 +505,7 @@ aws sts get-caller-identity --output json
 | aws-aurora-ops | Aurora (MySQL/PostgreSQL clusters) | ✅ Complete v1.2.0 |
 | aws-elasticache-ops | ElastiCache (Redis/Memcached) | ✅ Complete v1.1.0 |
 | aws-dynamodb-ops | DynamoDB (NoSQL) | ✅ Complete v1.3.0 |
+| aws-ecr-ops | ECR (Container Registry) | ✅ Complete v1.0.0 |
 | aws-ebs-ops | EBS (Block Storage) | ✅ Complete v1.0.0 |
 | aws-cloudtrail-ops | CloudTrail (Audit) | ✅ Complete v1.1.0 |
 | aws-kms-ops | KMS (Encryption) | ✅ Complete v2.1.0 |
