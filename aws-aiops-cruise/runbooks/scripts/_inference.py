@@ -924,55 +924,6 @@ def apply_chain_inference(
                     )
                 )
 
-    for rid, metrics in signals.get("OpenSearch", {}).items():
-        heap = metrics.get("JVMMemoryPressure")
-        if heap is not None and heap >= 80:
-            rule = "OS-HEAP-01"
-            if rule not in existing_rule_ids:
-                lines.append(
-                    f"- **{rule}**: OpenSearch `{rid}` JVM pressure {heap:.0f}% → GC thrash / heap exhaustion"
-                )
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="OpenSearch",
-                        resource_id=rid,
-                        rule_id=rule,
-                        title="OpenSearch JVM memory pressure",
-                        level="CRITICAL" if heap >= 95 else "WARNING",
-                        metric="JVMMemoryPressure",
-                        current_value=float(heap),
-                        threshold_warning=80,
-                        threshold_critical=95,
-                        recommendation="Scale JVM heap / add nodes; delegate aws-opensearch-ops",
-                    )
-                )
-        blocked = metrics.get("ClusterIndexWritesBlocked") or 0
-        unassigned = metrics.get("UnassignedShards") or 0
-        if blocked >= 1 or unassigned >= 1:
-            rule = "OS-SHARD-01"
-            if rule not in existing_rule_ids:
-                lines.append(
-                    f"- **{rule}**: OpenSearch `{rid}` writes blocked={blocked} unassigned_shards={unassigned} → shard imbalance"
-                )
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="OpenSearch",
-                        resource_id=rid,
-                        rule_id=rule,
-                        title="OpenSearch shard issue",
-                        level="CRITICAL" if blocked >= 1 else "WARNING",
-                        metric="ClusterIndexWritesBlocked",
-                        current_value=float(blocked),
-                        recommendation="Review shard allocation / disk watermark; delegate aws-opensearch-ops",
-                    )
-                )
-
     return incidents, lines
 
 
