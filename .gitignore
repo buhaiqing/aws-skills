@@ -234,3 +234,6 @@ audit-results/
 .pi-subagent-orchestrator/
 .pi-subagents/
 .vscode/
+
+# CodeGraph local index (per-project, rebuilt with `codegraph init .`)
+.codegraph/

@@ -436,8 +436,44 @@ Codified in `gcl-spec.md` §8. Highlights:
 - [`aws-securityhub-ops/references/prompt-templates.md`](aws-securityhub-ops/references/prompt-templates.md) — Group 7 G/C/O skeletons
 - Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)
 
+## 12. CodeGraph Integration（代码知识图谱集成）
+
+本地优先的代码知识图谱工具（[colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)，已装 `/Users/bohaiqing/.local/bin/codegraph`，Node v22.19.0）。用 tree-sitter 建本地 SQLite 图谱（`.codegraph/codegraph.db`），通过 MCP（工具 `codegraph_explore` / `codegraph_node`）集成进 OpenCode。100% 本地、无数据外泄。
+
+### 目的
+
+编辑技能 `SKILL.md` / `references/` 或共享脚本（`scripts/gcl_runner.py`、`_shared.py` 等）前，用 CodeGraph 校验**跨技能引用一致性**与**变更影响半径**，补强 §Operational Guidelines 的"跨文件引用三方同步"规则。
+
+本仓库 34 个 `aws-<svc>-ops` 技能委托引用频繁（如 `aws-rds-ops`→`aws-aurora-ops`、`aws-elb-ops`↔`aws-vpc-ops`），改一处可能影响多处。`codegraph explore "aws-aurora-ops"` 实测返回 36 符号跨 3 文件 + blast radius（`run_aws` 有 61 调用者跨 15+ 文件）。
+
+### 命令
+
+```bash
+codegraph init .              # 首次建图（实测 564 nodes / 1,329 edges）
+codegraph explore "<symbol>"  # 查影响半径 / 跨文件调用点
+codegraph status              # 查索引状态（Files/Nodes/Edges/DB Size）
+codegraph install --target opencode   # 接 OpenCode MCP（写全局 ~/.config/opencode/）
+```
+
+MCP 启用亦可手动在 `~/.config/opencode/opencode.jsonc` 的 `mcp` 下加：
+`"codegraph": { "type": "local", "command": ["codegraph","serve","--mcp"], "enabled": true }`。
+CLI 等价命令（`codegraph explore` / `codegraph node`）始终可用，无需 MCP 即可查询。
+
+### 规则
+
+| 项 | 要求 |
+|----|------|
+| `.codegraph/` | 内容已被其自带 `.gitignore`（`*` + `!.gitignore`）屏蔽，禁止提交索引；根 `.gitignore` 可补 `.codegraph/`（可选，为 `git status` 静默） |
+| 改共享脚本 / 委派引用前 | 先 `codegraph explore "<symbol>"` 确认调用点与文档描述一致 |
+| GCL 任务 R2 内容评审 | 用 CodeGraph 辅助校验跨技能委托引用存在性（如 `SHOULD` / `SHOULD NOT` 指向的目录真实存在） |
+| 与 self-review 关系 | 不替代 2-round self-review，仅作跨技能引用的机器校验增强 |
+
+有 `.codegraph/` 时优先用 CodeGraph 而非 `grep` / `find` 做跨文件引用查询。索引为本地产物，重建即用 `codegraph init .`。
+
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-07-04 | Added §Operational Guidelines: Task Tracking, GCL Skip Threshold, Pre-existing Lint Baseline |
+| 2026-07-11 | Added §12 CodeGraph Integration: local code knowledge graph (colbymchenry/codegraph) for cross-skill reference consistency + blast-radius checks; `codegraph init .` indexed 564 nodes / 1,329 edges |
