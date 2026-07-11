@@ -84,6 +84,19 @@ mutating AWS calls (consistent with GCL fail-closed).
 - Trigger: per-nodegroup scalingConfig — `NodesCurrent < NodesDesired` (CRITICAL, nodes not ready) or `NodesCurrent >= NodesMax and NodesDesired >= NodesMax` (WARNING, at max capacity with pending scale-up)
 - Action: delegate `aws-eks-ops`
 
+### Telemetry source alternatives (EKS-NODE-01 / EKS-OOM-01)
+
+Both rules consume the summarized signal keys `NodeNotReadyMin` / `PodOOMKilledSum`; the
+collector that populates them is swappable. The shipped `audit_eks_nodes` collector uses
+CloudWatch Container Insights (`EKS/ContainerInsights`). Equivalent alternative backends:
+
+| Source | Node NotReady signal | Pod OOM-kill signal |
+|--------|---------------------|---------------------|
+| CloudWatch Container Insights (shipped) | `node_status_condition_ready` (dim `ClusterName`, stat `Minimum`) | `pod_container_status_terminated_reason_oom_killed` (dim `ClusterName`, stat `Sum`) |
+| kube-state-metrics / Prometheus | `kube_node_status_condition{condition="Ready",status="true"}` gauge → min over cluster | `kube_pod_container_status_terminated_reason{reason="OOMKilled"}` counter → sum over window |
+
+Swap-in requires only a different `audit_eks_nodes` collector; the inference rules are unchanged.
+
 ### CF-ORIGIN-02 (implemented, distinct from CF-ORIGIN-01)
 - Trigger: CloudFront `OriginLatency` > 1000ms OR `OriginSuccessRate` < 0.99
 - Action: delegate `aws-cloudfront-ops`
