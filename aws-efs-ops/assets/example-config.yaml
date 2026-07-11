@@ -1,0 +1,28 @@
+# AWS EFS — Example Configuration
+# Substitute {{env.*}} and {{user.*}} placeholders before use.
+
+file_system:
+  creation_token: "my-efs-{{env.AWS_DEFAULT_REGION}}-001"
+  performance_mode: "generalPurpose"  # generalPurpose | maxIO
+  throughput_mode: "bursting"         # bursting | provisioned | elastic
+  encrypted: true
+  kms_key_id: ""  # Optional: custom KMS key ARN
+
+mount_targets:
+  - subnet_id: "subnet-abc123"
+    security_groups:
+      - "sg-xyz789"
+
+access_points:
+  - name: "data-ingest"
+    posix_user:
+      uid: 1000
+      gid: 1000
+    root_directory:
+      path: "/data"
+      owner_uid: 1000
+      owner_gid: 1000
+      permissions: "0755"
+
+lifecycle_policies:
+  - transition_to_ia: "AFTER_30_DAYS"
