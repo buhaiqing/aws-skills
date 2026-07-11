@@ -1,0 +1,43 @@
+# AWS ECR — Example Configuration
+# Substitute {{env.*}} and {{user.*}} placeholders before use.
+
+repository:
+  name: "{{user.repository_name}}"
+  region: "{{user.region}}"
+  imageTagMutability: "IMMUTABLE"  # IMMUTABLE | MUTABLE
+  imageScanningConfiguration:
+    scanOnPush: true  # Enable automatic CVE scanning on push
+
+lifecycle_policy:
+  rules:
+    - rulePriority: 1
+      description: "Expire untagged images older than 14 days"
+      selection:
+        tagStatus: "untagged"
+        countType: "sinceImagePushed"
+        countUnit: "days"
+        countNumber: 14
+    - rulePriority: 2
+      description: "Keep last 5 tagged images"
+      selection:
+        tagStatus: "tagged"
+        tagPrefixList: ["prod", "staging"]
+        countType: "imageCountMoreThan"
+        countNumber: 5
+
+repository_policy:
+  Version: "2012-10-17"
+  Statement:
+    - Sid: "CrossAccountPull"
+      Effect: "Allow"
+      Principal:
+        AWS: "arn:aws:iam::{{user.aws_account_id}}:role/CrossAccountPullRole"
+      Action:
+        - "ecr:BatchCheckLayerAvailability"
+        - "ecr:BatchGetImage"
+        - "ecr:GetDownloadUrlForLayer"
+
+# Docker login example
+# aws ecr get-login-password --region {{user.region}} | \
+#   docker login --username AWS --password-stdin \
+#   {{user.aws_account_id}}.dkr.ecr.{{user.region}}.amazonaws.com
