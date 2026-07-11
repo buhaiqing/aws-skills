@@ -212,7 +212,7 @@ diff /tmp/lb-baseline-{{lb_name}}.json /tmp/lb-current-{{lb_name}}.json && echo 
 | 6 | **Multi-region AIOps** | Single-region only | Cross-region LB health aggregation and failover orchestration | P3 |
 | 7 | **SLA breach auto-escalation** | Not documented | Auto-create PagerDuty/Jira ticket when auto-heal fails 2x | P3 |
 | 8 | **Capacity planning dashboard** | CLI FORECAST only | Grafana/CloudWatch dashboard with FORECAST + anomaly overlay | P2 |
-| 9 | **aws-cost-ops integration** | Referenced but no binding | Track ELB cost breakdown per-LB per-environment | P2 |
+| 9 | **Cost Explorer integration** | Planned, no dedicated skill | Track ELB cost breakdown per-LB per-environment | P2 |
 | 10 | **Pre-commit compliance hook** | Not implemented | Git hook that runs compliance scan before allowing LB config changes | P3 |
 
 ### Enhancement Description

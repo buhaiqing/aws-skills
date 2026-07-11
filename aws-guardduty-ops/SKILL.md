@@ -46,7 +46,7 @@ AWS GuardDuty is a threat detection service that continuously monitors for malic
 ### SHOULD NOT Use When
 - IAM only → delegate to: `aws-iam-ops`
 - Related service → delegate to: `aws-securityhub-ops`
-- Cost/Billing analysis → delegate to: `aws-cost-ops` (if available) or AWS Cost Explorer
+- Cost/Billing analysis → delegate to AWS Cost Explorer (if a dedicated cost skill is available)
 
 ## Variable Convention
 

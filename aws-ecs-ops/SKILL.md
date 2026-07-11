@@ -62,7 +62,7 @@ AWS Elastic Container Service (ECS) is a fully managed container orchestration s
 - IAM roles/policies for tasks → delegate to: `aws-iam-ops`
 - ALB/target group config → delegate to: `aws-elb-ops`
 - VPC/subnet/security group → delegate to: `aws-vpc-ops`
-- Container image registry → delegate to: `aws-ecr-ops` (if available)
+- Container image registry → delegate to AWS ECR (if a dedicated ECR skill is available)
 
 ## Variable Convention
 
