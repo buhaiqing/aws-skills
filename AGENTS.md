@@ -292,6 +292,7 @@ total score. Full rules in spec §3.
 | `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% drain confirmation (rule A12) — shipped v2.2.0 |
 | `aws-ecs-ops` | **required** | 2 | `delete-service` (scale-to-0, rule A16), `delete-cluster`, `deregister-task-definition` |
 | `aws-ecr-ops` | **required** | 2 | `delete-repository` (`--force` guard), `batch-delete-image` — shipped v1.0.0 |
+| `aws-efs-ops` | **required** | 2 | `delete-file-system` (dependency pre-flight: mount targets + access points), `delete-mount-target`, `delete-access-point` — shipped v1.0.0 |
 | `aws-ebs-ops` | **required** | 2 | `delete-volume` (data loss), `detach-volume`, `delete-snapshot` |
 | `aws-apigateway-ops` | **required** | 2 | `delete-rest-api` (irreversible), `delete-stage`, `delete-api-key` |
 | `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |

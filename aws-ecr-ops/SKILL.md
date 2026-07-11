@@ -22,9 +22,9 @@ metadata:
     - AWS_DEFAULT_REGION
     - AWS_PROFILE
   gcl:
-    enabled: false
-    class: optional
-    reason: "Not yet listed in AGENTS.md §11.5 — GCL disabled by default for new skills"
+    enabled: true
+    class: required
+    max_iter: 2
   cross_skill_deps:
     - aws-ecs-ops            # Task container images
     - aws-iam-ops            # Repository policies, pull/push auth
@@ -288,4 +288,4 @@ aws ecr set-repository-policy \
 
 ## Quality Gate (GCL)
 
-GCL is **disabled** for `aws-ecr-ops` by default per `AGENTS.md` §11.5 (`Not yet listed — GCL disabled by default for new skills`). When GCL is enabled in a future rollout, a `references/rubric.md` and `references/prompt-templates.md` will be added.
+GCL is **required** for `aws-ecr-ops` (max_iter=2) per `AGENTS.md` §11.5. See [`references/rubric.md`](references/rubric.md) for the 5-dimension scoring rubric and [`references/prompt-templates.md`](references/prompt-templates.md) for Generator/Critic/Orchestrator prompt templates.
