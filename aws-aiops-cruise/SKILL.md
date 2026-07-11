@@ -102,6 +102,14 @@ Patrol follows the **AWS reference stack** in [`references/aws-aiops-stack.md`](
 | ELB deep diagnosis | `aws-elb-ops` | Target health, 5xx RCA patterns |
 | Threat findings | `aws-guardduty-ops` | HIGH/CRITICAL count |
 | Change audit | `aws-cloudtrail-ops` | API event correlation |
+| DynamoDB diagnosis | `aws-dynamodb-ops` | Throttling, GSI hot shard, TTL |
+| ElastiCache diagnosis | `aws-elasticache-ops` | Memory pressure, failover, evictions |
+| OpenSearch diagnosis | `aws-opensearch-ops` | Heap pressure, shard imbalance, 5xx |
+| EKS diagnosis | `aws-eks-ops` | Node NotReady, OOM, pod eviction |
+| CloudFront diagnosis | `aws-cloudfront-ops` | Origin latency, cache hit rate, 5xx |
+| Athena diagnosis | `aws-athena-ops` | Query cost, scan volume, timeouts |
+| RAM diagnosis | `aws-ram-ops` | Resource share status, principal association |
+| Secrets Manager diagnosis | `aws-secretsmanager-ops` | Rotation age, secret access |
 
 ## Perceive Layer — 7 Agents
 

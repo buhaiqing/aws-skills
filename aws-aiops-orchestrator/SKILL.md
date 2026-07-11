@@ -62,6 +62,14 @@ metadata:
     - aws-topo-discovery   # topology manifest + health overlay
     - aws-sns-ops          # alert fanout
     - aws-sqs-ops          # async work queue
+    - aws-dynamodb-ops     # NoSQL throttling + GSI diagnosis
+    - aws-elasticache-ops  # In-memory store diagnosis
+    - aws-opensearch-ops   # Search/analytics cluster diagnosis
+    - aws-eks-ops          # Kubernetes control-plane + node diagnosis
+    - aws-cloudfront-ops   # CDN origin + cache diagnosis
+    - aws-athena-ops       # Query cost + scan-volume diagnosis
+    - aws-ram-ops          # Resource share diagnosis
+    - aws-secretsmanager-ops  # Secret rotation diagnosis
 ---
 
 # AWS AIOps Orchestrator

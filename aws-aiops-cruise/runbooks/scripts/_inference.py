@@ -481,7 +481,7 @@ def apply_chain_inference(
 
     for rid, metrics in signals.get("ElastiCache", {}).items():
         mem = metrics.get("DatabaseMemoryUsagePercentage")
-        if mem is not None and mem >= 90:
+        if mem is not None and mem >= 80:
             rule = "EC-MEM-01"
             if rule not in existing_rule_ids:
                 lines.append(f"- **{rule}**: ElastiCache `{rid}` memory {mem:.0f}% → eviction risk")
@@ -493,12 +493,12 @@ def apply_chain_inference(
                         resource_type="ElastiCache",
                         resource_id=rid,
                         rule_id=rule,
-                        title="ElastiCache memory usage critical",
-                        level="CRITICAL",
+                        title="ElastiCache memory usage pressure",
+                        level="CRITICAL" if mem >= 95 else "WARNING",
                         metric="DatabaseMemoryUsagePercentage",
                         current_value=mem,
-                        threshold_warning=75,
-                        threshold_critical=90,
+                        threshold_warning=80,
+                        threshold_critical=95,
                         recommendation="Scale up or adjust maxmemory policy via aws-elasticache-ops",
                     )
                 )
@@ -869,6 +869,107 @@ def apply_chain_inference(
                         metric="HTTPCode_Target_5XX_Count",
                         current_value=e5,
                         recommendation="elbv2 describe-target-health; check WAF if 403 vs 502 pattern",
+                    )
+                )
+
+    # --- Phase 1 additions: DynamoDB GSI + ElastiCache failover + OpenSearch ---
+    for rid, metrics in signals.get("DynamoDB", {}).items():
+        gsi_thr = metrics.get("GSIWriteThrottleEvents") or metrics.get("GSIReadThrottleEvents") or 0
+        if gsi_thr >= 1:
+            rule = "DYNAMO-GSI-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: DynamoDB `{rid}` GSI throttle events {gsi_thr:.0f} "
+                    "→ GSI capacity saturation or hot GSI key"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="DynamoDB",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="DynamoDB GSI throttling detected",
+                        level="CRITICAL" if gsi_thr >= 10 else "WARNING",
+                        metric="GSIWriteThrottleEvents",
+                        current_value=float(gsi_thr),
+                        threshold_warning=1,
+                        threshold_critical=10,
+                        recommendation="Review GSI provisioned capacity; delegate aws-dynamodb-ops",
+                    )
+                )
+
+    for rid, metrics in signals.get("ElastiCache", {}).items():
+        failover = metrics.get("FailoverInProgress") or 0
+        if failover >= 1:
+            rule = "EC-FAILOVER-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: ElastiCache `{rid}` failover in progress → replica promotion"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="ElastiCache",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="ElastiCache failover in progress",
+                        level="CRITICAL",
+                        metric="FailoverInProgress",
+                        current_value=float(failover),
+                        recommendation="Verify replica promotion; check primary health via aws-elasticache-ops",
+                    )
+                )
+
+    for rid, metrics in signals.get("OpenSearch", {}).items():
+        heap = metrics.get("JVMMemoryPressure")
+        if heap is not None and heap >= 80:
+            rule = "OS-HEAP-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: OpenSearch `{rid}` JVM pressure {heap:.0f}% → GC thrash / heap exhaustion"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="OpenSearch JVM memory pressure",
+                        level="CRITICAL" if heap >= 95 else "WARNING",
+                        metric="JVMMemoryPressure",
+                        current_value=float(heap),
+                        threshold_warning=80,
+                        threshold_critical=95,
+                        recommendation="Scale JVM heap / add nodes; delegate aws-opensearch-ops",
+                    )
+                )
+        blocked = metrics.get("ClusterIndexWritesBlocked") or 0
+        unassigned = metrics.get("UnassignedShards") or 0
+        if blocked >= 1 or unassigned >= 1:
+            rule = "OS-SHARD-01"
+            if rule not in existing_rule_ids:
+                lines.append(
+                    f"- **{rule}**: OpenSearch `{rid}` writes blocked={blocked} unassigned_shards={unassigned} → shard imbalance"
+                )
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=rid,
+                        rule_id=rule,
+                        title="OpenSearch shard issue",
+                        level="CRITICAL" if blocked >= 1 else "WARNING",
+                        metric="ClusterIndexWritesBlocked",
+                        current_value=float(blocked),
+                        recommendation="Review shard allocation / disk watermark; delegate aws-opensearch-ops",
                     )
                 )
 

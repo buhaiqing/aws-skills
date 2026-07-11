@@ -14,17 +14,22 @@
 - `aws-aiops-orchestrator` 跨服务 RCA + 多技能修复编排
 - `aws-aiops-cruise` 7 个 runbook（含 self-heal）
 
-**已核实的缺口**（grep 权威统计，非误报）：34 个 `aws-<svc>-ops` 技能中，
-**26 个已被 cruise/orchestrator 提及，8 个完全未接入**：
+**已核实的缺口**（grep 权威统计 + `_inference.py` 源码复核）：34 个 `aws-<svc>-ops` 技能中，
+cruise/orchestrator 的**路由元数据表**对以下 8 个完全缺席：
 
 ```
 aws-athena-ops, aws-cloudfront-ops, aws-dynamodb-ops, aws-eks-ops,
 aws-elasticache-ops, aws-opensearch-ops, aws-ram-ops, aws-secretsmanager-ops
 ```
 
-这 8 个技能在 cruise 的 `Cross-Skill References` 表与 orchestrator 的
-`cross_skill_deps` 表中均缺席，导致 cruise/orchestrator 发现这些服务的异常时
-缺乏标准化的"路由到对应 `aws-*-ops` self-heal"路径。
+进一步复核 `_inference.py` 源码发现：inference **检测代码**实际已覆盖其中 4 个
+（DynamoDB/ElasticCache/OpenSearch/CloudFront 的规则段已存在），仅路由元数据表缺。
+真正**检测代码也缺失**的只有 4 个：**EKS / Athena / RAM / SecretsManager**。
+
+因此分两组处理：
+- 路由表：8 个全补（真实缺口）。
+- inference 代码：仅补 EKS/Athena/RAM/SecretsManager 4 个；其余 4 个代码已存在，
+  只补路由 + 写测试验证现有代码工作（不重复实现）。
 
 ## 2. 目标与范围（Scope）
 
@@ -77,6 +82,16 @@ aws-elasticache-ops, aws-opensearch-ops, aws-ram-ops, aws-secretsmanager-ops
 **关键约束**：规则只做"检测 + 推荐 + 升级"，绝不自动执行破坏性操作
 （与 self-heal runbook 现有模式及 GCL fail-closed 一致）。
 
+**实现模式（已对齐磁盘现有代码）**：现有 14 条规则全部内联在
+`aws-aiops-cruise/runbooks/scripts/_inference.py` 的 `apply_chain_inference()`
+单一函数内，按 `resource_type` 分组循环，用 `existing_rule_ids` 开关控制。
+新增 8 套规则**沿用此内联模式**（不另起 `detect_*` 函数，避免偏离既有架构）：
+每段为 `for rid, metrics in signals.get("<ResourceType>", {}).items():` 循环，
+命中阈值则 `make_incident(...)`，字段对齐 `make_incident` 签名
+（`rule_id, title, level, metric, current_value, recommendation` 等）。
+`resource_type` 统一用大驼峰（DynamoDB / ElastiCache / OpenSearch / EKS /
+CloudFront / Athena / RAM / SecretsManager）。
+
 ## 5. 路由接入与端到端数据流
 
 ### A. 路由表接入（元数据改动）
@@ -88,9 +103,9 @@ aws-elasticache-ops, aws-opensearch-ops, aws-ram-ops, aws-secretsmanager-ops
 感知层 (7 Perceive Agents, 不改)
    │  采集 CloudWatch/EventBridge/CloudTrail 信号
    ▼
-_inference.py (本期增补 8 套 detect_* 函数)
-   │  输入信号 → 匹配规则 ID → 输出结构化结果
-   │  {rule_id, severity, evidence, recommend, delegate_to}
+_inference.py (本期在 apply_chain_inference() 内增补 8 段内联规则)
+   │  输入信号 → 匹配规则 ID → make_incident 输出结构化结果
+   │  {rule_id, level, metric, current_value, recommendation, delegate_to}
    ▼
 cruise runbook / orchestrator
    │  读规则结果，按 delegate_to 路由
@@ -113,8 +128,8 @@ cruise runbook / orchestrator
 |--------|------|
 | 路由表正确性 | cruise + orchestrator 各 +8 行；grep 确认 8 个 `aws-*-ops` 均出现；CodeGraph `explore` 确认目录真实存在 |
 | 规则语义完整 | 每套规则含 ID/触发/判定/关联动作四要素 |
-| Python 实现 | 每规则一个 `detect_*`，返回结构化结果 |
-| 单测 | 每 `detect_*` 有单测，合成信号验证命中/不命中；`pytest` 全绿 |
+| Python 实现 | 每规则在 `apply_chain_inference()` 内一段内联逻辑，走 `make_incident` |
+| 单测 | 合成信号验证命中/不命中；`pytest` 全绿 |
 | 不回归 | 现有 14 条规则行为不变，现有测试零 failure |
 | 不自动执行 | 新增规则无 `modify-/delete-/terminate-` 调用（grep 验证） |
 | GCL 评审 | 每期 `reflect-until-clean` 跑通（Generator + ≥2 Critic，直到零问题） |
