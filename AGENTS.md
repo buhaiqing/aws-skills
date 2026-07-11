@@ -47,12 +47,14 @@ aws-<service>-ops/
 (e.g. `aws-elb-ops`). Do not invent new file names without updating
 `aws-skill-template.md` and the README.
 
-## SKILL.md frontmatter gotcha (real bug currently in repo)
+## SKILL.md frontmatter gotcha (fixed — aws-ec2-ops verified clean 2026-07-12)
 
 YAML frontmatter is a **single** block delimited by one opening and one
-closing `---`. `aws-ec2-ops/SKILL.md` accidentally splits the block (a
-stray `---` after the `description` value), which breaks frontmatter
-parsers. When you create or edit a SKILL.md:
+closing `---`. Previously, `aws-ec2-ops/SKILL.md` accidentally split the
+block (a stray `---` after the `description` value), which broke
+frontmatter parsers. This has been verified clean as of 2026-07-12.
+
+When you create or edit a SKILL.md:
 
 - Exactly two `---` markers, both at the start of the file.
 - `description: >-` folded scalars must end with a blank line, **not** a
@@ -289,6 +291,7 @@ total score. Full rules in spec §3.
 | `aws-eks-ops` | required | 2 | `delete-cluster` (irreversible) |
 | `aws-elb-ops` | recommended | 3 | `delete-load-balancer`, `deregister-targets` ≥50% drain confirmation (rule A12) — shipped v2.2.0 |
 | `aws-ecs-ops` | **required** | 2 | `delete-service` (scale-to-0, rule A16), `delete-cluster`, `deregister-task-definition` |
+| `aws-ecr-ops` | **required** | 2 | `delete-repository` (`--force` guard), `batch-delete-image` — shipped v1.0.0 |
 | `aws-ebs-ops` | **required** | 2 | `delete-volume` (data loss), `detach-volume`, `delete-snapshot` |
 | `aws-apigateway-ops` | **required** | 2 | `delete-rest-api` (irreversible), `delete-stage`, `delete-api-key` |
 | `aws-cloudwatch-ops` | recommended | 3 | `delete-alarms` (silent-failure guard) |
