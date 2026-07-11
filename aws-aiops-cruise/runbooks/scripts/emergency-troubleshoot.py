@@ -54,7 +54,7 @@ def main() -> int:
 
     sym = args.symptom.lower()
     use_xray = any(k in sym for k in ("502", "5xx", "latency", "timeout", "slow"))
-    native_inc, _ = collect_aws_native_insights(
+    native_inc, _, native_signals = collect_aws_native_insights(
         region,
         scope_ids,
         run_id,
@@ -66,6 +66,8 @@ def main() -> int:
         enable_rds_proxy=True,
     )
     incidents.extend(native_inc)
+    for layer, resources in native_signals.items():
+        signals.setdefault(layer, {}).update(resources)
 
     # CloudTrail 1h window
     run_aws(

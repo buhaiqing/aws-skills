@@ -48,11 +48,12 @@ def audit_ecs_drift(region: str, scope_ids: set[str], run_id: str, customer: str
                 )
     return incidents
 
-def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, float]]]:
     incidents: list[dict] = []
+    signals: dict[str, dict[str, float]] = {}
     clusters = run_aws(["aws", "eks", "list-clusters"], region)
     if not clusters:
-        return incidents
+        return incidents, signals
     for name in clusters.get("clusters", []):
         if scope_ids and not resource_in_scope(name, scope_ids):
             continue
@@ -67,6 +68,13 @@ def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str
             if not desc:
                 continue
             ngd = desc.get("nodegroup", {})
+            scaling = ngd.get("scalingConfig", {}) or {}
+            signals[f"{name}/{ng_name}"] = {
+                "NodesDesired": float(scaling.get("desiredSize", 0) or 0),
+                "NodesCurrent": float(scaling.get("currentSize", 0) or 0),
+                "NodesMin": float(scaling.get("minSize", 0) or 0),
+                "NodesMax": float(scaling.get("maxSize", 0) or 0),
+            }
             health = ngd.get("health", {}).get("issues", [])
             if health:
                 incidents.append(
@@ -84,7 +92,7 @@ def audit_eks_nodes(region: str, scope_ids: set[str], run_id: str, customer: str
                         recommendation="eks describe-nodegroup health; check ASG, subnet, IAM, max pods",
                     )
                 )
-    return incidents
+    return incidents, {"EKS": signals}
 
 def audit_autoscaling_headroom(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []

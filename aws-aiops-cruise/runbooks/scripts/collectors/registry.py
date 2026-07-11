@@ -42,10 +42,15 @@ def collect_aws_native_insights(
     enable_cloudfront: bool = True,
     enable_xray: bool = False,
     enable_rds_proxy: bool = True,
-) -> tuple[list[dict], dict[str, Any]]:
-    """Run all AWS-native collectors; return incidents + summary meta."""
+) -> tuple[list[dict], dict[str, Any], dict[str, Any]]:
+    """Run all AWS-native collectors; return (incidents, summary-meta, signals).
+
+    `signals` carries per-service signal dicts (e.g. {"EKS": {ng_id: {...}}})
+    so inference rules in `_inference.py` have populated inputs at runtime.
+    """
     incidents: list[dict] = []
     meta: dict[str, Any] = {"collectors": []}
+    signals: dict[str, Any] = {}
 
     collectors = [
         ("cloudwatch_alarms", lambda: audit_cloudwatch_alarms(region, scope_ids, run_id, customer)),
@@ -77,11 +82,18 @@ def collect_aws_native_insights(
     for name, fn in collectors:
         try:
             found = fn()
-            incidents.extend(found)
-            meta["collectors"].append({"name": name, "findings": len(found)})
+            if name == "eks":
+                inc, eks_signal = found
+                incidents.extend(inc)
+                for layer, resources in eks_signal.items():
+                    signals.setdefault(layer, {}).update(resources)
+                meta["collectors"].append({"name": name, "findings": len(inc)})
+            else:
+                incidents.extend(found)
+                meta["collectors"].append({"name": name, "findings": len(found)})
         except Exception as e:
             log("WARN", f"collector {name} failed: {e}")
             meta["collectors"].append({"name": name, "error": str(e)[:100]})
 
-    return incidents, meta
+    return incidents, meta, signals
 

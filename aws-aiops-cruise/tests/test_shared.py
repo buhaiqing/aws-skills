@@ -350,7 +350,7 @@ class TestCollectAwsNativeInsights:
     def test_all_collectors_run(self, *mocks):
         from collectors.registry import collect_aws_native_insights
 
-        incidents, meta = collect_aws_native_insights(
+        incidents, meta, _signals = collect_aws_native_insights(
             "us-east-1", set(), "run-1", "test",
             enable_pi=True, enable_guru=True, enable_cloudfront=True,
             enable_xray=False, enable_rds_proxy=True,
@@ -366,7 +366,7 @@ class TestCollectAwsNativeInsights:
     def test_collector_failure_recorded(self, _mock_alarms, _mock_acm):
         from collectors.registry import collect_aws_native_insights
 
-        incidents, meta = collect_aws_native_insights(
+        incidents, meta, _signals = collect_aws_native_insights(
             "us-east-1", set(), "run-1", "test",
             enable_pi=False, enable_guru=False, enable_cloudfront=False,
             enable_xray=False, enable_rds_proxy=False,
@@ -385,7 +385,7 @@ class TestCollectAwsNativeInsights:
     def test_incidents_aggregated(self, *mocks):
         from collectors.registry import collect_aws_native_insights
 
-        incidents, meta = collect_aws_native_insights(
+        incidents, meta, _signals = collect_aws_native_insights(
             "us-east-1", set(), "run-1", "test",
             enable_pi=False, enable_guru=False, enable_cloudfront=False,
             enable_xray=False, enable_rds_proxy=False,

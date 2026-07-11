@@ -105,7 +105,7 @@ def patrol_region(
         incidents.extend(audit_acm_expiry(region, 30, run_id, customer))
         incidents.extend(audit_guardduty(region, run_id, customer))
 
-    native_inc, native_meta = collect_aws_native_insights(
+    native_inc, native_meta, native_signals = collect_aws_native_insights(
         region,
         scope_ids,
         run_id,
@@ -117,6 +117,8 @@ def patrol_region(
         enable_rds_proxy=not args.no_rds_proxy,
     )
     incidents.extend(native_inc)
+    for layer, resources in native_signals.items():
+        signals.setdefault(layer, {}).update(resources)
 
     existing = {i["rule_id"] for i in incidents}
     chain_inc, lines = apply_chain_inference(

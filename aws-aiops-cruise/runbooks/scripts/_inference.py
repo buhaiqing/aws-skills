@@ -383,6 +383,43 @@ def apply_chain_inference(
                     )
                 )
 
+    # EKS nodegroup scaling inference rules (EKS-NG-02)
+    for ng_id, metrics in signals.get("EKS", {}).items():
+        rule = "EKS-NG-02"
+        if rule in existing_rule_ids:
+            continue
+        desired = metrics.get("NodesDesired")
+        current = metrics.get("NodesCurrent")
+        maxn = metrics.get("NodesMax")
+        if current is None or desired is None:
+            continue
+        if current < desired:
+            title = f"EKS nodegroup below desired size ({int(current)}/{int(desired)})"
+            level = "CRITICAL"
+            rec = "Nodes not ready: check ASG launch failures, insufficient capacity, or node bootstrap errors"
+        elif maxn is not None and current >= maxn and desired >= maxn:
+            title = f"EKS nodegroup at max capacity ({int(current)}/{int(maxn)}) with pending scale-up"
+            level = "WARNING"
+            rec = "Raise maxSize or add nodegroups; desired>=max blocks further scale-out"
+        else:
+            continue
+        lines.append(f"- **{rule}**: EKS {ng_id} {title}")
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="EKS",
+                resource_id=ng_id,
+                rule_id=rule,
+                title=title,
+                level=level,
+                metric="NodesCurrent",
+                current_value=current,
+                recommendation=rec,
+            )
+        )
+
     for rid, metrics in signals.get("NAT", {}).items():
         err = metrics.get("ErrorPortAllocation")
         if err is not None and err >= 1:

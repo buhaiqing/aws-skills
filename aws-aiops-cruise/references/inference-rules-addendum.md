@@ -13,12 +13,16 @@ mutating AWS calls (consistent with GCL fail-closed).
 > so their `signals` keys are populated in production).
 >
 > **Deferred inference** (NOT added — would be dead code): OpenSearch,
-> CloudFront, EKS, Athena, RAM, SecretsManager have **no PRODUCTS entry** in
+> CloudFront, Athena, RAM, SecretsManager have **no PRODUCTS entry** in
 > `_shared.py`, so `signals["<svc>"]` is never populated and any inference block
 > for them could never fire. Their routing is wired (see table below); inference
 > rules follow only after a metrics collector / PRODUCTS entry is added (out of
 > the surgical scope of this change). `OS-HEAP-01`/`OS-SHARD-01` were briefly
 > added then removed for this reason.
+>
+> **EKS is the exception**: it has no PRODUCTS entry, but `audit_eks_nodes`
+> (native collector) populates `signals["EKS"]` with per-nodegroup scalingConfig
+> metrics, so `EKS-NG-02` fires at runtime. Implemented as a live rule.
 
 ## Routing status (all 8 wired into cruise/orchestrator SKILL.md)
 
@@ -28,13 +32,13 @@ mutating AWS calls (consistent with GCL fail-closed).
 | aws-elasticache-ops | ✅ added | ✅ live (EC-MEM-01 / EC-FAILOVER-01 / CACHE-EVICT-01) |
 | aws-opensearch-ops | ✅ added | ⏳ deferred (no `OpenSearch` PRODUCTS entry → signals never populated) |
 | aws-cloudfront-ops | ✅ added | ⏳ deferred (no `CloudFront` PRODUCTS entry; `CF-*` only referenced in cross-links) |
-| aws-eks-ops | ✅ added | ⏳ deferred (covered by `EKS-NG-01` collector, not `_inference.py`; no `EKS` PRODUCTS entry) |
+| aws-eks-ops | ✅ added | ✅ live (EKS-NG-02 via `signals["EKS"]` from `audit_eks_nodes`) |
 | aws-athena-ops | ✅ added | ⏳ deferred (no `Athena` PRODUCTS entry) |
 | aws-ram-ops | ✅ added | ⏳ deferred (no `RAM` PRODUCTS entry) |
 | aws-secretsmanager-ops | ✅ added | ⏳ deferred (no `SecretsManager` PRODUCTS entry) |
 | aws-opensearch-ops | ✅ added | ✅ exists (OS-HEAP-01 / OS-SHARD-01) |
 | aws-cloudfront-ops | ✅ added | ✅ exists (CF-ORIGIN-01 / CF-EDGE-01 / CF-S3-01 …) |
-| aws-eks-ops | ✅ added | ⏳ to be added (Phase 2) |
+| aws-eks-ops | ✅ added | ✅ live (EKS-NG-02) |
 | aws-athena-ops | ✅ added | ⏳ to be added (Phase 2) |
 | aws-ram-ops | ✅ added | ⏳ to be added (Phase 3) |
 | aws-secretsmanager-ops | ✅ added | ⏳ to be added (Phase 3) |
@@ -73,6 +77,10 @@ mutating AWS calls (consistent with GCL fail-closed).
 ### EKS-OOM-01 (Phase 2)
 - Trigger: pod OOM / eviction events > 0
 - Logic: >0 CRITICAL
+- Action: delegate `aws-eks-ops`
+
+### EKS-NG-02 (implemented)
+- Trigger: per-nodegroup scalingConfig — `NodesCurrent < NodesDesired` (CRITICAL, nodes not ready) or `NodesCurrent >= NodesMax and NodesDesired >= NodesMax` (WARNING, at max capacity with pending scale-up)
 - Action: delegate `aws-eks-ops`
 
 ### CF-ORIGIN-02 (implemented, distinct from CF-ORIGIN-01)
