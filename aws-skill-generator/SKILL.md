@@ -120,18 +120,19 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 
 ### Objective pre-merge checks (generator 自检必跑)
 
+客观硬指标由 `scripts/te_gate.py` 统一执行（machine-verifiable，与 Charter C6 / AGENTS.md §14 同源）：
+
 ```bash
-# Gate 1 — SKILL.md ≤ 120 lines (超长 = 内容未拆到 references/)
-[ "$(wc -l < SKILL.md)" -le 120 ] || echo "C6 FAIL: SKILL.md lines > 120"
+# 对新生成 / 修改的 skill，必须全 PASS（strict 退出码 1 阻断 merge）
+python3 scripts/te_gate.py <your-skill> --strict
+#   → 检查 G1 (SKILL.md ≤120 行) / G3 (JSON paths 仅顶部声明一次) / G4 (无 GCL 模板正文重复)
 
-# Gate 4 — 无跨文件重复：skill 内不得复制 prompt-skeletons.md 的 G/C/O 模板正文
-grep -rl "You are the Generator" references/ && echo "C6 FAIL: GCL template body duplicated"
-
-# Gate 3 — JSON paths 仅在文件顶部集中声明一次（文件名 + 行号报告重复点）
-awk '/^# Common JSON Paths:|^## Common JSON Paths/{f=1} f&&/JSON path|\.Resources\[\|\.Resource\./{c++} END{print "JSON-path-decl-blocks:", c+0}' SKILL.md
+# 对存量 34 个 aws-*-ops 扫描（仅报告，不阻断；渐进整改用）
+python3 scripts/te_gate.py --all
 ```
 
-> 静态表 / 重复流程 / docstring 由 Charter C6 人工 + LLM 双检；Gate 1/3/4 为客观硬指标。
+> 静态表 (G2) / boto3 docstring (G5) / 错误表紧凑 (G6) 需人工 + LLM 双检，不在脚本 machine-check 范围（见 AGENTS.md §14.2）。
+> `te_gate.py` 非 strict 模式只报告不卡死；CI / pre-merge hook 应加 `--strict` 使任一 gate FAIL 即退出码 1。
 
 > 目标：在保持 Agent 可执行性的前提下，最小化每份 skill 的 Token 消耗。
 
