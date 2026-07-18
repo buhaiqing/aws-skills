@@ -68,6 +68,7 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 - [ ] **[TE] Token Efficiency applied** — see §Key Principles below
 - [ ] **[GCL] Destructive-op classification recorded** — see §Generator ↔ GCL Integration below. If any op matches a `required` row in `AGENTS.md` §11.5, the skill MUST ship `references/rubric.md` + `references/prompt-templates.md` + a `## Quality Gate (GCL)` section.
 - [ ] **[GCL] Prompt templates use the shared skeleton** — see §Using the shared prompt skeleton below. `references/prompt-templates.md` is now a thin specialization of [`references/prompt-skeletons.md`](references/prompt-skeletons.md), NOT a self-contained file. Boilerplate (Generator/Critic/Orchestrator) belongs in the skeleton; only service-specific Hard rules + confirmation strings belong in the skill file.
+- [ ] **[CADL] 沉淀钩子注入** — 在生成的 `SKILL.md` 末尾追加一行：`> 任务完成后按根 AGENTS.md 的「复利资产沉淀机制 (CADL)」复盘并沉淀可复用资产。` 使新 skill 自动继承跨任务资产沉淀意识（详见 `AGENTS.md` §13）。
 
 ### P1 — SHOULD Complete
 - [ ] Cross-service delegation documented

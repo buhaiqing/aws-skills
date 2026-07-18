@@ -189,3 +189,7 @@ Use `&dev` / `&prod` anchors to eliminate repeated fields.
 SKILL.md already has full flow → no Complete Workflow in config or SDK file.
 
 **See**: `aws-skill-generator` SKILL.md §Token Efficiency Requirements for detailed examples.
+
+---
+
+> 任务完成后按根 AGENTS.md 的「复利资产沉淀机制 (CADL)」复盘并沉淀可复用资产。
