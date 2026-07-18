@@ -65,7 +65,7 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 - [ ] Execution flows: Pre-flight → Execute → Validate → Recover
 - [ ] Safety gates for destructive operations
 - [ ] Dual-path: AWS CLI (primary) + boto3 SDK (fallback)
-- [ ] **[TE] Token Efficiency applied** — see §Key Principles below
+ - [ ] **[TE] Token Efficiency applied** — C6 objective gates MUST pass: `SKILL.md` ≤120 lines, no hard-coded static tables >5 rows (TE-1), JSON paths declared once (TE-4), no cross-file duplicated flow (TE-6), boto3 no docstrings (TE-2), compact error table (TE-3). Run the §Token Efficiency Requirements pre-merge checks.
 - [ ] **[GCL] Destructive-op classification recorded** — see §Generator ↔ GCL Integration below. If any op matches a `required` row in `AGENTS.md` §11.5, the skill MUST ship `references/rubric.md` + `references/prompt-templates.md` + a `## Quality Gate (GCL)` section.
 - [ ] **[GCL] Prompt templates use the shared skeleton** — see §Using the shared prompt skeleton below. `references/prompt-templates.md` is now a thin specialization of [`references/prompt-skeletons.md`](references/prompt-skeletons.md), NOT a self-contained file. Boilerplate (Generator/Critic/Orchestrator) belongs in the skeleton; only service-specific Hard rules + confirmation strings belong in the skill file.
 - [ ] **[CADL] 沉淀钩子注入** — 在生成的 `SKILL.md` 末尾追加一行：`> 任务完成后按根 AGENTS.md 的「复利资产沉淀机制 (CADL)」复盘并沉淀可复用资产。` 使新 skill 自动继承跨任务资产沉淀意识（详见 `AGENTS.md` §13）。
@@ -97,7 +97,7 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 | C3 | Trigger & Scope | Complete with product keywords | Add from template |
 | C4 | Variable Convention | `{{env.AWS_*}}`, `{{user.*}}`, `{{output.*}}` | Add placeholder table |
 | C5 | Safety Gates | Destructive ops have confirmation | Add pre-flight safety gate |
-| **C6** | **Token Efficiency** | All 6 TE rules applied (see §Token Efficiency Requirements) | Report violations; fix per TE guidelines |
+| **C6** | **Token Efficiency** | Objective gates (all MUST pass — machine-verifiable, see §Token Efficiency Requirements): (1) `SKILL.md` ≤ 120 lines; (2) no hard-coded static tables >5 rows that an API call can replace (TE-1); (3) JSON paths declared once at file top, not per-command (TE-4); (4) no cross-file duplicated flow / boilerplate (TE-6); (5) boto3 has no docstrings (TE-2); (6) errors in compact table (TE-3) | HALT → report each violated gate → fix → re-check → LOOP |
 
 > **自解流程**：C1-C6 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
 
@@ -114,6 +114,24 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 | **TE: Token Efficiency** | See §Token Efficiency Requirements below |
 
 ## Token Efficiency Requirements (P0 — 强制)
+
+> **硬性要求（Hard Gate）：** Token Efficiency 不是风格建议，而是 C6 MUST-PASS 门禁。
+> 以下每条都附带**可 machine-verify 的检查**，generator 自检时必须执行，任一不过则 HALT。
+
+### Objective pre-merge checks (generator 自检必跑)
+
+```bash
+# Gate 1 — SKILL.md ≤ 120 lines (超长 = 内容未拆到 references/)
+[ "$(wc -l < SKILL.md)" -le 120 ] || echo "C6 FAIL: SKILL.md lines > 120"
+
+# Gate 4 — 无跨文件重复：skill 内不得复制 prompt-skeletons.md 的 G/C/O 模板正文
+grep -rl "You are the Generator" references/ && echo "C6 FAIL: GCL template body duplicated"
+
+# Gate 3 — JSON paths 仅在文件顶部集中声明一次（文件名 + 行号报告重复点）
+awk '/^# Common JSON Paths:|^## Common JSON Paths/{f=1} f&&/JSON path|\.Resources\[\|\.Resource\./{c++} END{print "JSON-path-decl-blocks:", c+0}' SKILL.md
+```
+
+> 静态表 / 重复流程 / docstring 由 Charter C6 人工 + LLM 双检；Gate 1/3/4 为客观硬指标。
 
 > 目标：在保持 Agent 可执行性的前提下，最小化每份 skill 的 Token 消耗。
 
