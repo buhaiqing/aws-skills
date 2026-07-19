@@ -18,7 +18,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "runbooks" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from _inference import apply_chain_inference  # noqa: E402
+from _inference import apply_chain_inference, correlate_native_findings  # noqa: E402
 
 
 def _run(signals: dict) -> list[dict]:
@@ -193,3 +193,64 @@ def test_phase1_still_fires_unchanged():
     ids = {i["rule_id"] for i in inc}
     assert "DYNAMO-GSI-01" in ids
     assert "EC-FAILOVER-01" in ids
+
+
+# --- Cross-service correlation patterns (correlate_native_findings) ------
+
+def _corr_run(incidents: list[dict]) -> list[str]:
+    """Call correlate_native_findings and return the lines list."""
+    _, lines = correlate_native_findings(
+        incidents, run_id="r1", customer="c", region="us-east-1", existing_rule_ids=set()
+    )
+    return lines
+
+
+def test_correlation_no_match_no_lines():
+    inc = [{"rule_id": "CF-ORIGIN-01", "resource_type": "Lambda", "resource_id": "f1"}]
+    lines = _corr_run(inc)
+    # No cross-service correlation should fire with only CF-ORIGIN-01
+    assert "R53-ALB-01" not in "\n".join(lines)
+
+
+def test_correlation_r53_alb():
+    inc = [
+        {"rule_id": "R53-ALB-01", "resource_type": "Route53", "resource_id": "hc1"},
+        {"rule_id": "CF-ORIGIN-01", "resource_type": "Lambda", "resource_id": "f1"},
+    ]
+    lines = _corr_run(inc)
+    joined = "\n".join(lines)
+    assert "R53-ALB-01" in joined
+    assert "DNS mispoint" in joined
+
+
+def test_correlation_waf_alb():
+    inc = [
+        {"rule_id": "WAF-ALB-01", "resource_type": "WAF", "resource_id": "acl1"},
+        {"rule_id": "ALB-5XX-01", "resource_type": "ALB", "resource_id": "alb1"},
+    ]
+    lines = _corr_run(inc)
+    joined = "\n".join(lines)
+    assert "WAF-ALB-01" in joined
+    assert "rate rule" in joined
+
+
+def test_correlation_lambda_apigw():
+    inc = [
+        {"rule_id": "LAMBDA-THROTTLE-01", "resource_type": "Lambda", "resource_id": "f1"},
+        {"rule_id": "APIGW-5XX-01", "resource_type": "ApiGateway", "resource_id": "api1"},
+    ]
+    lines = _corr_run(inc)
+    joined = "\n".join(lines)
+    assert "LAMBDA-THROTTLE-APIGW-01" in joined
+    assert "concurrency limit" in joined
+
+
+def test_correlation_cf_edge_cache():
+    inc = [
+        {"rule_id": "CF-EDGE-01", "resource_type": "CloudFront", "resource_id": "d1"},
+        {"rule_id": "CF-ORIGIN-02", "resource_type": "CloudFront", "resource_id": "d1"},
+    ]
+    lines = _corr_run(inc)
+    joined = "\n".join(lines)
+    assert "CF-EDGE-CACHE-01" in joined
+    assert "cache miss amplification" in joined

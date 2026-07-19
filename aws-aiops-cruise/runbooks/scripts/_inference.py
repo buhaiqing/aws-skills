@@ -1316,6 +1316,35 @@ def correlate_native_findings(
             f"(earliest in {expiry_days:.0f}d) — {domains}"
         )
 
+    # R53-ALB-01: Route53 HC failing, ALB targets healthy.
+    if "R53-ALB-01" in rules and not any(i["resource_type"] == "ALB" for i in incidents):
+        lines.append(
+            "- **R53-ALB-01**: Route53 health check failing but ALB targets healthy"
+            " → DNS mispoint, CloudFront cert mismatch, or regional endpoint issue"
+        )
+
+    # WAF-ALB-01: WAF blocking + ALB 5XX.
+    if any(i["rule_id"].startswith("WAF") for i in incidents) and "ALB-5XX-01" in rules:
+        lines.append(
+            "- **WAF-ALB-01**: WAF blocking requests and ALB returning 5XX"
+            " → rate rule / geo block / false positive on API path;"
+            " check `wafv2 get-sampled-requests`"
+        )
+
+    # LAMBDA-THROTTLE-APIGW-01: Lambda throttles + API Gateway 5XX.
+    if "LAMBDA-THROTTLE-01" in rules and "APIGW-5XX-01" in rules:
+        lines.append(
+            "- **LAMBDA-THROTTLE-APIGW-01**: Lambda throttling and API Gateway 5XX"
+            " → concurrency limit hit; downstream integration timeout"
+        )
+
+    # CF-EDGE-CACHE-01: CloudFront edge errors + origin latency.
+    if "CF-EDGE-01" in rules and "CF-ORIGIN-02" in rules:
+        lines.append(
+            "- **CF-EDGE-CACHE-01**: CloudFront edge errors AND origin latency elevated"
+            " → check both cache behavior AND origin health; cache miss amplification risk"
+        )
+
     return extra, lines
 
 
