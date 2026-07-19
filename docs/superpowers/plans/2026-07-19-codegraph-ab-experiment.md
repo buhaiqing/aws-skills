@@ -34,19 +34,22 @@
 
 | 方法 | 结果 | 耗时 | 正确性 |
 |------|------|------|--------|
-| **方法 A (Grep)** | 73 行原始匹配（含 12 测试行）→ 59 个非测试调用点，**未去重、无测试标注** | 0.180s | ✅ 但需人工分组 |
-| **方法 B (CodeGraph)** | 42 个**去重调用者**跨 11 文件 + `⚠️ no covering tests found` 标注 + 按文件聚合 | **0.134s** | ✅ **信息更丰富** |
+| **方法 A (Grep)** | 74 行原始匹配（含 2 测试行：`aws-aiops-cruise/tests/test_shared.py:30`、`:46`）→ 72 个非测试调用点，**未去重、无测试标注** | 0.180s | ✅ 但需人工分组 |
+| **方法 B (CodeGraph)** | 42 个**去重调用者**跨 11 文件 + `⚠️ no covering tests found` 标注 + 按文件聚合 | **0.134s** | ✅ **信息更丰富（enrichment）** |
 
-**结论 E2**：Python 代码符号影响半径，CodeGraph 严格更优（语义分组 + 测试覆盖标注，Grep 缺失）。
+**结论 E2**（已 re-verified，rev #2）：Grep 返回 72 个原始非测试调用点；CodeGraph 返回 42 个去重调用者 + `⚠️ no covering tests found` 标注（enrichment：去重 + 测试覆盖标注）。
+两方协议不同（Grep 报原始行、CodeGraph 报去重调用者），所以"CodeGraph 严格更优 / Grep 不完整"属于过度推断 —— 增益是 **enrichment（去重 + 测试标注），不是 recall 正确性**。两组 count 因协议不同不可直接相减比较。
+
+> 复核方法：重新运行 `grep -rn "make_incident(" --include=*.py`（74 行，其中 2 行在 `tests/`），可由任何读者复现。
 
 ### E3 — 端到端路由质量（5 个混合查询）
 
 | 查询 | 类型 | 正确工具 | 方法 A (Grep) | 方法 B (CodeGraph) |
 |------|------|----------|------------------|---------------------|
 | Q1 哪些 skill 委托 aws-s3-ops | Markdown | Grep | ✅ 17 个（0.03s） | ❌ 返回代码符号，答不了 |
-| Q2 run_aws 调用者 | Python | CodeGraph | 71 原始行 | ✅ 61 去重调用者 + 测试标注 |
+| Q2 run_aws 调用者 | Python | CodeGraph | 82 原始行 | ✅ 61 去重调用者 + 测试标注 |
 | Q3 ec2 是否引用 vpc | Markdown | Grep | ✅ YES | ❌ 失明 |
-| Q4 collect_aws_native_insights 半径 | Python | CodeGraph | 原始行 | ✅ 9 调用者 + 测试标注 |
+| Q4 collect_aws_native_insights 半径 | Python | CodeGraph | 原始行 | ✅ 7 调用者 + 测试标注 |
 | Q5 列出 type: composite/orchestrator-meta 的 skill | Markdown | Grep | ⚠️ **本人 glob 写错（`aws-*-ops` 不含 `aws-aiops-orchestrator`）→ 漏报 1（0 vs 2）** | ❌ 失明 |
 
 **关键发现 E3-Q5（修正版）**：Grep 本身**有能力**，但 Agent 的**查询构造错误**导致静默错答——
