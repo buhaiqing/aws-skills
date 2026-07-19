@@ -124,3 +124,50 @@ Swap-in requires only a different `audit_eks_nodes` collector; the inference rul
 - Trigger: SecretsManager `LastRotated` age > 90d (WARN) / > 180d or rotation disabled (CRITICAL)
 - Action: delegate `aws-secretsmanager-ops`
 - Source: `audit_secrets_rotation` (collector) → `signals["SecretsManager"]`
+
+## CloudWatch Alarm Definitions
+
+The inference rules above detect conditions via periodic patrol. To also receive
+push-based alerts between patrol cycles, deploy CloudWatch metric alarms for the
+threshold-based rules listed below.
+
+Alarm definitions: [`assets/alarms/cruise-inference-alarms.yaml`](../assets/alarms/cruise-inference-alarms.yaml)
+Deploy: `aws cloudwatch put-metric-alarm --cli-input-json "$(yq -o=json '.alarm_key' < alarms.yaml)"`
+
+### Alarmable rules
+
+| Rule ID | Namespace | Metric | WARN | CRIT | Stat | Period | Comparison | Notes |
+|---|---|---|---|---|---|---|---|---|
+| RDS-CONN-01 | AWS/RDS | DatabaseConnections | 70% max_conn | 85% max_conn | Average | 300s | > Threshold | Dynamic — user fills `_max_connections` |
+| RDS-LAT-01 | AWS/RDS | ReadLatency | 0.02 | 0.1 | p95 | 300s | > Threshold | |
+| AURORA-LAG-01 | AWS/RDS | AuroraReplicaLag | 1000 | 30000 | Maximum | 60s | > Threshold | |
+| AURORA-CACHE-01 | AWS/RDS | BufferCacheHitRatio | 99 | 95 | Average | 300s | < Threshold | Lower is worse |
+| XRAY-FAULT-01 | AWS/XRay | FaultRate | 5 | 10 | Average | 300s | > Threshold | |
+| NLB-TRAFFIC-01 | AWS/NetworkELB | ActiveFlowCount | 10000 | 50000 | Average | 60s | > Threshold | |
+| NLB-TRAFFIC-02 | AWS/NetworkELB | ProcessedBytes | 1 GB | 5 GB | Sum | 300s | > Threshold | |
+| EC-CPU-01 | AWS/ElastiCache | CPUUtilization | 70 | 85 | Average | 60s | > Threshold | |
+| EC-MEM-01 | AWS/ElastiCache | DatabaseMemoryUsagePercentage | 80 | 95 | Average | 60s | > Threshold | |
+| EC2-MEM-01 | CWAgent | mem_used_percent | 80 | 90 | Average | 300s | > Threshold | Requires CW Agent; inference code uses `MemoryUtilization` |
+| DYNAMO-THROTTLE-01 | AWS/DynamoDB | ThrottledRequests | 1 | 10 | Sum | 300s | > Threshold | |
+| CACHE-EVICT-01 | AWS/ElastiCache | Evictions | 100 | 1000 | Sum | 300s | > Threshold | |
+| ATHENA-COST-01 | AWS/Athena | ProcessedBytes | 5 GB | 20 GB | Sum | 6h | > Threshold | |
+| CF-ORIGIN-02 | AWS/CloudFront | OriginLatency | 1000ms | 3000ms | Average | 60s | > Threshold | |
+| OS-HEAP-01 | AWS/ES | JVMMemoryPressure | 80 | 95 | Maximum | 60s | > Threshold | |
+| SEC-ROTATE-01 | — | RotationAgeDays | 90d | 180d | — | — | — | Computed value, no direct CW alarm |
+
+### Exclusion rationale
+
+Rules **not** alarmable and why:
+
+- **Binary/presence rules** (ALB-EC2-01/02, RDS-PROXY-02, NAT-PORT-01, LAMBDA-THROTTLE-01, APIGW-5XX-01, etc.): fire on presence of ANY occurrence → covered by cruise patrol, no static threshold needed.
+- **Composite/multi-metric rules** (WAF-ALB-01, EC2-IO-01/02, EC2-NET-02): require multi-variable logic → better suited to inference engine.
+- **Non-CloudWatch services** (DevOps Guru DG-INSIGHT-01, Container Insights EKS-*): not CloudWatch-native metrics.
+- **Dynamic-percentage rules** (RDS-PROXY-01, EC-CONN-01, EC2-NET-01): threshold is % of a runtime-determined limit → documented but user fills the actual value.
+
+### Deployment note
+
+Deploy alarms per-resource after identifying the resource ID. The YAML uses
+`{{user.*}}` placeholders for resource-specific values and `{{env.*}}` for environment
+values. Replace before deployment or use the skill's variable substitution flow.
+See `aws-cloudwatch-ops/assets/example-config.yaml` for FinOps cost tips
+($0.10/alarm/month; composite alarms reduce count).
