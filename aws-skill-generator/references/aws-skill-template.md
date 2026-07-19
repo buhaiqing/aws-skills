@@ -13,7 +13,7 @@ metadata:
   last_updated: "2026-05-10"
   runtime: Harness AI Agent
   cli_applicability: dual-path
-  type: base             # base | composite  —— 复合/copilot 技能填 composite
+  type: base             # base | composite（或既有等价值 orchestrator-meta）—— 复合/copilot 技能填 composite
   provides:              # 本 skill 能处理的操作列表（取自下方 Execution Flow 的 operation 名）
     - "<operation-1>"
     - "<operation-2>"
@@ -33,9 +33,11 @@ metadata:
 ## Layering Contract (type / provides / delegate)
 
 `metadata.type` declares the skill layer: `base` (single-service runbook, L1) or
-`composite` (copilot/orchestrator, L2). A `composite` skill **orchestrates only** —
-it lists the operations it `provides` and maps each to a downstream base skill via
-`delegate:`; it must contain no service-level operation logic.
+`composite` (copilot/orchestrator, L2). `provides:` lists the operations this skill
+handles (optional for `base`, expected for both). A `composite` skill
+**orchestrates only** — it maps each provided operation to a downstream base skill
+via `delegate:` and must contain no service-level operation logic; `base` skills omit
+`delegate:`.
 These fields are machine-readable: any agent globs `aws-*-ops/SKILL.md`, reads
 frontmatter, and composes skills without a per-agent loader.
 
