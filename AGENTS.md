@@ -116,12 +116,12 @@ For any work involving 3+ distinct steps, create tasks via `TaskCreate`
 before starting. This provides:
 - Progress visibility to the user
 - A checklist that prevents skipping steps
-- A natural "next task" prompt when the user says "继续"
+- A natural "next task" prompt when the user says "continue"
 
 After completing each task, immediately mark it `completed` and check
 `TaskList` for the next item. Do not batch completions.
 
-### Fan-out Subagents (as much as feasible) — 强制
+### Fan-out Subagents (as much as feasible) — MANDATORY
 
 **This is a hard constraint; enforce it strictly in every subsequent action.**
 Any subtask that can be parallelized and delivered independently **must be
@@ -160,7 +160,7 @@ Determination and execution rules:
 > each subtask must still go through the corresponding Grep/CodeGraph routing
 > and asset distillation.
 
-### Token Efficiency Monitor（强制门禁 — 每个 task 必经）
+### Token Efficiency Monitor (MANDATORY GATE — every task must pass)
 
 **This is a hard constraint; enforce it strictly in every subsequent action.**
 After any substantive task (including subagent deliverables) is completed, it
@@ -552,7 +552,7 @@ Codified in `gcl-spec.md` §8. Highlights:
 - [`aws-securityhub-ops/references/prompt-templates.md`](aws-securityhub-ops/references/prompt-templates.md) — Group 7 G/C/O skeletons
 - Top-level `CLAUDE.md` — shared baseline (dual-path, credentials, recovery table)
 
-## 12. CodeGraph Integration（代码知识图谱集成）
+## 12. CodeGraph Integration (Code Knowledge-Graph Integration)
 
 Local-first code knowledge graph tool ([colbymchenry/codegraph](https://github.com/colbymchenry/codegraph),
 installed at `/Users/bohaiqing/.local/bin/codegraph`, Node v22.19.0). Builds a
@@ -647,7 +647,7 @@ codegraph install -t all      # project codegraph MCP into all installed agents'
 > 3. To make CodeGraph cover the skill corpus, it would need a Markdown
 >    frontmatter extractor added (**out of scope for this §12**, a separate plan).
 
-### 强制分流门禁（data-driven, must be strictly enforced — 2026-07-19 A/B comparison conclusion）
+### Mandatory Split Gate (data-driven, must be strictly enforced — 2026-07-19 A/B comparison conclusion)
 
 > **Decision basis (measured, not vibe):** This session ran an A/B test on two
 > query types (Grep = B, current approach; CodeGraph CLI = candidate). Results:
@@ -695,7 +695,7 @@ codegraph install -t all      # project codegraph MCP into all installed agents'
 > to `docs/failure-patterns.md` (pitfall assets go to failure-patterns, not
 > AGENTS.md), for any future agent to retrieve and reuse.
 
-## 13. 复利资产沉淀机制（Compound-Asset Distillation Loop, CADL)
+## 13. Compound-Asset Distillation Loop (CADL)
 
 **A working loop, not a single rule**: after any substantive task, the Agent
 must complete "extract → decide landing → write → gate" before finishing — a
@@ -734,7 +734,7 @@ compound interest.
 
 - **Source**: `aws-skill-generator`, when generating each skill, must inject one
   line at the end of SKILL.md:
-  `> After completing a task, review and distill reusable assets per the root AGENTS.md "复利资产沉淀机制 (CADL)".`
+  `> After completing a task, review and distill reusable assets per the root AGENTS.md "Compound-Asset Distillation Loop (CADL)".`
   All future `aws-<svc>-ops` automatically inherit this awareness.
 - **Existing skills**: progressively add the same hint line at the end of each
   SKILL.md so any model invoking any skill sees the trigger signal. (Injecting
@@ -781,7 +781,7 @@ compound interest.
 > the existing skills themselves. Before adding a new contract, first `grep`
 > globally to confirm no missing legacy values.
 
-## 14. Token Efficiency 硬性要求与去重规范（TE Hard Gate）
+## 14. Token Efficiency Hard Gate & Deduplication Spec (TE Hard Gate)
 
 > Repo-wide hard requirement, constraining both the output of
 > `aws-skill-generator` **and** anyone manually editing a skill.
@@ -823,6 +823,6 @@ compound interest.
 | 2026-07-04 | Added §Operational Guidelines: Task Tracking, GCL Skip Threshold, Pre-existing Lint Baseline |
 | 2026-07-11 | Added §12 CodeGraph Integration: local code knowledge graph (colbymchenry/codegraph) for cross-skill reference consistency + blast-radius checks; `codegraph init .` indexed 564 nodes / 1,329 edges |
 | 2026-07-18 | Added §13 Compound-Asset Distillation Loop (CADL); wires the extract→decide-landing→write→gate loop into every substantial task; generator injects the CADL hook line into new skills' SKILL.md |
-| 2026-07-19 | Added §Operational Guidelines `### Fan-out Subagents (as much as feasible) — 强制`; user hard constraint: fan out independent subtasks to parallel subagents, main Agent only orchestrates+synthesizes, strictly enforced in every subsequent action |
-| 2026-07-19 | CodeGraph A/B comparison experiment (spec+plan+record three-piece set, `99adbde`+`f3f66c9`; data-decision commits `d1f0daa`/`4d77f57`): conclusion = route by file type (code files→CodeGraph, non-code docs `.md`/`.yaml`→Grep), not either/or; 5 reviewers unanimously backed the decision. The gate was merged into §12 强制分流门禁 and made language-agnostic (tree-sitter covers all supported languages, not just Python) |
-| 2026-07-19 | Added §Operational Guidelines `### Token Efficiency Monitor（强制门禁）`; user hard constraint: every task must pass an independent Token Efficiency Monitor subagent (OPTIMAL / REFACTOR-NOW / ACCEPT-SUBOPTIMAL) before being declared done; strictly enforced from next task |
+| 2026-07-19 | Added §Operational Guidelines `### Fan-out Subagents (as much as feasible) — MANDATORY`; user hard constraint: fan out independent subtasks to parallel subagents, main Agent only orchestrates+synthesizes, strictly enforced in every subsequent action |
+| 2026-07-19 | CodeGraph A/B comparison experiment (spec+plan+record three-piece set, `99adbde`+`f3f66c9`; data-decision commits `d1f0daa`/`4d77f57`): conclusion = route by file type (code files→CodeGraph, non-code docs `.md`/`.yaml`→Grep), not either/or; 5 reviewers unanimously backed the decision. The gate was merged into §12 Mandatory Split Gate and made language-agnostic (tree-sitter covers all supported languages, not just Python) |
+| 2026-07-19 | Added §Operational Guidelines `### Token Efficiency Monitor (MANDATORY GATE)`; user hard constraint: every task must pass an independent Token Efficiency Monitor subagent (OPTIMAL / REFACTOR-NOW / ACCEPT-SUBOPTIMAL) before being declared done; strictly enforced from next task |
