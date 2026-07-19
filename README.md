@@ -488,6 +488,7 @@ aws sts get-caller-identity --output json
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
 | aws-finops-core | **Cross-service FinOps Composite** (cost anomaly, idle resource, tag compliance) | ✅ **Complete v1.0.0 (NEW)** |
+| aws-security-copilot | **Cross-service SecOps Composite** (GuardDuty, SecurityHub, Config, IAM, Secrets, KMS, CloudTrail) | ✅ **Complete v0.1.0 (NEW)** |
 | aws-apigateway-ops | API Gateway (REST/HTTP APIs) | ✅ Complete v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ Complete v1.1.0 |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
@@ -663,6 +664,19 @@ Layer 6: 反馈学习层 (Feedback & Learning)
           Success Tracking | Model Calibration
           Knowledge Base Update | Progressive Tuning
 ```
+
+### SecOps Copilot (NEW — v0.1.0)
+
+**`aws-security-copilot`** is the unified SecOps entry point. It sits alongside AIOps as a third operational pillar:
+
+| Skill | Role |
+|-------|------|
+| `aws-aiops-cruise` | Read-only health cruise |
+| `aws-aiops-orchestrator` | Cross-service RCA and orchestration |
+| `aws-finops-core` | Cost anomaly and idle resource |
+| `aws-security-copilot` | Security posture, findings, incident response |
+
+See [`aws-security-copilot/SKILL.md`](aws-security-copilot/SKILL.md).
 
 ### AIOps Decision Types
 

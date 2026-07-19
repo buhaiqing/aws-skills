@@ -487,6 +487,7 @@ aws sts get-caller-identity --output json
 | 技能 | 服务 | 状态 |
 |------|------|------|
 | aws-aiops-orchestrator | **跨服务 AIOps 编排器** | ✅ **完成 v0.1.0 (新增)** — 见下方 [§AIOps 编排器](#aiops-编排器) |
+| aws-security-copilot | **跨服务 SecOps 编排器** (GuardDuty, SecurityHub, Config, IAM, Secrets, KMS, CloudTrail) | ✅ **完成 v0.1.0 (新增)** |
 | aws-apigateway-ops | API Gateway (REST/HTTP API) | ✅ 完成 v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ 完成 v1.1.0 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.4.0 |
@@ -544,6 +545,19 @@ python3 aws-aiops-cruise/runbooks/scripts/daily-health-check.py \
   --resource-group prod-web-rg --region us-east-1 \
   --render-topology --non-interactive
 ```
+
+## SecOps 编排器（新增 — v0.1.0）
+
+**`aws-security-copilot`** 是统一 SecOps 入口，与 AIOps、FinOps 并列为第三大运维支柱：
+
+| 技能 | 职责 |
+|------|------|
+| `aws-aiops-cruise` | 只读健康巡检 |
+| `aws-aiops-orchestrator` | 跨服务 RCA 和编排 |
+| `aws-finops-core` | 成本异常和闲置资源 |
+| `aws-security-copilot` | 安全态势、告警发现、事件响应 |
+
+见 [`aws-security-copilot/SKILL.md`](aws-security-copilot/SKILL.md)。
 
 ## AIOps 编排器
 
