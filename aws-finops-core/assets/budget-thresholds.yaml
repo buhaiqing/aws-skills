@@ -1,0 +1,30 @@
+# Budget Alert Thresholds
+# Percentage of budgeted amount that triggers alerts.
+
+thresholds:
+  # Immediate alert at 80% of budget
+  immediate_alert: 80
+
+  # Critical alert at 100% (budget exhausted)
+  critical_alert: 100
+
+  # Trend warning at 50% mid-month
+  trend_warning: 50
+
+# Monthly budget alert schedule
+alert_schedule:
+  - day: 15      # Mid-month check
+    threshold: 50
+    message: "Mid-month budget review"
+  - day: 25
+    threshold: 80
+    message: "Approaching budget limit"
+  - day: 28
+    threshold: 100
+    message: "Monthly budget exhausted"
+
+# Per-service anomaly multipliers
+# cost > baseline * multiplier triggers alert
+anomaly_multipliers:
+  WARNING: 1.3     # 130% of 7-day average
+  CRITICAL: 1.5    # 150% of 7-day average

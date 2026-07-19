@@ -1,0 +1,36 @@
+# Required Cost Tags
+# All AWS resources must carry these 4 tags for chargeback/showback.
+
+required_tags:
+  - Environment
+  - Application
+  - Owner
+  - CostCenter
+
+tag_values:
+  Environment:
+    prod: "Production workloads"
+    staging: "Staging / pre-production"
+    dev: "Development / testing"
+
+  Application:
+    # Customize per organization
+    # example: order-service, user-api, data-pipeline, ml-training
+
+  Owner:
+    # Use team email alias or individual email
+    # example: platform-team@example.com, ops@example.com
+
+  CostCenter:
+    # Use organizational cost center codes
+    # example: CC-001, CC-002, finance, engineering
+
+# Recommended tag values by environment
+per_environment_defaults:
+  prod:
+    Environment: prod
+    # Owner and CostCenter must be set explicitly
+  staging:
+    Environment: staging
+  dev:
+    Environment: dev
