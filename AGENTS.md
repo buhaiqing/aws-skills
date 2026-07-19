@@ -189,6 +189,20 @@ residue must be recorded and escalated for human decision — never ignored.
 Record the review conclusion (scope / found / fixed / residue) before
 marking the Phase done.
 
+### Composite / Copilot Skills (L2)
+
+Base skills (`aws-<svc>-ops`, L1) are single-service runbooks. Composite
+skills (L2, `metadata.type: composite`) **orchestrate only** — they declare
+`delegate:` to L1 skills and contain no service-level operation logic.
+
+Contract (enforced by aws-skill-generator Charter C7):
+- `metadata.type`: `base` | `composite`
+- `metadata.provides`: operations this skill handles
+- `metadata.delegate`: composite→base skill/operation map (dirs must exist)
+
+Runtime-agnostic: any agent globs `aws-*-ops/SKILL.md` and reads frontmatter
+— no per-agent loader (see §12 CodeGraph for cross-agent MCP discovery).
+
 ## Self-reflection rule (project policy)
 
 > **Rule**: After every skill update, auto-run **2 rounds** of self-review
