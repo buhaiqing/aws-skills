@@ -171,7 +171,7 @@ def apply_chain_inference(
                         current_value=lag,
                         threshold_warning=1000,
                         threshold_critical=30000,
-                        recommendation="PI top SQL on writer; add reader or scale writer — aws-aurora-ops",
+                        recommendation="PI top SQL on writer; add reader or scale writer — delegate aws-aurora-ops",
                     )
                 )
 
@@ -198,7 +198,7 @@ def apply_chain_inference(
                             level="CRITICAL",
                             metric="ServerlessDatabaseCapacity",
                             current_value=slv_cap,
-                            recommendation="Raise MaxCapacity (≤ ceiling); aws-aurora-ops modify-db-cluster",
+                            recommendation="Raise MaxCapacity (≤ ceiling); delegate aws-aurora-ops modify-db-cluster",
                         )
                     )
 
@@ -224,7 +224,7 @@ def apply_chain_inference(
                         current_value=buf_hit,
                         threshold_warning=99,
                         threshold_critical=95,
-                        recommendation="Scale instance class or tune buffer pool parameters — aws-aurora-ops",
+                        recommendation="Scale instance class or tune buffer pool parameters — delegate aws-aurora-ops",
                     )
                 )
 
@@ -396,11 +396,11 @@ def apply_chain_inference(
         if current < desired:
             title = f"EKS nodegroup below desired size ({int(current)}/{int(desired)})"
             level = "CRITICAL"
-            rec = "Nodes not ready: check ASG launch failures, insufficient capacity, or node bootstrap errors"
+            rec = "Nodes not ready: check ASG launch failures, insufficient capacity, or node bootstrap errors; delegate aws-eks-ops"
         elif maxn is not None and current >= maxn and desired >= maxn:
             title = f"EKS nodegroup at max capacity ({int(current)}/{int(maxn)}) with pending scale-up"
             level = "WARNING"
-            rec = "Raise maxSize or add nodegroups; desired>=max blocks further scale-out"
+            rec = "Raise maxSize or add nodegroups; desired>=max blocks further scale-out; delegate aws-eks-ops"
         else:
             continue
         lines.append(f"- **{rule}**: EKS {ng_id} {title}")
@@ -442,7 +442,7 @@ def apply_chain_inference(
                         metric="NodeNotReadyMin",
                         current_value=node_not_ready,
                         threshold_warning=1.0,
-                        recommendation="A node is NotReady: check kubelet, ASG launch/health, capacity, or node bootstrap",
+                        recommendation="A node is NotReady: check kubelet, ASG launch/health, capacity, or node bootstrap; delegate aws-eks-ops",
                     )
                 )
         oom = node_metrics.get("PodOOMKilledSum")
@@ -465,7 +465,7 @@ def apply_chain_inference(
                         metric="PodOOMKilledSum",
                         current_value=oom,
                         threshold_critical=0,
-                        recommendation="Pod OOM-killed: inspect memory requests/limits and node memory pressure; right-size or scale",
+                        recommendation="Pod OOM-killed: inspect memory requests/limits and node memory pressure; right-size or scale; delegate aws-eks-ops",
                     )
                 )
 
@@ -561,7 +561,7 @@ def apply_chain_inference(
                         current_value=cpu,
                         threshold_warning=70,
                         threshold_critical=85,
-                        recommendation="Upgrade node type via aws-elasticache-ops; review Redis heavy commands",
+                        recommendation="Upgrade node type; delegate aws-elasticache-ops; review Redis heavy commands",
                     )
                 )
 
@@ -585,7 +585,7 @@ def apply_chain_inference(
                         current_value=mem,
                         threshold_warning=80,
                         threshold_critical=95,
-                        recommendation="Scale up or adjust maxmemory policy via aws-elasticache-ops",
+                        recommendation="Scale up or adjust maxmemory policy; delegate aws-elasticache-ops",
                     )
                 )
 
@@ -611,7 +611,7 @@ def apply_chain_inference(
                         current_value=conn_pct,
                         threshold_warning=70,
                         threshold_critical=85,
-                        recommendation="Review client connection pools and idle timeouts via aws-elasticache-ops",
+                        recommendation="Review client connection pools and idle timeouts; delegate aws-elasticache-ops",
                     )
                 )
         elif conn is not None and max_conn == 0 and conn >= 5000:
@@ -632,7 +632,7 @@ def apply_chain_inference(
                         current_value=conn,
                         threshold_warning=1000,
                         threshold_critical=5000,
-                        recommendation="Add max_connections collector; check client connection pools via aws-elasticache-ops",
+                        recommendation="Add max_connections collector; check client connection pools; delegate aws-elasticache-ops",
                     )
                 )
 
@@ -818,7 +818,7 @@ def apply_chain_inference(
                         level="WARNING",
                         metric="Throttles",
                         current_value=metrics.get("Throttles"),
-                        recommendation="Raise reserved concurrency or fix slow downstream (RDS/API)",
+                        recommendation="Raise reserved concurrency or fix slow downstream (RDS/API); delegate aws-lambda-ops",
                     )
                 )
 
@@ -896,7 +896,7 @@ def apply_chain_inference(
                         current_value=evictions,
                         threshold_warning=100,
                         threshold_critical=1000,
-                        recommendation="Scale node type; review key TTLs; check for hot keys via aws-elasticache-ops",
+                        recommendation="Scale node type; review key TTLs; check for hot keys; delegate aws-elasticache-ops",
                     )
                 )
 
@@ -1006,7 +1006,7 @@ def apply_chain_inference(
                         level="CRITICAL",
                         metric="FailoverInProgress",
                         current_value=float(failover),
-                        recommendation="Verify replica promotion; check primary health via aws-elasticache-ops",
+                        recommendation="Verify replica promotion; check primary health; delegate aws-elasticache-ops",
                     )
                 )
 

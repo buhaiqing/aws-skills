@@ -180,3 +180,12 @@ Deploy alarms per-resource after identifying the resource ID. The YAML uses
 values. Replace before deployment or use the skill's variable substitution flow.
 See `aws-cloudwatch-ops/assets/example-config.yaml` for FinOps cost tips
 ($0.10/alarm/month; composite alarms reduce count).
+
+### Routing Addendum (A1)
+
+| Skill | Rule IDs | Routing | Status |
+|-------|----------|---------|--------|
+| aws-aurora-ops | AURORA-LAG-01, AURORA-SLV2-01, AURORA-CACHE-01 | delegate aws-aurora-ops | ✅ live |
+| aws-elasticache-ops | EC-CPU-01, EC-MEM-01, EC-CONN-01, EC-CONN-FALLBACK-01, CACHE-EVICT-01, EC-FAILOVER-01 | delegate aws-elasticache-ops | ✅ live |
+| aws-eks-ops | EKS-NG-02, EKS-NODE-01, EKS-OOM-01 | delegate aws-eks-ops | ✅ live |
+| aws-lambda-ops | LAMBDA-THROTTLE-01 | delegate aws-lambda-ops | ✅ live |
