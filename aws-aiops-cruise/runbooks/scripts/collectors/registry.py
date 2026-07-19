@@ -35,6 +35,8 @@ from collectors.governance import (
     audit_guardduty,
     audit_security_hub,
 )
+from collectors.kms import audit_kms_keys
+from collectors.sqs import audit_sqs_dlq
 
 def collect_aws_native_insights(
     region: str,
@@ -84,6 +86,8 @@ def collect_aws_native_insights(
     collectors.append(("ram", lambda: audit_ram_shares(region, scope_ids, run_id, customer)))
     collectors.append(("secrets", lambda: audit_secrets_rotation(region, scope_ids, run_id, customer)))
     collectors.append(("opensearch", lambda: audit_opensearch_health(region, scope_ids, run_id, customer)))
+    collectors.append(("kms", lambda: audit_kms_keys(region, scope_ids, run_id, customer)))
+    collectors.append(("sqs_dlq", lambda: audit_sqs_dlq(region, scope_ids, run_id, customer)))
     if enable_rds_proxy:
         collectors.append(("rds_proxy", lambda: audit_rds_proxy(region, scope_ids, run_id, customer)))
     if enable_xray:

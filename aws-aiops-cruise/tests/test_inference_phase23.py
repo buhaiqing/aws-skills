@@ -254,3 +254,174 @@ def test_correlation_cf_edge_cache():
     joined = "\n".join(lines)
     assert "CF-EDGE-CACHE-01" in joined
     assert "cache miss amplification" in joined
+
+
+# --- EC2: EC2-IDLE-01 ----------------------------------------------------
+def test_ec2_idle_01_hit_warn():
+    # Idle >= 7d, CPU low, healthy, non-spot
+    inc = _run({
+        "EC2": {"i-123": {"CPUUtilization": 1.0, "StatusCheckFailed": 0.0, "InstanceLifecycle": "on-demand", "InstanceAgeDays": 8}}
+    })
+    by = _by_rule(inc)
+    assert "EC2-IDLE-01" in by
+    assert by["EC2-IDLE-01"]["level"] == "WARNING"
+
+
+def test_ec2_idle_01_hit_crit():
+    # Idle >= 14d
+    inc = _run({
+        "EC2": {"i-456": {"CPUUtilization": 0.0, "StatusCheckFailed": 0.0, "InstanceLifecycle": "on-demand", "InstanceAgeDays": 20}}
+    })
+    by = _by_rule(inc)
+    assert "EC2-IDLE-01" in by
+    assert by["EC2-IDLE-01"]["level"] == "CRITICAL"
+
+
+def test_ec2_idle_01_miss_spot():
+    # Spot instance — should not fire
+    inc = _run({
+        "EC2": {"i-789": {"CPUUtilization": 0.0, "StatusCheckFailed": 0.0, "InstanceLifecycle": "spot", "InstanceAgeDays": 20}}
+    })
+    assert "EC2-IDLE-01" not in {i["rule_id"] for i in inc}
+
+
+def test_ec2_idle_01_miss_too_young():
+    # Instance age < 1d — should not fire
+    inc = _run({
+        "EC2": {"i-new": {"CPUUtilization": 0.0, "StatusCheckFailed": 0.0, "InstanceLifecycle": "on-demand", "InstanceAgeDays": 0}}
+    })
+    assert "EC2-IDLE-01" not in {i["rule_id"] for i in inc}
+
+
+def test_ec2_idle_01_miss_healthy_failed():
+    # StatusCheckFailed != 0 — should not fire
+    inc = _run({
+        "EC2": {"i-bad": {"CPUUtilization": 1.0, "StatusCheckFailed": 1.0, "InstanceLifecycle": "on-demand", "InstanceAgeDays": 10}}
+    })
+    assert "EC2-IDLE-01" not in {i["rule_id"] for i in inc}
+
+
+# --- ACM: ACM-CERT-01 -----------------------------------------------------
+def test_acm_cert_01_hit_warn():
+    inc = _run({"ACM": {"arn:aws:acm:us-east-1:123456789012:certificate/abc123": {"DomainName": "example.com", "NotAfterDays": 20, "NotAfter": 0, "InUseBy": []}}})
+    by = _by_rule(inc)
+    assert "ACM-CERT-01" in by
+    assert by["ACM-CERT-01"]["level"] == "WARNING"
+
+
+def test_acm_cert_01_hit_crit():
+    inc = _run({"ACM": {"arn:aws:acm:us-east-1:123456789012:certificate/def456": {"DomainName": "api.example.com", "NotAfterDays": 5, "NotAfter": 0, "InUseBy": []}}})
+    by = _by_rule(inc)
+    assert "ACM-CERT-01" in by
+    assert by["ACM-CERT-01"]["level"] == "CRITICAL"
+
+
+def test_acm_cert_01_miss_internal():
+    # .internal domain — should skip
+    inc = _run({"ACM": {"arn:aws:acm:us-east-1:123456789012:certificate/int": {"DomainName": "db.internal", "NotAfterDays": 5, "NotAfter": 0, "InUseBy": []}}})
+    assert "ACM-CERT-01" not in {i["rule_id"] for i in inc}
+
+
+def test_acm_cert_01_miss_far_future():
+    # Not expiring soon
+    inc = _run({"ACM": {"arn:aws:acm:us-east-1:123456789012:certificate/xyz": {"DomainName": "safe.com", "NotAfterDays": 200, "NotAfter": 0, "InUseBy": []}}})
+    assert "ACM-CERT-01" not in {i["rule_id"] for i in inc}
+
+
+# --- KMS: KMS-ROTATE-01 ---------------------------------------------------
+def test_kms_rotate_01_hit():
+    inc = _run({"KMS": {"arn:aws:kms:us-east-1:123456789012:key/mrk-123": {"KeyRotationEnabled": False, "KeyManager": "CUSTOMER", "CreatedTimestamp": 0, "KeySpec": "SYMMETRIC_DEFAULT", "DaysSinceCreation": 400}}})
+    by = _by_rule(inc)
+    assert "KMS-ROTATE-01" in by
+    assert by["KMS-ROTATE-01"]["level"] == "CRITICAL"
+
+
+def test_kms_rotate_01_miss_aws_managed():
+    # AWS-managed — should not fire
+    inc = _run({"KMS": {"arn:aws:kms:us-east-1:123456789012:key/aws-managed": {"KeyRotationEnabled": False, "KeyManager": "AWS", "CreatedTimestamp": 0, "KeySpec": "SYMMETRIC_DEFAULT", "DaysSinceCreation": 999}}})
+    assert "KMS-ROTATE-01" not in {i["rule_id"] for i in inc}
+
+
+def test_kms_rotate_01_miss_recent():
+    # Rotation disabled but < 365d old
+    inc = _run({"KMS": {"arn:aws:kms:us-east-1:123456789012:key/recent": {"KeyRotationEnabled": False, "KeyManager": "CUSTOMER", "CreatedTimestamp": 0, "KeySpec": "SYMMETRIC_DEFAULT", "DaysSinceCreation": 100}}})
+    assert "KMS-ROTATE-01" not in {i["rule_id"] for i in inc}
+
+
+# --- SQS: SQS-DLQ-01 ------------------------------------------------------
+def test_sqs_dlq_01_hit_warn():
+    inc = _run({"SQS": {"https://sqs.us-east-1.amazonaws.com/123/ MyDLQ": {"QueueType": "dlq", "ApproximateNumberOfMessages": 5, "ApproximateAgeOfOldestMessage": 7200.0, "QueueName": "MyDLQ"}}})
+    by = _by_rule(inc)
+    assert "SQS-DLQ-01" in by
+    assert by["SQS-DLQ-01"]["level"] == "WARNING"
+
+
+def test_sqs_dlq_01_hit_crit():
+    inc = _run({"SQS": {"https://sqs.us-east-1.amazonaws.com/123/ MyDLQ": {"QueueType": "dlq", "ApproximateNumberOfMessages": 15, "ApproximateAgeOfOldestMessage": 7200.0, "QueueName": "MyDLQ"}}})
+    by = _by_rule(inc)
+    assert "SQS-DLQ-01" in by
+    assert by["SQS-DLQ-01"]["level"] == "CRITICAL"
+
+
+def test_sqs_dlq_01_miss_too_fresh():
+    # DLQ but age < 1h
+    inc = _run({"SQS": {"https://sqs.us-east-1.amazonaws.com/123/ MyDLQ": {"QueueType": "dlq", "ApproximateNumberOfMessages": 5, "ApproximateAgeOfOldestMessage": 1800.0, "QueueName": "MyDLQ"}}})
+    assert "SQS-DLQ-01" not in {i["rule_id"] for i in inc}
+
+
+def test_sqs_dlq_01_miss_regular_queue():
+    # Not a DLQ — should not fire
+    inc = _run({"SQS": {"https://sqs.us-east-1.amazonaws.com/123/ MyQueue": {"QueueType": "regular", "ApproximateNumberOfMessages": 5, "ApproximateAgeOfOldestMessage": 7200.0, "QueueName": "MyQueue"}}})
+    assert "SQS-DLQ-01" not in {i["rule_id"] for i in inc}
+
+
+# --- GuardDuty: GUARDDUTY-HIGH-01 ----------------------------------------
+def test_guardduty_high_01_hit_ec2():
+    inc = _run({"GuardDuty": {"fid-1": {"Severity": 8.0, "Type": "UnauthorizedAccess:EC2/MaliciousIPCaller", "ServiceName": "EC2", "CreatedAt": "", "UpdatedAt": ""}}})
+    by = _by_rule(inc)
+    assert "GUARDDUTY-HIGH-01" in by
+    assert by["GUARDDUTY-HIGH-01"]["level"] == "CRITICAL"
+
+
+def test_guardduty_high_01_hit_backdoor():
+    inc = _run({"GuardDuty": {"fid-2": {"Severity": 9.0, "Type": "Backdoor:EC2", "ServiceName": "EC2", "CreatedAt": "", "UpdatedAt": ""}}})
+    by = _by_rule(inc)
+    assert "GUARDDUTY-HIGH-01" in by
+    assert "HUMAN ESCALATION" in by["GUARDDUTY-HIGH-01"]["title"]
+
+
+def test_guardduty_high_01_miss_low_severity():
+    # Severity < 7
+    inc = _run({"GuardDuty": {"fid-3": {"Severity": 5.0, "Type": "Trojan:EC2", "ServiceName": "EC2", "CreatedAt": "", "UpdatedAt": ""}}})
+    assert "GUARDDUTY-HIGH-01" not in {i["rule_id"] for i in inc}
+
+
+# --- SecurityHub: SECHUB-FAILED-01 ----------------------------------------
+def test_sechub_failed_01_hit_warn():
+    from datetime import datetime, timezone, timedelta
+    past = datetime.now(timezone.utc) - timedelta(days=10)
+    inc = _run({"SecurityHub": {"sh-1": {"ComplianceStatus": "FAILED", "WorkflowStatus": "NEW", "FirstObservedAt": past.isoformat(), "Title": "S3 bucket open", "ProductName": "Security Hub"}}})
+    by = _by_rule(inc)
+    assert "SECHUB-FAILED-01" in by
+    assert by["SECHUB-FAILED-01"]["level"] == "WARNING"
+
+
+def test_sechub_failed_01_hit_crit():
+    from datetime import datetime, timezone, timedelta
+    past = datetime.now(timezone.utc) - timedelta(days=35)
+    inc = _run({"SecurityHub": {"sh-2": {"ComplianceStatus": "FAILED", "WorkflowStatus": "NEW", "FirstObservedAt": past.isoformat(), "Title": "S3 bucket open", "ProductName": "Security Hub"}}})
+    by = _by_rule(inc)
+    assert "SECHUB-FAILED-01" in by
+    assert by["SECHUB-FAILED-01"]["level"] == "CRITICAL"
+
+
+def test_sechub_failed_01_miss_resolved():
+    from datetime import datetime, timezone, timedelta
+    past = datetime.now(timezone.utc) - timedelta(days=10)
+    inc = _run({"SecurityHub": {"sh-3": {"ComplianceStatus": "FAILED", "WorkflowStatus": "RESOLVED", "FirstObservedAt": past.isoformat(), "Title": "Old issue", "ProductName": "Security Hub"}}})
+    assert "SECHUB-FAILED-01" not in {i["rule_id"] for i in inc}
+
+
+def test_sechub_failed_01_miss_passed():
+    inc = _run({"SecurityHub": {"sh-4": {"ComplianceStatus": "PASSED", "WorkflowStatus": "NEW", "FirstObservedAt": "", "Title": "All good", "ProductName": "Security Hub"}}})
+    assert "SECHUB-FAILED-01" not in {i["rule_id"] for i in inc}
