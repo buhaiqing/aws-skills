@@ -127,6 +127,64 @@ Every operation follows: **Pre-flight → Execute → Validate → Recover**
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
+## Predictive Operations
+
+### Operation: get-capacity-forecast
+
+Predict capacity utilization based on 14-day historical trend. Used by `aws-aiops-cruise` for proactive resize recommendations.
+
+#### Pre-flight
+Collect 14-day history via `get_metric_statistics`, then invoke `scripts/capacity_forecast.py`:
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace "{{user.ns}}" \
+  --metric-name "{{user.metric}}" \
+  --statistics Average \
+  --period 3600 \
+  --start-time $(date -d '-14 days' -u +%Y-%m-%dT00:00:00Z) \
+  --end-time $(date -u +%Y-%m-%dT00:00:00Z) \
+  --region "{{user.region}}" --output json
+```
+
+#### Execute — Python (capacity_forecast.py)
+```python
+from scripts.capacity_forecast import batch_forecast
+results = batch_forecast([{"resource_id": "{{user.resource_id}}",
+  "namespace": "{{user.ns}}", "metric": "{{user.metric}}",
+  "period": 3600, "forecast_days": {{user.forecast_days|7}}}],
+  warning_thresh=80, critical_thresh=90)
+```
+
+#### Output Schema
+```json
+{
+  "capacity_forecast": {
+    "resource_id": "{{user.resource_id}}",
+    "metric": "{{user.metric}}",
+    "current_avg": 65.5,
+    "forecast_7d_avg": 78.3,
+    "forecast_7d_max": 92.1,
+    "trend": "increasing|stable|decreasing",
+    "alert_level": "OK|WARNING|CRITICAL",
+    "recommendation": "Proactive resize ...",
+    "confidence": "high|medium|low",
+    "data_points_analyzed": 336
+  }
+}
+```
+
+#### Validate
+Confirm `alert_level` is set and `forecast_7d_avg` is populated. Refs: `references/capacity-forecast-rules.md`, `references/capacity-alert-thresholds.md`.
+
+## Cross-Skill References
+
+| Skill | Integration Point | Capability |
+|-------|-------------------|------------|
+| `aws-aiops-cruise` | Calls `get-capacity-forecast` for proactive resize | 14-day trend prediction, HealthCruise enrichment |
+| `aws-aiops-orchestrator` | Delegates capacity-forecast intent | Orchestrates across skills |
+| `aws-ec2-ops` | Source of EC2 CPU/memory metrics | Resource-level data |
+| `aws-rds-ops` | Source of RDS connection metrics | Database metrics |
+
 ### Common Pre-flight Steps (all ops)
 
 #### Step 1: Check CLI
