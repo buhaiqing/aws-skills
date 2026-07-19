@@ -10,6 +10,7 @@ _Latest update: 2026-06-13_
 | Describe alarms | `aws cloudwatch describe-alarms` | `.MetricAlarms[]` |
 | Delete alarms | `aws cloudwatch delete-alarms` | Empty (success) |
 | List metrics | `aws cloudwatch list-metrics` | `.Metrics[]` |
+| Get metric statistics | `aws cloudwatch get-metric-statistics` | `.Datapoints[]` |
 | Get metric data | `aws cloudwatch get-metric-data` | `.MetricDataResults[]` |
 | Put metric data | `aws cloudwatch put-metric-data` | Empty (success) |
 | Put composite alarm | `aws cloudwatch put-composite-alarm` | Empty (success) |
@@ -111,6 +112,24 @@ aws cloudwatch get-metric-statistics \
   --region us-east-1 \
   --output json
 ```
+
+### Batch Metric Collection (for Capacity Forecast)
+Collect 14-day hourly history for trend prediction. Pipe to Python for forecasting:
+```bash
+# 14-day hourly CPU history for EC2 instance
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/EC2 \
+  --metric-name CPUUtilization \
+  --dimensions Name=InstanceId,Value={{instance_id}} \
+  --statistics Average \
+  --period 3600 \
+  --start-time $(date -d '-14 days' -u +%Y-%m-%dT00:00:00Z) \
+  --end-time $(date -u +%Y-%m-%dT00:00:00Z) \
+  --region us-east-1 \
+  --output json | jq '.Datapoints'
+```
+
+**Note**: AWS has no native `forecast` CLI. Use `get_metric_statistics` to collect history, then `scripts/capacity_forecast.py` (`predict_capacity()`) to compute trends.
 
 ### Put Custom Metric
 ```bash
