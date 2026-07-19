@@ -21,6 +21,11 @@ from collectors.edge import (
     audit_route53_health_checks,
     audit_waf_blocked,
 )
+from collectors.analytics import audit_athena_cost
+from collectors.ram_audit import audit_ram_shares
+from collectors.secrets_audit import audit_secrets_rotation
+from collectors.cloudfront_audit import audit_cloudfront_signals
+from collectors.search_audit import audit_opensearch_health
 from collectors.governance import (
     audit_acm_expiry,
     audit_cloudwatch_alarms,
@@ -74,6 +79,11 @@ def collect_aws_native_insights(
     if enable_cloudfront:
         collectors.append(("cloudfront", lambda: audit_cloudfront(scope_ids, run_id, customer)))
         collectors.append(("cloudfront_s3", lambda: audit_cloudfront_s3_origins(scope_ids, run_id, customer)))
+        collectors.append(("cloudfront_signals", lambda: audit_cloudfront_signals(scope_ids, run_id, customer)))
+    collectors.append(("athena", lambda: audit_athena_cost(region, scope_ids, run_id, customer)))
+    collectors.append(("ram", lambda: audit_ram_shares(region, scope_ids, run_id, customer)))
+    collectors.append(("secrets", lambda: audit_secrets_rotation(region, scope_ids, run_id, customer)))
+    collectors.append(("opensearch", lambda: audit_opensearch_health(region, scope_ids, run_id, customer)))
     if enable_rds_proxy:
         collectors.append(("rds_proxy", lambda: audit_rds_proxy(region, scope_ids, run_id, customer)))
     if enable_xray:
@@ -82,10 +92,14 @@ def collect_aws_native_insights(
     for name, fn in collectors:
         try:
             found = fn()
-            if name == "eks":
-                inc, eks_signal = found
+            # Collectors may return either a bare incident list (legacy) or a
+            # (incidents, signals_dict) tuple. The latter folds its per-service
+            # signal dicts into `signals` so inference rules can consume them
+            # (e.g. EKS, Athena, RAM, SecretsManager, CloudFront, OpenSearch).
+            if isinstance(found, tuple) and len(found) == 2:
+                inc, signal_map = found
                 incidents.extend(inc)
-                for layer, resources in eks_signal.items():
+                for layer, resources in signal_map.items():
                     signals.setdefault(layer, {}).update(resources)
                 meta["collectors"].append({"name": name, "findings": len(inc)})
             else:

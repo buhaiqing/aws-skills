@@ -1010,6 +1010,184 @@ def apply_chain_inference(
                     )
                 )
 
+    # --- Phase-2/3 closure: Athena / RAM / SecretsManager / CloudFront / OpenSearch ---
+    # Each block consumes a `signals` key populated by its native collector
+    # (collectors/analytics.py, ram_audit.py, secrets_audit.py,
+    # cloudfront_audit.py, search_audit.py). Detect + recommend + delegate
+    # only — no mutating AWS calls (GCL fail-closed).
+
+    # ATHENA-COST-01: query cost anomaly via ProcessedBytes over 6h window.
+    for wg, metrics in signals.get("Athena", {}).items():
+        pb = metrics.get("ProcessedBytes")
+        if pb is None:
+            continue
+        rule = "ATHENA-COST-01"
+        if rule in existing_rule_ids:
+            continue
+        level = "CRITICAL" if pb >= 2e10 else ("WARNING" if pb >= 5e9 else None)
+        if level:
+            incidents.append(
+                make_incident(
+                    run_id=run_id,
+                    customer=customer,
+                    region=region,
+                    resource_type="Athena",
+                    resource_id=wg,
+                    rule_id=rule,
+                    title=f"Athena workgroup `{wg}` scanned {pb / 1e9:.1f} GB in 6h",
+                    level=level,
+                    metric="ProcessedBytes",
+                    current_value=float(pb),
+                    threshold_warning=5e9,
+                    threshold_critical=2e10,
+                    recommendation="Tune query / partition / cache; delegate aws-athena-ops for cost review",
+                )
+            )
+
+    # RAM-SHARE-01: resource share not ACTIVE or has rejected associations.
+    for arn, metrics in signals.get("RAM", {}).items():
+        active = metrics.get("ShareStatusActive", 1.0)
+        rejected = metrics.get("RejectedAssociations", 0.0) or 0.0
+        if active == 1.0 and rejected <= 0:
+            continue
+        rule = "RAM-SHARE-01"
+        if rule in existing_rule_ids:
+            continue
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="RAM",
+                resource_id=arn,
+                rule_id=rule,
+                title=f"RAM share `{arn.split('/')[-1]}` unhealthy (status={'ACTIVE' if active == 1.0 else 'NON-ACTIVE'}, rejected={int(rejected)})",
+                level="WARNING",
+                metric="ShareStatusActive",
+                current_value=active,
+                recommendation="Check share status / principal association rejections; delegate aws-ram-ops",
+            )
+        )
+
+    # SEC-ROTATE-01: secret rotation stale or disabled.
+    for name, metrics in signals.get("SecretsManager", {}).items():
+        age = metrics.get("RotationAgeDays", 0.0) or 0.0
+        enabled = metrics.get("RotationEnabled", 1.0)
+        if age <= 90 and enabled == 1.0:
+            continue
+        rule = "SEC-ROTATE-01"
+        if rule in existing_rule_ids:
+            continue
+        level = "CRITICAL" if (age > 180 or enabled == 0.0) else "WARNING"
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="SecretsManager",
+                resource_id=name,
+                rule_id=rule,
+                title=f"Secret `{name}` rotation age {age:.0f}d (enabled={enabled == 1.0})",
+                level=level,
+                metric="RotationAgeDays",
+                current_value=float(age),
+                threshold_warning=90,
+                threshold_critical=180,
+                recommendation="Rotate secret and enable rotation; delegate aws-secretsmanager-ops",
+            )
+        )
+
+    # CF-ORIGIN-02 / CF-CACHE-01: origin latency/success + cache hit rate.
+    for did, metrics in signals.get("CloudFront", {}).items():
+        latency = metrics.get("OriginLatency")
+        success = metrics.get("OriginSuccessRate")
+        hit = metrics.get("CacheHitRate")
+        # CF-ORIGIN-02
+        if (latency is not None and latency > 1000) or (success is not None and success < 0.99):
+            rule = "CF-ORIGIN-02"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="CloudFront",
+                        resource_id=did,
+                        rule_id=rule,
+                        title=f"CloudFront {did} origin latency={latency}ms success={success}",
+                        level="CRITICAL" if (latency or 0) > 3000 or (success or 1) < 0.95 else "WARNING",
+                        metric="OriginLatency",
+                        current_value=float(latency) if latency is not None else None,
+                        threshold_warning=1000,
+                        threshold_critical=3000,
+                        recommendation="Inspect origin (ALB/S3) health, TLS, timeouts; delegate aws-cloudfront-ops",
+                    )
+                )
+        # CF-CACHE-01
+        if hit is not None and hit < 0.8:
+            rule = "CF-CACHE-01"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="CloudFront",
+                        resource_id=did,
+                        rule_id=rule,
+                        title=f"CloudFront {did} cache hit rate {hit:.2f}",
+                        level="WARNING",
+                        metric="CacheHitRate",
+                        current_value=float(hit),
+                        threshold_warning=0.8,
+                        recommendation="Review cache policy, TTL, query strings/cookies in cache key; delegate aws-cloudfront-ops",
+                    )
+                )
+
+    # OS-HEAP-01 / OS-SHARD-01: OpenSearch JVM pressure + shard health.
+    for domain, metrics in signals.get("OpenSearch", {}).items():
+        jvm = metrics.get("JVMMemoryPressure")
+        if jvm is not None and jvm >= 80:
+            rule = "OS-HEAP-01"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=domain,
+                        rule_id=rule,
+                        title=f"OpenSearch `{domain}` JVM memory pressure {jvm:.1f}%",
+                        level="CRITICAL" if jvm >= 95 else "WARNING",
+                        metric="JVMMemoryPressure",
+                        current_value=float(jvm),
+                        threshold_warning=80,
+                        threshold_critical=95,
+                        recommendation="Scale nodes / adjust shard allocation / JVM heap; delegate aws-opensearch-ops",
+                    )
+                )
+        blocked = metrics.get("ClusterIndexWritesBlocked", 0.0) or 0.0
+        unassigned = metrics.get("UnassignedShards", 0.0) or 0.0
+        if blocked > 0 or unassigned > 0:
+            rule = "OS-SHARD-01"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=domain,
+                        rule_id=rule,
+                        title=f"OpenSearch `{domain}` writes blocked={blocked:.0f} unassignedShards={unassigned:.0f}",
+                        level="CRITICAL",
+                        metric="ClusterIndexWritesBlocked",
+                        current_value=float(blocked),
+                        recommendation="Check disk watermark / node count / shard allocation; delegate aws-opensearch-ops",
+                    )
+                )
+
     return incidents, lines
 
 
