@@ -23,6 +23,19 @@
 
 ---
 
+## 1.5. Query / Search Silent Miss（烂查询 > 错工具）
+
+> 来源：2026-07-19 CodeGraph A/B 对比实验 E3-Q5。最隐蔽的失败模式——**查询构造错（烂 glob/正则）比工具选错更危险，因为它静默错答、不报错**。
+
+| 场景 | 错误模式 | 根因 | 修复 | 计数 |
+|------|----------|------|------|------|
+| 全局搜索"所有 composite/orchestrator 技能" | glob `aws-*-ops` 漏匹配 `aws-aiops-orchestrator`（该目录**无 `-ops` 后缀） | glob/正则未对齐仓库实际目录布局 | 写查询前先用 `ls` / `git ls-files` 核对真实目录命名，不要凭模式推测 | 1（实测真值=2，Grep 返回 0） |
+| 任何"按模式搜文件"的查询 | 用 `aws-*-ops` 这类带后缀的 glob 当全集 | 仓库存在例外目录（无后缀、`-meta` 等） | 优先用 `git ls-files 'aws-*/SKILL.md'` 或先枚举再过滤 | — |
+
+> **判别口诀**：工具返回"无结果"时，先怀疑**自己的查询形状**（glob/正则/参数），再怀疑工具能力。烂查询会同时骗过 Grep 和 CodeGraph——与工具无关。
+
+---
+
 ## 2. Skill Generation Issues
 
 > Common structural errors from the skill generator.
