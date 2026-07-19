@@ -78,3 +78,47 @@ aws logs put-log-events \
 ```
 
 Full schema and query patterns: [feedback-loop.md](feedback-loop.md).
+
+## ELB Alarm Templates & AIOps Dashboard
+
+Delegates ELB ARN discovery to `aws-elb-ops`, then creates alarms and the AIOps dashboard. See [elb-monitoring-templates.md](elb-monitoring-templates.md) for:
+
+- Anomaly Detection — ALB Request Count
+- Latency Alarm (p99)
+- UnHealthyHostCount Alarm
+- 5xx Error Rate Alarm
+- ELB Capacity Planning (FORECAST)
+- AIOps Dashboard via [assets/elb-aiops-dashboard.json](../assets/elb-aiops-dashboard.json)
+
+## Common Pre-flight Steps (all ops)
+
+### Step 1: Check CLI
+```bash
+aws --version
+```
+Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: pip install awscli`
+
+### Step 2: Load & Verify Credentials
+```bash
+aws sts get-caller-identity --output json
+```
+Log format:
+```
+[SKILL] Loading AWS credentials...
+[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from env)
+[OK]   AWS_ACCESS_KEY_ID=**** (masked)
+[OK]   Credential verification passed
+[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
+```
+On failure:
+```
+[FAIL] AWS credential verification failed.
+AWS Error: <exact error message>
+Action: See troubleshooting.md for diagnosis.
+```
+
+| Check | Method | On Failure |
+|-------|--------|------------|
+| CLI available | `aws --version` | Install AWS CLI v2 |
+| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide to troubleshooting.md |
+| Region valid | `aws cloudwatch list-metrics --region {{user.region}}` | Suggest valid region |
