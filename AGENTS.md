@@ -291,6 +291,9 @@ Contract (enforced by aws-skill-generator Charter C7):
 Runtime-agnostic: any agent globs `aws-*-ops/SKILL.md` and reads frontmatter
 — no per-agent loader (see §12 CodeGraph for cross-agent MCP discovery).
 
+`aws-aiops-copilot` is the canonical L2 example (type: composite, delegates to
+aws-aiops-cruise + aws-aiops-orchestrator).
+
 ## Self-reflection rule (project policy)
 
 > **Rule**: After every skill update, auto-run **2 rounds** of self-review
