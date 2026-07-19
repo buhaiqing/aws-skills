@@ -98,8 +98,9 @@ Input → Analyze Sources → Create Layout → Populate Files → Verify
 | C4 | Variable Convention | `{{env.AWS_*}}`, `{{user.*}}`, `{{output.*}}` | Add placeholder table |
 | C5 | Safety Gates | Destructive ops have confirmation | Add pre-flight safety gate |
 | **C6** | **Token Efficiency** | Objective gates (all MUST pass — machine-verifiable, see §Token Efficiency Requirements): (1) `SKILL.md` ≤ 120 lines; (2) no hard-coded static tables >5 rows that an API call can replace (TE-1); (3) JSON paths declared once at file top, not per-command (TE-4); (4) no cross-file duplicated flow / boilerplate (TE-6); (5) boto3 has no docstrings (TE-2); (6) errors in compact table (TE-3) | HALT → report each violated gate → fix → re-check → LOOP |
+| **C7** | **分层契约 (Layering Contract)** | 若 `metadata.type == composite`，则必含 `delegate` 且其指向的 `aws-<svc>-ops` 目录真实存在；`base` 技能可选填 `provides` | composite 缺失 delegate 或 delegate 目录不存在则 HALT 报告 |
 
-> **自解流程**：C1-C6 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
+> **自解流程**：C1-C7 失败 → HALT → REPORT → REMEDIATE → RE-CHECK → LOOP
 
 ---
 
@@ -406,6 +407,9 @@ no-credential-logging rule (rule A9) and the `--region` rule (A7).
 | `{{skill.service}}` | `<service>` |
 | `{{skill.aws_cli_svc}}` | `<aws-cli-namespace>` |
 | `{{skill.max_iter}}` | `<2|3>` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
+| `{{skill.type}}` | `base` \| `composite` (from `metadata.type` in SKILL.md frontmatter) |
+| `{{skill.provides}}` | operations this skill handles (from `metadata.provides` in frontmatter) |
+| `{{skill.delegate}}` | composite→base skill/operation map (from `metadata.delegate` in frontmatter; base skills omit) |
 
 ## Hard rules (Critic template injection)
 
