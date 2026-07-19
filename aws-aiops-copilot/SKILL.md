@@ -17,12 +17,10 @@ metadata:
   provides:
     - "aiops-health-check"
     - "aiops-rca"
-    - "aiops-patrol"
   delegate:
     aws-aiops-cruise:
       - "health-check"
       - "rca"
-      - "patrol"
     aws-aiops-orchestrator:
       - "cross-service-rca"
   cross_skill_deps:
@@ -54,7 +52,7 @@ Delegated targets (both directories verified to exist in this repo):
 
 | Delegate skill | Operations handled | Role |
 |----------------|--------------------|------|
-| `aws-aiops-cruise` | `health-check`, `rca`, `patrol` | Single-service / full-chain read-only patrol + chain inference |
+| `aws-aiops-cruise` | `health-check`, `rca` | Single-service / full-chain read-only health check + chain inference |
 | `aws-aiops-orchestrator` | `cross-service-rca` | Cross-service correlation, multi-skill RCA orchestration |
 
 Per Charter C7, every `delegate` target directory (`aws-aiops-cruise`,
@@ -80,8 +78,7 @@ Per Charter C7, every `delegate` target directory (`aws-aiops-cruise`,
 |-------------------|-----------------|-------|
 | `aiops-health-check` | `aws-aiops-cruise` | Read-only full-chain patrol |
 | `aiops-rca` | `aws-aiops-cruise` | RCA within one service / chain |
-| `aiops-patrol` | `aws-aiops-cruise` | Scheduled / ad-hoc patrol |
-| `aiops-cross-service-rca` | `aws-aiops-orchestrator` | Correlation across services |
+| `cross-service-rca` | `aws-aiops-orchestrator` | Correlation across services |
 
 See [`references/delegate-routing.md`](references/delegate-routing.md) for the
 full routing decision table.
