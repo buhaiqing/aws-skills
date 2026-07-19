@@ -349,3 +349,42 @@ sec_rotate_alarm:
   AlarmName: "Cruise-SEC-ROTATE-01-{{user.resource_id}}"
   AlarmDescription: "[PLACEHOLDER] Secret rotation stale (from inference rule SEC-ROTATE-01) — requires custom metric"
   # No standard CloudWatch metric exists for this rule
+
+# --- ACM-CERT-01: ACM certificate expiring ---
+# Inference: DaysToExpiry < 30 → WARNING, < 7 → CRITICAL
+# Source: audit_acm_expiry → signals["ACM"]; CloudWatch metric AWS/CertificateManager DaysToExpiry
+# NOTE: ACM DOES have DaysToExpiry as a standard CloudWatch metric.
+acm_cert_alarm:
+  AlarmName: "Cruise-ACM-CERT-01-{{user.resource_id}}"
+  AlarmDescription: "ACM certificate expiring (from inference rule ACM-CERT-01, CRIT < 7d, WARN < 30d)"
+  MetricName: DaysToExpiry
+  Namespace: AWS/CertificateManager
+  Dimensions:
+    - Name: CertificateArn
+      Value: "{{user.resource_id}}"
+  Statistic: Minimum
+  Period: 86400
+  EvaluationPeriods: 1
+  DatapointsToAlarm: 1
+  ThresholdWarning: 30
+  ThresholdCritical: 7
+  ComparisonOperator: LessThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- KMS-ROTATE-01: KMS key rotation stale ---
+# Inference: KMS key rotation age > 255d (365 - 110 grace) → WARNING, > 365d → CRITICAL
+# Source: audit_kms_rotation → signals["KMS"]; no direct CloudWatch metric for rotation status
+# NOTE: KMS does NOT expose key rotation age as a CloudWatch metric.
+# Patrol-only rule — fires via audit_kms_expiry native collector.
+kms_rotate_alarm:
+  # Placeholder — KMS does not expose rotation age as a CloudWatch metric.
+  # KMS-ROTATE-01 fires via audit_kms_expiry native collector (patrol-only).
+  # Implementation options for CloudWatch alarm:
+  #   A. EventBridge rule: check KMS key rotation on schedule, publish custom metric
+  #   B. Config rule: periodic check against key last-rotated timestamp
+  # Thresholds: WARNING=255d (365-110 grace), CRITICAL=365d
+  AlarmName: "Cruise-KMS-ROTATE-01-{{user.resource_id}}"
+  AlarmDescription: "[PLACEHOLDER] KMS key rotation stale (from inference rule KMS-ROTATE-01) — requires custom metric via EventBridge"
+  # No standard CloudWatch metric exists for KMS key rotation age

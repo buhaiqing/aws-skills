@@ -125,6 +125,41 @@ Swap-in requires only a different `audit_eks_nodes` collector; the inference rul
 - Action: delegate `aws-secretsmanager-ops`
 - Source: `audit_secrets_rotation` (collector) → `signals["SecretsManager"]`
 
+### ACM-CERT-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: ACM certificate `DaysToExpiry` < 30d (WARN) / < 7d (CRITICAL)
+- Action: delegate `aws-acm-ops`
+- Source: `audit_acm_expiry` (collector) → `signals["ACM"]`
+- CloudWatch metric: `AWS/CertificateManager` / `DaysToExpiry` (Minimum, 86400s period)
+- Alarm: `cruise-inference-alarms.yaml` → `acm_cert_alarm`
+
+### KMS-ROTATE-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: KMS key rotation age > 255d (WARN) / > 365d (CRITICAL); rotation disabled → CRITICAL
+- Action: delegate `aws-kms-ops`
+- Source: `audit_kms_rotation` (collector) → `signals["KMS"]`
+- Note: KMS does NOT expose rotation age as a CloudWatch metric — patrol-only via native collector
+- Alarm: `cruise-inference-alarms.yaml` → `kms_rotate_alarm` (placeholder, requires EventBridge custom metric)
+
+### SQS-DLQ-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: SQS dead-letter queue `ApproximateNumberOfMessagesVisible` > 0 (WARN) / > 100 (CRITICAL)
+- Action: delegate `aws-sqs-ops`
+- Source: `audit_sqs_dlq` (collector) → `signals["SQS"]`
+
+### GUARDDUTY-HIGH-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: GuardDuty finding count > 10 in 24h window (WARN) / > 50 (CRITICAL)
+- Action: delegate `aws-guardduty-ops`
+- Source: `audit_guardduty_findings` (collector) → `signals["GuardDuty"]`
+
+### SECHUB-FAILED-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: Security Hub `ComplianceStatus` == "FAILED" AND `WorkflowStatus` != "RESOLVED" AND age > 7d (WARN) / > 30d (CRITICAL)
+- Action: delegate `aws-securityhub-ops`
+- Source: `audit_securityhub_compliance` (collector) → `signals["SecurityHub"]`
+
+### EC2-IDLE-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: EC2 instance idle ≥ 7d (WARN) / ≥ 14d (CRITICAL); CPU < 5%, StatusCheck == 0, non-spot, age > 1d
+- Action: delegate `aws-ec2-ops`
+- Source: `compute.py` EC2 collector → `signals["EC2"]` (CPUUtilization, StatusCheckFailed, InstanceLifecycle, InstanceAgeDays)
+- Severity escalation: WARNING at ≥ 7d idle, CRITICAL at ≥ 14d idle
+
 ### Cross-Service Correlation Addendum
 
 | Correlation ID | Chain | Implemented |

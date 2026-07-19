@@ -21,7 +21,6 @@ def audit_cloudwatch_alarms(region: str, scope_ids: set[str], run_id: str, custo
         for alarm in data.get("MetricAlarms", []):
             name = alarm.get("AlarmName", "")
             dims = {d["Name"]: d["Value"] for d in alarm.get("Dimensions", [])}
-            subject = next(iter(dims.values()), name)
             if scope_ids and not any(resource_in_scope(v, scope_ids) for v in dims.values()):
                 continue
             incidents.append(
@@ -80,8 +79,9 @@ def audit_devops_guru(region: str, run_id: str, customer: str) -> list[dict]:
             )
     return incidents
 
-def audit_security_hub(region: str, run_id: str, customer: str) -> list[dict]:
+def audit_security_hub(region: str, run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, Any]]]:
     incidents: list[dict] = []
+    signals: dict[str, dict[str, Any]] = {}
     # Security Hub is often us-east-1 for API; try requested region first
     filters = {
         "RecordState": [{"Value": "ACTIVE", "Comparison": "EQUALS"}],
@@ -102,9 +102,12 @@ def audit_security_hub(region: str, run_id: str, customer: str) -> list[dict]:
         region,
     )
     if not data:
-        return incidents
+        return incidents, {"SecurityHub": signals}
     findings = data.get("Findings", [])
     if findings:
+        for f in findings:
+            fid = f.get("Id", "")
+            signals[fid] = {"ComplianceStatus": f.get("Compliance", {}).get("ComplianceStatus", "UNKNOWN"), "WorkflowStatus": f.get("WorkflowStatus", ""), "FirstObservedAt": f.get("FirstObservedAt", ""), "Title": f.get("Title", ""), "ProductName": f.get("ProductName", ""), "SeverityLabel": f.get("SeverityLabel", "")}
         incidents.append(
             make_incident(
                 run_id=run_id,
@@ -120,7 +123,7 @@ def audit_security_hub(region: str, run_id: str, customer: str) -> list[dict]:
                 recommendation="Delegate aws-securityhub-ops; map to ASFF compliance controls",
             )
         )
-    return incidents
+    return incidents, {"SecurityHub": signals}
 
 def audit_config_compliance(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []
@@ -157,11 +160,12 @@ def audit_config_compliance(region: str, scope_ids: set[str], run_id: str, custo
                 break
     return incidents[:10]
 
-def audit_guardduty(region: str, run_id: str, customer: str) -> list[dict]:
+def audit_guardduty(region: str, run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, Any]]]:
     incidents: list[dict] = []
+    signals: dict[str, dict[str, Any]] = {}
     detectors = run_aws(["aws", "guardduty", "list-detectors"], region)
     if not detectors:
-        return incidents
+        return incidents, {"GuardDuty": signals}
     for det_id in detectors.get("DetectorIds", []):
         findings = run_aws(
             [
@@ -195,13 +199,15 @@ def audit_guardduty(region: str, run_id: str, customer: str) -> list[dict]:
             title = f.get("Title", "")[:120]
             ftype = f.get("Type", "")
             level = "CRITICAL" if sev >= 8 else "WARNING"
+            fid = f.get("Id", det_id)[:128]
+            signals[fid] = {"Severity": sev, "Type": f.get("Type", ""), "ServiceName": f.get("Service", {}).get("ServiceName", ""), "CreatedAt": f.get("CreatedAt", ""), "UpdatedAt": f.get("UpdatedAt", "")}
             incidents.append(
                 make_incident(
                     run_id=run_id,
                     customer=customer,
                     region=region,
                     resource_type="GuardDuty",
-                    resource_id=f.get("Id", det_id)[:128],
+                    resource_id=fid,
                     rule_id="GD-HIGH-01",
                     title=f"GuardDuty HIGH+ finding: {title}",
                     level=level,
@@ -210,7 +216,7 @@ def audit_guardduty(region: str, run_id: str, customer: str) -> list[dict]:
                     recommendation=f"Type: {ftype}; delegate aws-guardduty-ops for investigation",
                 )
             )
-    return incidents
+    return incidents, {"GuardDuty": signals}
 
 def audit_compute_optimizer(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
     incidents: list[dict] = []
@@ -246,14 +252,15 @@ def audit_compute_optimizer(region: str, scope_ids: set[str], run_id: str, custo
             )
     return incidents
 
-def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
+def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, Any]]]:
     """ACM certificate expiry detection — DaysToExpiry <= 30 (WARNING) or <= 7 (CRITICAL)."""
     from datetime import datetime, timezone
 
     incidents: list[dict] = []
+    signals: dict[str, dict[str, Any]] = {}
     data = run_aws(["aws", "acm", "list-certificates"], region)
     if not data:
-        return incidents
+        return incidents, {"ACM": signals}
     now = datetime.now(timezone.utc)
     for cert in data.get("CertificateSummaryList", []):
         not_after_str = cert.get("NotAfter")
@@ -274,6 +281,7 @@ def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: st
             else:
                 continue
         level = "CRITICAL" if days <= 7 else "WARNING"
+        signals[cert_arn] = {"DomainName": domain, "NotAfter": not_after.timestamp(), "NotAfterDays": days, "InUseBy": in_use}
         incidents.append(
             make_incident(
                 run_id=run_id,
@@ -289,5 +297,5 @@ def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: st
                 recommendation="Request renewal via aws-acm-ops; delegate to aws-route53-ops for DNS validation",
             )
         )
-    return incidents
+    return incidents, {"ACM": signals}
 
