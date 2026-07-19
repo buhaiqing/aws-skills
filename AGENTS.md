@@ -132,6 +132,21 @@ but can be skipped for:
 The判断标准: if the change is purely additive (no logic changes,
 no control flow, no error handling), GCL overhead exceeds its value.
 
+### Pre-change CodeGraph Sync (mandatory)
+
+**Every code change must run `codegraph sync .` first** to refresh the
+local index before editing. This guarantees that `codegraph explore` /
+`codegraph impact` queries during the change reflect current state, so
+cross-skill reference drift and blast radius are caught early.
+
+```bash
+codegraph sync .    # incremental sync; if no index exists, run codegraph init . first
+```
+
+- For documentation-only Markdown changes, sync is still recommended (cheap,
+  keeps the graph current) but not strictly required.
+- Full setup and rules: see §12 CodeGraph Integration.
+
 ### Pre-existing Lint Baseline
 
 When running `ruff check` / `eslint` after changes, always run the
@@ -142,6 +157,37 @@ for a full lint report.
 
 This prevents false-positive code reviews where the reviewer flags
 errors that existed before the change.
+
+### Spec + Plan Before Implement (mandatory)
+
+Any non-trivial implementation MUST first define a **spec** and a **plan**
+under `docs/superpowers/` before writing code:
+
+- **Spec** → `docs/superpowers/specs/<YYYY-MM-DD>-<topic>-design.md`
+  (gap/need analysis with disk-verified evidence, scope boundary).
+- **Plan** → `docs/superpowers/plans/<YYYY-MM-DD>-<topic>.md`
+  (checkbox tasks referencing the spec, with acceptance criteria).
+
+**Triggers** (any one ⇒ spec + plan required): code/config/skill change
+>5 lines; new feature module; cross-file or cross-skill refactor.
+**Exempt**: pure-doc typo fixes, single-line constant additions, import
+list updates (purely additive, no logic/control-flow change).
+**Precedent**: `docs/superpowers/specs/2026-07-11-level3-coverage-design.md`
+and its plan are the canonical template — every new implement task follows
+the same path.
+
+### Per-Phase / Milestone Full Review (mandatory)
+
+After **all tasks in a Phase (or Milestone)** complete, run one **full
+review** and **fix every issue found** before proceeding or handing off.
+Cover: (1) structure — markdown tables/fences closed, headings coherent;
+(2) consistency — no conflict with §11 GCL / §12 CodeGraph / §14 TE gate,
+paths align with the level3 precedent; (3) scope — `git diff --stat` shows
+only intended files; (4) gate — line count under §14 soft cap, frontmatter
+valid. Fix each finding, re-run the check until zero issues. Unfixable
+residue must be recorded and escalated for human decision — never ignored.
+Record the review conclusion (scope / found / fixed / residue) before
+marking the Phase done.
 
 ## Self-reflection rule (project policy)
 
@@ -412,21 +458,37 @@ Codified in `gcl-spec.md` §8. Highlights:
 
 ```bash
 codegraph init .              # 首次建图（实测 564 nodes / 1,329 edges）
+codegraph sync .              # 增量同步自上次索引以来的变更（每次代码变更前必跑）
 codegraph explore "<symbol>"  # 查影响半径 / 跨文件调用点
 codegraph status              # 查索引状态（Files/Nodes/Edges/DB Size）
-codegraph install --target opencode   # 接 OpenCode MCP（写全局 ~/.config/opencode/）
+codegraph install -t opencode   # 接 OpenCode MCP（写全局 ~/.config/opencode/）
 ```
 
 MCP 启用亦可手动在 `~/.config/opencode/opencode.jsonc` 的 `mcp` 下加：
 `"codegraph": { "type": "local", "command": ["codegraph","serve","--mcp"], "enabled": true }`。
-CLI 等价命令（`codegraph explore` / `codegraph node`）始终可用，无需 MCP 即可查询。
+`codegraph install -t opencode` 会自动写入该配置，无需手改。
+CLI 等价命令（`codegraph explore` / `codegraph node` / `codegraph sync`）始终可用，无需 MCP 即可查询。
+
+### MCP 集成（必装）
+
+CodeGraph 通过 MCP server（`codegraph serve --mcp`）接入 OpenCode，提供
+`codegraph_explore` / `codegraph_node` 工具。安装（一次性）：
+
+```bash
+codegraph install -t opencode
+```
+
+安装后重启 OpenCode session 即生效。若 MCP 未出现，检查
+`~/.config/opencode/opencode.jsonc` 的 `mcp.codegraph.enabled` 是否为
+`true`。卸载用 `codegraph uninstall -t opencode`。
 
 ### 规则
 
 | 项 | 要求 |
 |----|------|
+| **每次代码变更前** | **必跑 `codegraph sync .`**（增量同步），确保后续 `explore` / `impact` 基于最新索引；索引不存在时先 `codegraph init .` |
 | `.codegraph/` | 内容已被其自带 `.gitignore`（`*` + `!.gitignore`）屏蔽，禁止提交索引；根 `.gitignore` 可补 `.codegraph/`（可选，为 `git status` 静默） |
-| 改共享脚本 / 委派引用前 | 先 `codegraph explore "<symbol>"` 确认调用点与文档描述一致 |
+| 改共享脚本 / 委派引用前 | 先 `codegraph sync .` 再 `codegraph explore "<symbol>"` 确认调用点与文档描述一致 |
 | GCL 任务 R2 内容评审 | 用 CodeGraph 辅助校验跨技能委托引用存在性（如 `SHOULD` / `SHOULD NOT` 指向的目录真实存在） |
 | 与 self-review 关系 | 不替代 2-round self-review，仅作跨技能引用的机器校验增强 |
 
