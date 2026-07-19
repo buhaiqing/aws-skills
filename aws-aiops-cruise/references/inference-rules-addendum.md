@@ -12,13 +12,13 @@ mutating AWS calls (consistent with GCL fail-closed).
 > live rules (DynamoDB + ElastiCache both have PRODUCTS entries in `_shared.py`,
 > so their `signals` keys are populated in production).
 >
-> **Deferred inference** (NOT added — would be dead code): OpenSearch,
-> CloudFront, Athena, RAM, SecretsManager have **no PRODUCTS entry** in
-> `_shared.py`, so `signals["<svc>"]` is never populated and any inference block
-> for them could never fire. Their routing is wired (see table below); inference
-> rules follow only after a metrics collector / PRODUCTS entry is added (out of
-> the surgical scope of this change). `OS-HEAP-01`/`OS-SHARD-01` were briefly
-> added then removed for this reason.
+> **Deferred inference** (was NOT added — would be dead code): OpenSearch,
+> CloudFront, Athena, RAM, SecretsManager had **no PRODUCTS entry** in
+> `_shared.py`, so `signals["<svc>"]` was never populated and any inference
+> block for them could never fire. This was closed on 2026-07-19 (Task #10,
+> Phase-2/3): each service now has a **native collector** that populates its
+> `signals` key, making the rules live. `OS-HEAP-01`/`OS-SHARD-01` were
+> briefly added then removed for this reason — now re-added via collector.
 >
 > **EKS is the exception**: it has no PRODUCTS entry, but `audit_eks_nodes`
 > (native collector) populates `signals["EKS"]` with per-nodegroup scalingConfig
@@ -31,18 +31,12 @@ mutating AWS calls (consistent with GCL fail-closed).
 |-------|---------|-----------------------------------|
 | aws-dynamodb-ops | ✅ added | ✅ live (DYNAMO-THROTTLE-01 / DYNAMO-GSI-01) |
 | aws-elasticache-ops | ✅ added | ✅ live (EC-MEM-01 / EC-FAILOVER-01 / CACHE-EVICT-01) |
-| aws-opensearch-ops | ✅ added | ⏳ deferred (no `OpenSearch` PRODUCTS entry → signals never populated) |
-| aws-cloudfront-ops | ✅ added | ⏳ deferred (no `CloudFront` PRODUCTS entry; `CF-*` only referenced in cross-links) |
+| aws-opensearch-ops | ✅ added | ✅ live (OS-HEAP-01 / OS-SHARD-01 via `signals["OpenSearch"]` from `audit_opensearch_health`) |
+| aws-cloudfront-ops | ✅ added | ✅ live (CF-ORIGIN-02 / CF-CACHE-01 via `signals["CloudFront"]` from `audit_cloudfront_signals`; CF-ORIGIN-01 / CF-EDGE-01 / CF-S3-01 from cross-links) |
 | aws-eks-ops | ✅ added | ✅ live (EKS-NG-02 via `signals["EKS"]`; EKS-NODE-01 / EKS-OOM-01 via `signals["EKS_NODE"]` from Container Insights) |
-| aws-athena-ops | ✅ added | ⏳ deferred (no `Athena` PRODUCTS entry) |
-| aws-ram-ops | ✅ added | ⏳ deferred (no `RAM` PRODUCTS entry) |
-| aws-secretsmanager-ops | ✅ added | ⏳ deferred (no `SecretsManager` PRODUCTS entry) |
-| aws-opensearch-ops | ✅ added | ✅ exists (OS-HEAP-01 / OS-SHARD-01) |
-| aws-cloudfront-ops | ✅ added | ✅ exists (CF-ORIGIN-01 / CF-EDGE-01 / CF-S3-01 …) |
-| aws-eks-ops | ✅ added | ✅ live (EKS-NG-02) |
-| aws-athena-ops | ✅ added | ⏳ to be added (Phase 2) |
-| aws-ram-ops | ✅ added | ⏳ to be added (Phase 3) |
-| aws-secretsmanager-ops | ✅ added | ⏳ to be added (Phase 3) |
+| aws-athena-ops | ✅ added | ✅ live (ATHENA-COST-01 via `signals["Athena"]` from `audit_athena_cost`) |
+| aws-ram-ops | ✅ added | ✅ live (RAM-SHARE-01 via `signals["RAM"]` from `audit_ram_shares`) |
+| aws-secretsmanager-ops | ✅ added | ✅ live (SEC-ROTATE-01 via `signals["SecretsManager"]` from `audit_secrets_rotation`) |
 
 ## Rule semantics (full 8, independent of code status)
 
@@ -105,14 +99,17 @@ Swap-in requires only a different `audit_eks_nodes` collector; the inference rul
 - Trigger: `CacheHitRate` < 0.8
 - Action: delegate `aws-cloudfront-ops`
 
-### ATHENA-COST-01 (Phase 2)
-- Trigger: Athena query `EstimatedBytesScanned` anomaly OR duration > 600s
+### ATHENA-COST-01 (Phase 2) — ✅ implemented 2026-07-19
+- Trigger: Athena workgroup `ProcessedBytes` over 6h window >= 5e9 (WARN) / >= 2e10 (CRITICAL)
 - Action: delegate `aws-athena-ops`
+- Source: `audit_athena_cost` (collector) → `signals["Athena"]`
 
-### RAM-SHARE-01 (Phase 3)
-- Trigger: RAM `ShareStatus` != ACTIVE OR principal association rejected
+### RAM-SHARE-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: RAM `ShareStatus` != ACTIVE OR principal association rejected (FAILED)
 - Action: delegate `aws-ram-ops`
+- Source: `audit_ram_shares` (collector) → `signals["RAM"]`
 
-### SEC-ROTATE-01 (Phase 3)
-- Trigger: SecretsManager `LastRotated` age > 90d
+### SEC-ROTATE-01 (Phase 3) — ✅ implemented 2026-07-19
+- Trigger: SecretsManager `LastRotated` age > 90d (WARN) / > 180d or rotation disabled (CRITICAL)
 - Action: delegate `aws-secretsmanager-ops`
+- Source: `audit_secrets_rotation` (collector) → `signals["SecretsManager"]`

@@ -6,8 +6,9 @@ Verifies the rule blocks added to `apply_chain_inference` in
   DYNAMO-GSI-01, EC-FAILOVER-01
 
 Note: OpenSearch / CloudFront / Athena / RAM / SecretsManager inference rules
-remain DEFERRED — `signals["<svc>"]` is never populated because those services
-have no PRODUCTS entry in `_shared.py`, so inference blocks would be dead code.
+were DEFERRED at Phase-1 but are now LIVE (closed 2026-07-19, Task #10
+Phase-2/3) — each has a native collector populating `signals["<svc>"]`.
+Their tests live in `test_inference_phase23.py`.
 EKS is the exception: `audit_eks_nodes` (native collector) populates
 `signals["EKS"]` at runtime, so `EKS-NG-02` fires; the EKS_NODE layer
 (CloudWatch Container Insights) drives `EKS-NODE-01` / `EKS-OOM-01`. See
