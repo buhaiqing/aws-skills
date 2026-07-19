@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/causal-graph-template.json",
+  "title": "Causal Graph Output",
+  "description": "Output schema for aws-topo-discovery causal graph operations, aligned with incident-schema.",
+  "type": "object",
+  "required": ["causal_graph"],
+  "properties": {
+    "causal_graph": {
+      "type": "object",
+      "required": ["generated_at", "time_window", "services", "edges"],
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp when the graph was generated"
+        },
+        "time_window": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string", "format": "date-time" },
+            "end": { "type": "string", "format": "date-time" }
+          }
+        },
+        "region": {
+          "type": "string",
+          "description": "AWS region, e.g. us-east-1"
+        },
+        "account": {
+          "type": "string",
+          "description": "AWS account ID"
+        },
+        "traces_analyzed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "xray_enabled": {
+          "type": "boolean",
+          "description": "True if X-Ray data was available; false if CloudWatch fallback was used"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "referenceId": { "type": "integer" }
+            }
+          },
+          "minItems": 1
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "type": "string", "description": "Upstream service name" },
+              "to": { "type": "string", "description": "Downstream service name" },
+              "latency_p50_ms": { "type": "number", "minimum": 0 },
+              "latency_p99_ms": { "type": "number", "minimum": 0 },
+              "error_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "trace_count": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "error_summaries": {
+          "type": "object",
+          "description": "X-Ray error distribution (empty if CloudWatch fallback)"
+        }
+      }
+    },
+    "cloudwatch_fallback": {
+      "type": "object",
+      "description": "CloudWatch Contributor Insights data when X-Ray is not enabled"
+    },
+    "anomalies": {
+      "type": "array",
+      "description": "Latency anomalies detected (from detect-anomalies mode)",
+      "items": {
+        "type": "object",
+        "required": ["service", "metric", "value_ms", "baseline_ms", "deviation_pct", "alert_level"],
+        "properties": {
+          "service": { "type": "string" },
+          "metric": { "type": "string", "enum": ["latency_p99", "error_rate", "connections"] },
+          "value_ms": { "type": "number" },
+          "baseline_ms": { "type": "number" },
+          "deviation_pct": { "type": "number" },
+          "alert_level": { "type": "string", "enum": ["WARNING", "CRITICAL"] }
+        }
+      }
+    },
+    "root_cause_candidates": {
+      "type": "array",
+      "description": "Top-3 root cause suspects from find-root-cause mode",
+      "items": {
+        "type": "object",
+        "required": ["service", "confidence", "reason"],
+        "properties": {
+          "service": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "depth": { "type": "integer" },
+          "direction": { "type": "string", "enum": ["target", "upstream", "downstream"] },
+          "error_rate": { "type": "number" },
+          "latency_p99_ms": { "type": "number" },
+          "reason": { "type": "string" }
+        }
+      },
+      "maxItems": 3
+    },
+    "_mode": {
+      "type": "string",
+      "enum": ["build-graph", "find-root-cause", "detect-anomalies"]
+    }
+  }
+}
