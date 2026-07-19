@@ -487,6 +487,7 @@ aws sts get-caller-identity --output json
 | Skill | Service | Status |
 |-------|---------|--------|
 | aws-aiops-orchestrator | **Cross-service AIOps Orchestrator** | ✅ **Complete v0.1.0 (NEW)** — see [§AIOps Architecture](#aiops-architecture) |
+| aws-finops-core | **Cross-service FinOps Composite** (cost anomaly, idle resource, tag compliance) | ✅ **Complete v1.0.0 (NEW)** |
 | aws-apigateway-ops | API Gateway (REST/HTTP APIs) | ✅ Complete v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ Complete v1.1.0 |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
