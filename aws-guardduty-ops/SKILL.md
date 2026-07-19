@@ -206,6 +206,49 @@ Confirm filter no longer exists.
 | ResourceNotFoundException | Filter doesn't exist |
 | AccessDeniedException | Check IAM permissions for guardduty:DeleteFilter |
 
+### Operation: Archive Finding
+
+**Use case**: Close a GuardDuty finding after investigation/mitigation (e.g., RB-SEC-01 forensic isolation completed).
+
+#### Pre-flight
+1. Verify CLI availability (`aws --version`)
+2. Validate credentials (`aws sts get-caller-identity`)
+3. Confirm finding ID and detector ID from enrichment step
+
+#### Execute — CLI (Primary)
+```bash
+aws guardduty archive-findings \
+  --detector-id {{user.detector_id}} \
+  --finding-ids {{user.finding_ids}} \
+  --region "{{user.region}}" \
+  --output json
+```
+
+#### Execute — boto3 (Fallback)
+```python
+client.archive_findings(
+    DetectorId='{{user.detector_id}}',
+    FindingIds=['{{user.finding_id}}']
+)
+```
+
+#### Validate
+```bash
+aws guardduty get-findings \
+  --detector-id {{user.detector_id}} \
+  --finding-ids {{user.finding_ids}} \
+  --query 'Findings[0].Status' \
+  --output text
+# Expected: ARCHIVED
+```
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidInputException | Check finding ID format |
+| ResourceNotFoundException | Verify detector_id and finding_id |
+| BadRequestException | Finding already archived |
+
 ## Reference Files
 
 - [AWS CLI Usage](references/aws-cli-usage.md)

@@ -366,6 +366,37 @@ parse and validate:
 5. **Output format**: always include a final `aiops_context:` JSON
    block in the response, even on failure.
 
+### Operation: Get Credential Report
+
+**Use case**: Audit all IAM users for access key age and MFA status (RB-SEC-18 S6: root account credential audit).
+
+#### Execute — CLI
+```bash
+# Step 1: generate (if not already cached — cached for ~4h)
+aws iam generate-credential-report --output json
+# Step 2: retrieve
+aws iam get-credential-report --output json | jq -r '.Content' | base64 -d | head -5
+```
+
+#### Execute — boto3 (Fallback)
+```python
+client.generate_credential_report()
+resp = client.get_credential_report()
+import csv, io
+reader = csv.DictReader(io.StringIO(resp['Content'].decode()))
+for row in reader:
+    print(f"{row['user']}: key_last_used={row.get('access_key_1_last_used', 'N/A')}")
+```
+
+#### Validate
+Confirm report is `COMPLETE` state before parsing.
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| ReportNotComplete | Retry after 5s (report generation takes ~10s) |
+| AccessDenied | Requires iam:GetCredentialReport permission |
+
 ### Cross-reference
 
 This skill participates in the orchestrator's runbook library. See

@@ -476,6 +476,7 @@ rule:
 - **default_severity**: critical
 - **default_decision**: MANUAL (security findings → human review;
   legal/compliance implications)
+- **trigger_runbook**: RB-SEC-01
 
 ### SD-02 — S3 bucket public
 
@@ -524,6 +525,7 @@ rule:
 - **condition**: any `userIdentity.type == Root` event
 - **default_severity**: critical
 - **default_decision**: MANUAL
+- **trigger_runbook**: RB-SEC-18
 
 ## 6. Change Detection (CD)
 

@@ -645,6 +645,54 @@ done
 | SnapshotCreationPerVolumeRateExceeded | HALT — too many concurrent snapshots |
 | ThrottlingException | Backoff; retry 3x |
 
+### Operation: Create Forensic Snapshots
+
+**Use case**: Snapshot all volumes attached to an EC2 instance for forensic investigation (RB-SEC-01 S3).
+
+#### Pre-flight
+- Verify instance exists (`describe-instances`)
+- List all attached volumes (`describe-volumes`, filter by attachment.instance-id)
+
+#### Execute — CLI (Primary)
+```bash
+# Step 1: collect volume IDs
+VOLUME_IDS=$(aws ec2 describe-volumes \
+  --filters "Name=attachment.instance-id,Values={{user.instance_id}}" \
+  --region "{{user.region}}" \
+  --query 'Volumes[].VolumeId' \
+  --output text)
+
+# Step 2: snapshot each volume
+for VOL in $VOLUME_IDS; do
+  aws ec2 create-snapshot \
+    --volume-id "$VOL" \
+    --description "Forensic snapshot instance={{user.instance_id}} finding={{user.finding_id}}" \
+    --region "{{user.region}}" \
+    --output json | jq -r '.SnapshotId'
+done
+```
+
+#### Execute — boto3 (Fallback)
+```python
+volumes = ec2.describe_volumes(
+    Filters=[{'Name': 'attachment.instance-id', 'Values': [instance_id]}])
+for vol in volumes['Volumes']:
+    snap = ec2.create_snapshot(
+        VolumeId=vol['VolumeId'],
+        Description=f"Forensic snapshot instance={instance_id}")
+    print(f"Snapshot: {snap['SnapshotId']}")
+```
+
+#### Validate
+Poll each snapshot until `completed` (max 300s, interval 10s).
+
+#### Recover
+| Error | Action |
+|-------|--------|
+| InvalidInstanceID.NotFound | HALT |
+| SnapshotCreationPerVolumeRateExceeded | Backoff 30s; retry 3x |
+| InsufficientInstanceCapacity | Skip that volume; continue others |
+
 ### Operation: Create Image (AMI)
 
 #### Pre-flight
