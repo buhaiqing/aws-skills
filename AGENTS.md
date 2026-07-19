@@ -446,7 +446,7 @@ Codified in `gcl-spec.md` §8. Highlights:
 
 ## 12. CodeGraph Integration（代码知识图谱集成）
 
-本地优先的代码知识图谱工具（[colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)，已装 `/Users/bohaiqing/.local/bin/codegraph`，Node v22.19.0）。用 tree-sitter 建本地 SQLite 图谱（`.codegraph/codegraph.db`），通过 MCP（工具 `codegraph_explore` / `codegraph_node`）集成进 OpenCode。100% 本地、无数据外泄。
+本地优先的代码知识图谱工具（[colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)，已装 `/Users/bohaiqing/.local/bin/codegraph`，Node v22.19.0）。用 tree-sitter 建本地 SQLite 图谱（`.codegraph/codegraph.db`），通过 MCP（工具 `codegraph_explore` / `codegraph_node`）集成。**设计目标：跨 coding agent 通用**——同一份 `codegraph serve --mcp` 定义，自动投影到 OpenCode / Cursor / Claude Code / Codex / Hermes Agent / Kiro / CodeBuddy 等各自的原生配置，无需 per-agent 适配。100% 本地、无数据外泄。
 
 ### 目的
 
@@ -461,26 +461,26 @@ codegraph init .              # 首次建图（实测 564 nodes / 1,329 edges）
 codegraph sync .              # 增量同步自上次索引以来的变更（每次代码变更前必跑）
 codegraph explore "<symbol>"  # 查影响半径 / 跨文件调用点
 codegraph status              # 查索引状态（Files/Nodes/Edges/DB Size）
-codegraph install -t opencode   # 接 OpenCode MCP（写全局 ~/.config/opencode/）
 ```
 
-MCP 启用亦可手动在 `~/.config/opencode/opencode.jsonc` 的 `mcp` 下加：
-`"codegraph": { "type": "local", "command": ["codegraph","serve","--mcp"], "enabled": true }`。
-`codegraph install -t opencode` 会自动写入该配置，无需手改。
-CLI 等价命令（`codegraph explore` / `codegraph node` / `codegraph sync`）始终可用，无需 MCP 即可查询。
+### MCP 集成（跨 agent 通用，一次到位）
 
-### MCP 集成（必装）
-
-CodeGraph 通过 MCP server（`codegraph serve --mcp`）接入 OpenCode，提供
-`codegraph_explore` / `codegraph_node` 工具。安装（一次性）：
+**单一技术**：`codegraph serve --mcp`（stdio）。同一份 server 定义，通过
+`codegraph install -t all` 自动投影到各 agent 的原生配置文件
+（OpenCode / Cursor / Claude Code / Codex / Hermes / Kiro / CodeBuddy 等），
+各 agent 读自己的配置即可，**无需 per-agent 适配代码**：
 
 ```bash
-codegraph install -t opencode
+codegraph install -t all      # 投影 codegraph MCP 到所有已装 agent 的全局配置
+# 或指定： codegraph install -t opencode,cursor,claude,codex,hermes,codebuddy
 ```
 
-安装后重启 OpenCode session 即生效。若 MCP 未出现，检查
-`~/.config/opencode/opencode.jsonc` 的 `mcp.codegraph.enabled` 是否为
-`true`。卸载用 `codegraph uninstall -t opencode`。
+- **仓库级自动发现**：本仓库根已放 `.mcp.json`（声明 `mcpServers.codegraph`），
+  支持项目级 MCP 的 agent（Cursor / Claude Code / CodeBuddy 开 project-MCP）打开
+  本目录即自动感知并加载，无需手动 install。
+- **CLI 等价命令**（`codegraph explore` / `codegraph node` / `codegraph sync`）
+  始终可用，无 MCP 也可用——AGENTS.md §12 的"改前 sync + 跨技能校验"不依赖 MCP。
+- 安装后**重启对应 agent session** 生效；卸载用 `codegraph uninstall -t all`。
 
 ### 规则
 
