@@ -887,7 +887,184 @@ runbook:
   rollback_strategy: "N/A — credentials rotation is forward-only; record incident in audit log."
 ```
 
-## 18. RB-018 — ElastiCache Connection Saturation
+## 18. RB-SEC-01 — Compromised Instance Isolation
+
+**Trigger**: SD-01 (GuardDuty CRITICAL finding, severity >= 7.0 — CryptoCurrency/Backdoor/Trojan on EC2)
+**Decision tier**: AI_ASSIST (non-destructive SG swap, but blast radius on prod instance is large; human confirms)
+**Goal**: snapshot evidence, isolate the instance behind a forensic quarantine SG, archive the finding, notify security oncall.
+
+```yaml
+runbook:
+  id: RB-SEC-01
+  name: "Compromised Instance Isolation"
+  trigger_rules: [SD-01]
+  default_decision_tier: AI_ASSIST
+  preconditions:
+    - finding.resource.type == "EC2 instance"
+    - instance state != "terminated"
+
+  steps:
+    - id: S1 [orchestrator]
+      skill: orchestrator
+      action: enrich_finding
+      params: { finding: "{{u.finding}}" }
+      # Pull instance-id, attached ENIs/volumes, current SG, account/region,
+      # detector_id; emit forensic context used by S3-S6.
+
+    - id: S2
+      skill: aws-cloudtrail-ops
+      action: lookup_events
+      params:
+        # Filter by resource ARN or username to find instance-related API calls
+        LookupAttributes: [{Key: Resource, Value: "arn:aws:ec2:{{user.region}}:{{user.account_id}}:instance/{{S1.instance_id}}"}]
+        StartTime: "{{u.window_start}}"
+        EndTime: "{{u.window_end}}"
+      on_failure: skip
+
+    - id: S3
+      skill: aws-ec2-ops
+      action: create_forensic_snapshots
+      params:
+        instance_id: "{{S1.instance_id}}"
+        finding_id: "{{u.finding.id}}"
+      on_failure: halt
+      # EVIDENCE — preserve before any isolation. Backs the rollback path.
+
+    - id: S4
+      skill: aws-ec2-ops
+      action: modify_instance_attribute
+      params:
+        instance_id: "{{S1.instance_id}}"
+        # EC2 ModifyInstanceAttribute --groups replaces ALL security groups
+        Groups: ["{{u.forensic_quarantine_sg_id}}"]
+      requires_confirm: true   # SG swap is the only write — large blast radius
+      on_failure: halt
+      idempotency_key: "rbs01-{{u.finding.id}}"
+      rollback: modify_instance_attribute -> restore original Groups list
+
+    - id: S5
+      skill: aws-guardduty-ops
+      action: archive_finding
+      params:
+        detector_id: "{{S1.detector_id}}"
+        finding_id: "{{u.finding.id}}"
+      on_failure: skip
+
+    - id: S6
+      skill: aws-sns-ops
+      action: publish
+      params:
+        topic_arn: "{{u.security_topic_arn}}"
+        subject: "GuardDuty CRITICAL — instance isolation ({{u.finding.id}})"
+        message: "{{S1.context}}"
+      requires_confirm: false
+
+    - id: S7 [orchestrator]
+      skill: orchestrator
+      action: schedule_post_checks
+      params:
+        window: PT30M
+        checks:
+          - verify: SSM session reachable on instance
+          - verify: no new outbound connections via VPC Flow Logs
+
+  post_checks:
+    - verify: instance still reachable via SSM Session Manager
+    - verify: zero new outbound connections for PT30M (via VPC Flow Logs)
+
+  estimated_mttr: PT15M
+  rollback_strategy: "Restore original SG association via modify-instance-attribute (groups). Snapshots retained 90d minimum; no destructive action beyond SG swap."
+  owner: security
+  tested_in: [staging]
+```
+
+## 19. RB-SEC-18 — Root Account Usage Alert
+
+**Trigger**: SD-07 (CloudTrail event with `userIdentity.type == Root`)
+**Decision tier**: AI_ASSIST (notify + propose hard-mitigations; human confirms writes)
+**Goal**: capture the root event, install a durable alarm, notify security oncall, and propose account-hardening actions.
+
+```yaml
+runbook:
+  id: RB-SEC-18
+  name: "Root Account Usage Alert"
+  trigger_rules: [SD-07]
+  default_decision_tier: AI_ASSIST
+  preconditions:
+    - event occurred in last PT5M
+    - event.userIdentity.invokedBy != "aws-internal"   # exclude known break-glass chain
+
+  steps:
+    - id: S1
+      skill: aws-cloudtrail-ops
+      action: lookup_events
+      params:
+        # Filter for root user events
+        LookupAttributes: [{Key: Username, Value: "Root"}]
+        StartTime: "{{u.start_time}}"
+        EndTime: "{{u.end_time}}"
+      on_failure: halt
+
+    - id: S2
+      skill: aws-cloudtrail-ops
+      action: lookup_events
+      params:
+        LookupAttributes: [{Key: Username, Value: "Root"}]
+        StartTime: "{{u.window_24h_start}}"
+        EndTime: "{{u.window_24h_end}}"
+      on_failure: skip
+
+    - id: S3 [orchestrator]
+      skill: orchestrator
+      action: enrich_event
+      params: { event: "{{S1.event}}" }
+      # Tag with severity, geo-IP if available, source-IP reputation.
+
+    - id: S4
+      skill: aws-cloudwatch-ops
+      action: put_metric_alarm
+      params:
+        alarm_name: "RootAccountUsage"
+        namespace: "AWS/CloudTrail"
+        metric_name: "RootUserActivityCount"
+        threshold: 1
+        period: 300
+        statistic: Sum
+        treat_missing_data: notBreaching
+      requires_confirm: false   # durable monitor; idempotent
+      idempotency_key: "rbs18-alarm-RootAccountUsage"
+
+    - id: S5
+      skill: aws-sns-ops
+      action: publish
+      params:
+        topic_arn: "{{u.security_oncall_topic_arn}}"
+        subject: "HIGH — AWS root account usage detected ({{u.event_id}})"
+        message: "{{S3.enriched}}"
+      requires_confirm: false
+
+    - id: S6
+      skill: aws-iam-ops
+      action: get_credential_report
+      params: {}
+      # Read-only: generate+get credential report; filter rows where user=="<root_account>"
+      on_failure: skip
+      on_failure: skip
+
+    - id: S7 [orchestrator]
+      skill: orchestrator
+      action: propose_mitigations
+      params: { source: [S1, S2, S6] }
+      # Text-only output: disable/delete root access keys, enable root MFA,
+      # restrict break-glass role chain. Emitted to operator for review.
+
+  estimated_mttr: PT5M
+  rollback_strategy: "N/A — alarm creation is idempotent; SNS notify is forward-only."
+  owner: security
+  tested_in: [staging]
+```
+
+## 20. RB-018 — ElastiCache Connection Saturation
 
 **Trigger**: ElastiCache CPU/connection pressure
 **Decision tier**: AI_ASSIST
@@ -1386,6 +1563,8 @@ runbook:
 | RB-015 | EBS Volume Saturation | PD-02 | AI_ASSIST | PT20M | ec2, ssm, cloudwatch |
 | RB-016 | KMS Key Compliance Failure | SD-05 | AI_ASSIST | PT10M | kms, cloudwatch |
 | RB-017 | IAM Credential Leak Response | SD-04 | MANUAL | PT1H | iam, cloudtrail, sns |
+| RB-SEC-01 | Compromised Instance Isolation | SD-01 | AI_ASSIST | PT15M | guardduty, cloudtrail, ec2, sns |
+| RB-SEC-18 | Root Account Usage Alert | SD-07 | AI_ASSIST | PT5M | cloudtrail, cloudwatch, iam, sns |
 | RB-018 | ElastiCache Connection Saturation | ElastiCache-sat | AI_ASSIST | PT20M | elasticache, cloudwatch |
 | RB-019 | OpenSearch Cluster Yellow/Red | FD-14 | AI_ASSIST | PT45M | opensearch, cloudwatch |
 | RB-020 | S3 Lifecycle Gap Remediation | CO-06 | MANUAL | PT15M | s3, cloudwatch |
@@ -1402,7 +1581,8 @@ runbook:
 - All `FD-*` fault detection rules have at least one runbook (RB-001/002/003/007/011/012/019/021/023/025).
 - All `PD-*` predictive rules have at least one runbook (RB-004/010/015/024/026/027).
 - All `CO-*` cost rules have at least one runbook (RB-006/009/020/022).
-- All `SD-*` security rules have at least one runbook (RB-008/014/016/017).
+- All `SD-*` security rules have at least one runbook (RB-008/014/016/017/SEC-01/SEC-18).
+  RB-SEC-01 covers SD-01 (GuardDuty CRITICAL on EC2); RB-SEC-18 covers SD-07 (root account usage).
 - All `CD-*` change rules use the orchestrator's standard change-impact flow.
 
 ## 12. Runbook Selection Logic

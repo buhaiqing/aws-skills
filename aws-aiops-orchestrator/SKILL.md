@@ -361,6 +361,30 @@ Layer 5: execute [AUTO_HEAL] tier actions sequentially
 Layer 6: track MTTR per incident; update runbook success rate
 ```
 
+### Scenario 6 — "自动遏制失陷实例 / 根账号使用" (security incident containment)
+
+```
+Intent: self-heal, scope=security-rule (SD-01 / SD-07), action_mode=auto-heal
+Layer 0: parse SD-01 (GuardDuty CRITICAL on EC2) or SD-07 (root user event)
+        → look up trigger_runbook in detection-rules.md
+        → match RB-SEC-01 (compromised instance) or RB-SEC-18 (root account)
+Layer 1: delegate to
+  - aws-guardduty-ops (RB-SEC-01 S1/S5)  / aws-cloudtrail-ops (RB-SEC-18 S1)
+  - aws-ec2-ops (RB-SEC-01 S3/S4)
+  - aws-cloudtrail-ops (RB-SEC-01 S2)
+  - aws-cloudwatch-ops (RB-SEC-18 S4)
+Layer 2: enrich finding/event with context (account/region, ENIs, source IP)
+Layer 3: correlate recent API activity for forensic timeline
+Layer 4: classify — all security runbooks force [AI_ASSIST] tier;
+        destructive EC2 write (RB-SEC-01 S4) requires confirmation token
+        before execution; RB-SEC-18 S4/S5 are local mutates (idempotent)
+Layer 5: execute RB-SEC-01 S1-S6 / RB-SEC-18 S1-S5 sequentially
+        → halt at any halt branch (S3/S4 of RB-SEC-01; S1 of RB-SEC-18)
+        → S6/S7 emit mitigation proposals only (no writes)
+Layer 6: track MTTR; archive finding (RB-SEC-01 S5); post-check SSM reachability
+        and zero new outbound connections for PT30M
+```
+
 ## Detection Rule Library (summary)
 
 See `references/detection-rules.md` for the full library. Each rule has:
