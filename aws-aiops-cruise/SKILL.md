@@ -110,6 +110,7 @@ Patrol follows the **AWS reference stack** in [`references/aws-aiops-stack.md`](
 | Athena diagnosis | `aws-athena-ops` | Query cost, scan volume, timeouts |
 | RAM diagnosis | `aws-ram-ops` | Resource share status, principal association |
 | Secrets Manager diagnosis | `aws-secretsmanager-ops` | Rotation age, secret access |
+| Capacity forecast | `aws-cloudwatch-ops` | 14-day trend prediction, proactive resize recommendations |
 
 ## EKS Node & Pod Detection
 
