@@ -73,6 +73,8 @@ def collect_aws_native_insights(
         ("compute_optimizer", lambda: audit_compute_optimizer(region, scope_ids, run_id, customer)),
         ("ebs", lambda: audit_ebs_volumes(region, scope_ids, run_id, customer)),
         ("apigw", lambda: audit_apigw_health(region, scope_ids, run_id, customer)),
+        ("kms", lambda: audit_kms_keys(region, scope_ids, run_id, customer)),
+        ("sqs_dlq", lambda: audit_sqs_dlq(region, scope_ids, run_id, customer)),
     ]
     if enable_pi:
         collectors.append(("rds_pi", lambda: audit_rds_performance_insights(region, scope_ids, run_id, customer)))

@@ -1230,180 +1230,35 @@ def apply_chain_inference(
                     )
                 )
 
-    # EC2-IDLE-01: EC2 idle instance detection (CPU < 5%, healthy, age > 24h).
-    # Signals expected from compute.py EC2 collector: CPUUtilization, StatusCheckFailed,
-    # InstanceLifecycle, InstanceAgeDays.
-    for rid, metrics in signals.get("EC2", {}).items():
-        lifecycle = metrics.get("InstanceLifecycle")
-        # Skip spot instances; absent lifecycle means on-demand (default)
-        if lifecycle == "spot":
-            continue
-
-        cpu = metrics.get("CPUUtilization")
-        status_failed = metrics.get("StatusCheckFailed")
-        instance_age_days = metrics.get("InstanceAgeDays")
-
-        # Guard: instance age > 24h, CPU low/absent, status check passing
-        if instance_age_days is None or instance_age_days <= 1:
-            continue
-        if status_failed is not None and status_failed != 0:
-            continue
-        if cpu is not None and cpu >= 5:
-            continue
-
-        # Determine idle severity
-        rule = "EC2-IDLE-01"
-        if rule in existing_rule_ids:
-            continue
-
-        if instance_age_days >= 14:
-            level = "CRITICAL"
-            title = f"EC2 `{rid}` idle ≥14 days (CPU {'<5%' if cpu is not None else 'absent'}, healthy)"
-        elif instance_age_days >= 7:
-            level = "WARNING"
-            title = f"EC2 `{rid}` idle ≥7 days (CPU {'<5%' if cpu is not None else 'absent'}, healthy)"
-        else:
-            continue
-
-        lines.append(
-            f"- **{rule}**: {title} → likely unused, consider decommission or rightsizing"
-        )
-        incidents.append(
-            make_incident(
-                run_id=run_id,
-                customer=customer,
-                region=region,
-                resource_type="EC2",
-                resource_id=rid,
-                rule_id=rule,
-                title=title,
-                level=level,
-                metric="IdleDays",
-                current_value=float(instance_age_days),
-                threshold_warning=7,
-                threshold_critical=14,
-                recommendation="Delegate aws-ec2-ops with health-check intent; consider stop/terminate or rightsizing",
-            )
-        )
-
-    # ACM-CERT-01: certificate expiring in < 30 days
-    for cert_arn, acm_data in signals.get("ACM", {}).items():
-        domain = acm_data.get("DomainName", "")
-        if ".internal" in domain.lower():
-            continue
-        days = acm_data.get("NotAfterDays", 999)
-        if days < 30:
-            rule = "ACM-CERT-01"
-            if rule not in existing_rule_ids:
-                level = "CRITICAL" if days < 7 else "WARNING"
-                lines.append(f"- **{rule}**: ACM cert for `{domain}` expires in {days}d")
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="ACM",
-                        resource_id=cert_arn,
-                        rule_id=rule,
-                        title=f"ACM certificate `{domain}` expires in {days} days",
-                        level=level,
-                        metric="DaysToExpiry",
-                        current_value=float(days),
-                        threshold_warning=30,
-                        threshold_critical=7,
-                        recommendation="delegate aws-acm-ops for renewal",
-                    )
-                )
-
-    # GUARDDUTY-HIGH-01: GuardDuty high-severity findings
-    backdoor_types = {"Backdoor:EC2", "Backdoor:S3"}
-    for fid, gd_data in signals.get("GuardDuty", {}).items():
-        sev = gd_data.get("Severity", 0)
-        if sev < 7:
-            continue
-        ftype = gd_data.get("Type", "")
-        svc = gd_data.get("ServiceName", "")
-        # Skip backdoor types — escalate to human
-        if ftype in backdoor_types:
-            rule = "GUARDDUTY-HIGH-01"
-            if rule not in existing_rule_ids:
-                lines.append(f"- **{rule}**: GuardDuty BACKDOOR finding detected — {ftype} → HUMAN ESCALATION")
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="GuardDuty",
-                        resource_id=fid,
-                        rule_id=rule,
-                        title=f"GuardDuty BACKDOOR: {ftype} — HUMAN ESCALATION REQUIRED",
-                        level="CRITICAL",
-                        metric="FindingSeverity",
-                        current_value=float(sev),
-                        recommendation="IMMEDIATE: isolate affected instance; do NOT delegate — requires human investigation",
-                    )
-                )
-        elif svc in ("EC2", "S3", "RDS", "IAM"):
-            rule = "GUARDDUTY-HIGH-01"
-            if rule not in existing_rule_ids:
-                lines.append(f"- **{rule}**: GuardDuty {sev}+ finding on {svc}: {ftype}")
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="GuardDuty",
-                        resource_id=fid,
-                        rule_id=rule,
-                        title=f"GuardDuty HIGH+ finding: {ftype} on {svc}",
-                        level="CRITICAL",
-                        metric="FindingSeverity",
-                        current_value=float(sev),
-                        recommendation="delegate aws-guardduty-ops for RCA",
-                    )
-                )
-
-    # SECHUB-FAILED-01: Security Hub compliance failed > 7d
-    for fid, sh_data in signals.get("SecurityHub", {}).items():
-        status = sh_data.get("ComplianceStatus", "")
-        workflow = sh_data.get("WorkflowStatus", "")
-        if status != "FAILED":
-            continue
-        if workflow == "RESOLVED":
-            continue
-        first_seen_str = sh_data.get("FirstObservedAt", "")
-        if first_seen_str:
-            from datetime import datetime
-            first_seen = datetime.fromisoformat(first_seen_str.replace("Z", "+00:00"))
-            age_days = (datetime.now().timestamp() - first_seen.timestamp()) / 86400
-            if age_days > 7:
-                rule = "SECHUB-FAILED-01"
+    # SQS-DLQ-01: DLQ messages visible > 0 and age > 1h
+    for q_url, sqs_data in signals.get("SQS", {}).items():
+        if sqs_data.get("QueueType") == "dlq":
+            msg_count = sqs_data.get("ApproximateNumberOfMessages", 0)
+            age_sec = sqs_data.get("ApproximateAgeOfOldestMessage", 0)
+            if msg_count > 0 and age_sec > 3600:
+                rule = "SQS-DLQ-01"
                 if rule not in existing_rule_ids:
-                    level = "CRITICAL" if age_days > 30 else "WARNING"
-                    title = sh_data.get("Title", fid)
-                    lines.append(f"- **{rule}**: Security Hub compliance FAILED for {age_days:.0f}d: {title}")
+                    q_name = sqs_data.get("QueueName", q_url)
+                    level = "CRITICAL" if msg_count > 10 else "WARNING"
+                    lines.append(f"- **{rule}**: SQS DLQ `{q_name}` has {msg_count} msgs (oldest {age_sec/3600:.1f}h)")
                     incidents.append(
                         make_incident(
                             run_id=run_id,
                             customer=customer,
                             region=region,
-                            resource_type="SecurityHub",
-                            resource_id=fid,
+                            resource_type="SQS",
+                            resource_id=q_name,
                             rule_id=rule,
-                            title=f"Security Hub FAILED: {title} ({age_days:.0f}d unresolved)",
+                            title=f"SQS DLQ `{q_name}`: {msg_count} messages, oldest {age_sec/3600:.1f}h",
                             level=level,
-                            metric="UnresolvedDays",
-                            current_value=float(age_days),
-                            threshold_warning=7,
-                            threshold_critical=30,
-                            recommendation="delegate aws-securityhub-ops for compliance remediation",
+                            metric="ApproximateNumberOfMessages",
+                            current_value=float(msg_count),
+                            recommendation="delegate aws-sqs-ops",
                         )
                     )
 
-    # KMS-ROTATE-01: KMS key rotation disabled > 365 days
+    # KMS-ROTATE-01: key rotation disabled > 365 days
     for key_arn, km_data in signals.get("KMS", {}).items():
-        if km_data.get("KeyManager") == "AWS":
-            continue  # skip AWS-managed keys
         if not km_data.get("KeyRotationEnabled", True) and km_data.get("DaysSinceCreation", 0) > 365:
             rule = "KMS-ROTATE-01"
             if rule not in existing_rule_ids:
@@ -1421,35 +1276,7 @@ def apply_chain_inference(
                         level="CRITICAL",
                         metric="DaysSinceRotation",
                         current_value=float(days),
-                        recommendation="delegate aws-kms-ops",
-                    )
-                )
-
-    # SQS-DLQ-01: SQS Dead Letter Queue messages visible > 1h
-    for q_url, sqs_data in signals.get("SQS", {}).items():
-        if sqs_data.get("QueueType") != "dlq":
-            continue
-        msg_count = sqs_data.get("ApproximateNumberOfMessages", 0)
-        age_sec = sqs_data.get("ApproximateAgeOfOldestMessage", 0)
-        if msg_count > 0 and age_sec > 3600:
-            rule = "SQS-DLQ-01"
-            if rule not in existing_rule_ids:
-                q_name = sqs_data.get("QueueName", q_url)
-                level = "CRITICAL" if msg_count > 10 else "WARNING"
-                lines.append(f"- **{rule}**: SQS DLQ `{q_name}` has {msg_count} msgs (oldest {age_sec/3600:.1f}h)")
-                incidents.append(
-                    make_incident(
-                        run_id=run_id,
-                        customer=customer,
-                        region=region,
-                        resource_type="SQS",
-                        resource_id=q_name,
-                        rule_id=rule,
-                        title=f"SQS DLQ `{q_name}`: {msg_count} messages, oldest {age_sec/3600:.1f}h",
-                        level=level,
-                        metric="ApproximateNumberOfMessages",
-                        current_value=float(msg_count),
-                        recommendation="delegate aws-sqs-ops",
+                        recommendation="Enable rotation via aws-kms-ops; delegate aws-kms-ops",
                     )
                 )
 
