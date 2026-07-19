@@ -31,7 +31,7 @@ mutating AWS calls (consistent with GCL fail-closed).
 |-------|---------|-----------------------------------|
 | aws-dynamodb-ops | ✅ added | ✅ live (DYNAMO-THROTTLE-01 / DYNAMO-GSI-01) |
 | aws-elasticache-ops | ✅ added | ✅ live (EC-MEM-01 / EC-FAILOVER-01 / CACHE-EVICT-01) |
-| aws-opensearch-ops | ✅ added | ✅ live (OS-HEAP-01 / OS-SHARD-01 via `signals["OpenSearch"]` from `audit_opensearch_health`) |
+| aws-opensearch-ops | ✅ added | ✅ live (OS-HEAP-01 / OS-SHARD-01 / **OS-MASTER-01 / OS-SNAP-01** via `signals["OpenSearch"]` from `audit_opensearch_health`) |
 | aws-cloudfront-ops | ✅ added | ✅ live (CF-ORIGIN-02 / CF-CACHE-01 via `signals["CloudFront"]` from `audit_cloudfront_signals`; CF-ORIGIN-01 / CF-EDGE-01 / CF-S3-01 from cross-links) |
 | aws-eks-ops | ✅ added | ✅ live (EKS-NG-02 via `signals["EKS"]`; EKS-NODE-01 / EKS-OOM-01 via `signals["EKS_NODE"]` from Container Insights) |
 | aws-athena-ops | ✅ added | ✅ live (ATHENA-COST-01 via `signals["Athena"]` from `audit_athena_cost`) |
@@ -63,6 +63,17 @@ mutating AWS calls (consistent with GCL fail-closed).
 ### OS-SHARD-01 (implemented)
 - Trigger: `ClusterIndexWritesBlocked` = true OR `UnassignedShards` > 0
 - Action: delegate `aws-opensearch-ops`
+
+### OS-MASTER-01 (Phase 1 OS-signals) — ✅ live
+- Trigger: OpenSearch `MasterReachableFromNode` == 0 (master not reachable from node)
+- Guard: skip when metric is absent (None)
+- Action: delegate `aws-opensearch-ops`
+- Source: `audit_opensearch_health` (collector) → `signals["OpenSearch"]`
+
+### OS-SNAP-01 (Phase 1 OS-signals) — ✅ live
+- Trigger: OpenSearch `AutomatedSnapshotFailure` > 0
+- Action: delegate `aws-opensearch-ops`
+- Source: `audit_opensearch_health` (collector) → `signals["OpenSearch"]`
 
 ### EKS-NODE-01 (implemented)
 - Trigger: EKS node `NotReady` (CloudWatch Container Insights `node_status_condition_ready`, summarized as `NodeNotReadyMin`) < 1.0

@@ -155,6 +155,33 @@ def test_opensearch_heap_absent_skips():
     inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": None, "ClusterIndexWritesBlocked": 0.0, "UnassignedShards": 0.0}}})
     assert "OS-HEAP-01" not in {i["rule_id"] for i in inc}
 
+# --- OpenSearch: OS-MASTER-01 / OS-SNAP-01 ---------------------------
+def test_opensearch_master_miss_reachable():
+    inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": 50.0, "MasterReachableFromNode": 1}}})
+    by = _by_rule(inc)
+    assert "OS-MASTER-01" not in by
+
+def test_opensearch_master_crit_unreachable():
+    inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": 50.0, "MasterReachableFromNode": 0}}})
+    by = _by_rule(inc)
+    assert by["OS-MASTER-01"]["level"] == "CRITICAL"
+    assert by["OS-MASTER-01"]["current_value"] == 0.0
+
+def test_opensearch_master_absent_skips():
+    inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": 50.0, "MasterReachableFromNode": None}}})
+    assert "OS-MASTER-01" not in {i["rule_id"] for i in inc}
+
+def test_opensearch_snap_miss_none():
+    inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": 50.0, "AutomatedSnapshotFailure": 0.0}}})
+    assert "OS-SNAP-01" not in {i["rule_id"] for i in inc}
+
+def test_opensearch_snap_crit_failure():
+    inc = _run({"OpenSearch": {"dom1": {"JVMMemoryPressure": 50.0, "AutomatedSnapshotFailure": 2.0}}})
+    by = _by_rule(inc)
+    assert by["OS-SNAP-01"]["level"] == "CRITICAL"
+    assert by["OS-SNAP-01"]["current_value"] == 2.0
+
+
 
 # --- Non-regression: Phase-1 rules still fire on their own keys ----
 def test_phase1_still_fires_unchanged():

@@ -39,6 +39,8 @@ def audit_opensearch_health(
         batch.append((_NS, "JVMMemoryPressure", _DIM, name, "Maximum"))
         batch.append((_NS, "ClusterIndexWritesBlocked", _DIM, name, "Maximum"))
         batch.append((_NS, "UnassignedShards", _DIM, name, "Maximum"))
+        batch.append((_NS, "MasterReachableFromNode", _DIM, name, "Maximum"))
+        batch.append((_NS, "AutomatedSnapshotFailure", _DIM, name, "Maximum"))
 
     if not batch:
         return incidents, {"OpenSearch": signals}
@@ -49,12 +51,18 @@ def audit_opensearch_health(
         jvm = results.get(("JVMMemoryPressure", name))
         blocked = results.get(("ClusterIndexWritesBlocked", name))
         unassigned = results.get(("UnassignedShards", name))
+        master = results.get(("MasterReachableFromNode", name))
+        snap = results.get(("AutomatedSnapshotFailure", name))
         signals[name] = {
             # None when absent so the inference rule can skip missing pressure data
             "JVMMemoryPressure": (jvm or {}).get("max"),
             # 0.0 default so the boolean/count rules still evaluate
             "ClusterIndexWritesBlocked": (blocked or {}).get("max") or 0.0,
             "UnassignedShards": (unassigned or {}).get("max") or 0.0,
+            # None when absent so OS-MASTER-01 can skip missing reachability data
+            "MasterReachableFromNode": (master or {}).get("max"),
+            # 0.0 default so OS-SNAP-01 still evaluates when no failure signaled
+            "AutomatedSnapshotFailure": (snap or {}).get("max") or 0.0,
         }
 
     return incidents, {"OpenSearch": signals}
