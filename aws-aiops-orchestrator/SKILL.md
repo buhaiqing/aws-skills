@@ -59,7 +59,7 @@ metadata:
     - aws-stepfunctions-ops
     - aws-eventbridge-ops  # event-driven remediation triggers
     - aws-aiops-cruise     # read-only full-chain patrol producer
-    - aws-topo-discovery   # topology manifest + health overlay
+    - aws-topo-discovery   # topology manifest + health overlay + causal graph (RCA)
     - aws-sns-ops          # alert fanout
     - aws-sqs-ops          # async work queue
     - aws-dynamodb-ops     # NoSQL throttling + GSI diagnosis
@@ -311,7 +311,10 @@ Layer 1: delegate to
   - aws-waf-ops → recent WAF rule matches, block rate spike
   - aws-cloudtrail-ops → change events on each resource in last 1h
 Layer 2: collect all signals
-Layer 3: build timeline; correlate changes with symptom onset
+Layer 3: build timeline; correlate changes with symptom onset; build causal graph:
+  - `aws-topo-discovery` → `get-causal-graph` via `scripts/causal-graph.sh` (X-Ray traces → service topology)
+  - `aws-topo-discovery` → `find-root-cause` via `scripts/causal_inference.py` (rank top-3 suspects)
+  - Delegate to product-level skill for targeted deep diagnosis
 Layer 4: emit top-3 hypotheses ranked by likelihood
 Layer 5: optionally trigger runbook (auto-heal tier only)
 Layer 6: record RCA outcome for future learning
@@ -409,6 +412,7 @@ the blueprint and the matching `aws-*-ops` skills as the executors.
 | Threat correlation | `aws-guardduty-ops` |
 | Security findings aggregation | `aws-securityhub-ops` |
 | Storage cost / lifecycle | `aws-s3-ops` |
+| Topology + causal graph | `aws-topo-discovery` (causal graph operations) |
 | Event-driven triggers | `aws-eventbridge-ops` |
 | Alert fanout | `aws-sns-ops` |
 | Async work queue | `aws-sqs-ops` |
