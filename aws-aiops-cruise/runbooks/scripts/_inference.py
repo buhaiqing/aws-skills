@@ -1188,6 +1188,48 @@ def apply_chain_inference(
                     )
                 )
 
+        # OS-MASTER-01: master node not reachable from the data node.
+        master_reachable = metrics.get("MasterReachableFromNode", None)
+        if master_reachable is not None and master_reachable == 0:
+            rule = "OS-MASTER-01"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=domain,
+                        rule_id=rule,
+                        title=f"OpenSearch `{domain}` master not reachable from node",
+                        level="CRITICAL",
+                        metric="MasterReachableFromNode",
+                        current_value=0.0,
+                        recommendation="Check cluster health / node availability / network partition; delegate aws-opensearch-ops",
+                    )
+                )
+
+        # OS-SNAP-01: automated snapshot failure.
+        snap_fail = metrics.get("AutomatedSnapshotFailure", 0.0) or 0.0
+        if snap_fail > 0:
+            rule = "OS-SNAP-01"
+            if rule not in existing_rule_ids:
+                incidents.append(
+                    make_incident(
+                        run_id=run_id,
+                        customer=customer,
+                        region=region,
+                        resource_type="OpenSearch",
+                        resource_id=domain,
+                        rule_id=rule,
+                        title=f"OpenSearch `{domain}` automated snapshot failed (n={snap_fail:.0f})",
+                        level="CRITICAL",
+                        metric="AutomatedSnapshotFailure",
+                        current_value=float(snap_fail),
+                        recommendation="Investigate snapshot role / S3 access / domain health; delegate aws-opensearch-ops",
+                    )
+                )
+
     return incidents, lines
 
 
