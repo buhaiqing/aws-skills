@@ -1,0 +1,351 @@
+# CloudWatch Alarm Definitions for aws-aiops-cruise Inference Rules
+#
+# Deploy: aws-cloudwatch-ops put-composite-alarm (or per-alarm via CloudFormation)
+# Placeholders: {{env.*}} from .env, {{user.*}} from user input
+# Reference format: aws-cloudwatch-ops/assets/example-config.yaml (see FinOps tips there)
+#
+# Inference rules from: _inference.py + inference-rules.md
+# Thresholds: WARN = alarm threshold, CRIT = documented in comments (escalation)
+#
+# ==== 16 inference rules mapped to CloudWatch alarms ====
+
+# --- RDS-CONN-01: RDS connection count elevated ---
+# Inference: connections >= 70% of max_connections → WARNING, >= 85% → CRITICAL
+# Note: Dynamic threshold — depends on instance max_connections parameter
+rds_conn_alarm:
+  AlarmName: "Cruise-RDS-CONN-01-{{user.resource_id}}"
+  AlarmDescription: "RDS connection count elevated (from inference rule RDS-CONN-01)"
+  MetricName: DatabaseConnections
+  Namespace: AWS/RDS
+  Dimensions:
+    - Name: DBInstanceIdentifier
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  # DYNAMIC THRESHOLD: This is a percentage of max_connections (WARN: 70%, CRIT: 85%).
+  # User must fill this value as: max_connections * 0.70
+  # Example: if max_connections = 200, set Threshold: 140
+  Threshold: null
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- RDS-LAT-01: RDS read/write latency elevated ---
+# Inference: latency >= 0.02s → WARNING, >= 0.1s → CRITICAL
+# Source: _inference.py RDS-LAT-01, threshold_warning=0.02, threshold_critical=0.1
+rds_lat_alarm:
+  AlarmName: "Cruise-RDS-LAT-01-{{user.resource_id}}"
+  AlarmDescription: "RDS read/write latency elevated (from inference rule RDS-LAT-01, CRIT at 0.1)"
+  MetricName: ReadLatency
+  Namespace: AWS/RDS
+  Dimensions:
+    - Name: DBInstanceIdentifier
+      Value: "{{user.resource_id}}"
+  ExtendedStatistic: p95
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 0.02
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- AURORA-LAG-01: Aurora replica lag elevated ---
+# Inference: lag > 1000ms → WARNING, > 30000ms → CRITICAL
+# Source: _inference.py AURORA-LAG-01, threshold_warning=1000, threshold_critical=30000
+aurora_lag_alarm:
+  AlarmName: "Cruise-AURORA-LAG-01-{{user.resource_id}}"
+  AlarmDescription: "Aurora replica lag elevated (from inference rule AURORA-LAG-01, CRIT at 30000ms)"
+  MetricName: AuroraReplicaLag
+  Namespace: AWS/RDS
+  Dimensions:
+    - Name: DBClusterIdentifier
+      Value: "{{user.resource_id}}"
+  Statistic: Maximum
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 1000
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- AURORA-CACHE-01: Aurora buffer cache hit ratio low ---
+# Inference: hit ratio < 99% → WARNING, < 95% → CRITICAL
+# Source: _inference.py AURORA-CACHE-01, threshold_warning=99, threshold_critical=95
+# Note: LessThanThreshold because lower hit ratio = worse
+aurora_cache_alarm:
+  AlarmName: "Cruise-AURORA-CACHE-01-{{user.resource_id}}"
+  AlarmDescription: "Aurora buffer cache hit ratio low (from inference rule AURORA-CACHE-01, CRIT at 95)"
+  MetricName: BufferCacheHitRatio
+  Namespace: AWS/RDS
+  Dimensions:
+    - Name: DBClusterIdentifier
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 99
+  ComparisonOperator: LessThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- XRAY-FAULT-01: X-Ray node fault rate elevated ---
+# Inference: fault rate >= 5% → WARNING, >= 10% → CRITICAL
+# Source: _inference.py XRAY-FAULT-01, threshold_warning=5, threshold_critical=10
+# Dimension: X-Ray uses ServiceType (e.g. AWS::Lambda) rather than resource_id directly
+xray_fault_alarm:
+  AlarmName: "Cruise-XRAY-FAULT-01-{{user.resource_id}}"
+  AlarmDescription: "X-Ray node fault rate elevated (from inference rule XRAY-FAULT-01, CRIT at 10%)"
+  MetricName: FaultRate
+  Namespace: AWS/XRay
+  Dimensions:
+    - Name: ServiceType
+      Value: "AWS::Lambda"
+  Statistic: Average
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 5
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- NLB-TRAFFIC-01: NLB active flows near limit ---
+# Inference: active flows >= 10000 → WARNING, >= 50000 → CRITICAL
+# Source: _inference.py NLB-TRAFFIC-01, threshold_warning=10000, threshold_critical=50000
+nlb_traffic_flow_alarm:
+  AlarmName: "Cruise-NLB-TRAFFIC-01-{{user.resource_id}}"
+  AlarmDescription: "NLB active flows near limit (from inference rule NLB-TRAFFIC-01, CRIT at 50000)"
+  MetricName: ActiveFlowCount
+  Namespace: AWS/NetworkELB
+  Dimensions:
+    - Name: LoadBalancer
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 10000
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- NLB-TRAFFIC-02: NLB traffic surge detected ---
+# Inference: processed bytes >= 1GB → WARNING, >= 5GB → CRITICAL
+# Source: _inference.py NLB-TRAFFIC-02, threshold_warning=1e9, threshold_critical=5e9
+nlb_traffic_bytes_alarm:
+  AlarmName: "Cruise-NLB-TRAFFIC-02-{{user.resource_id}}"
+  AlarmDescription: "NLB traffic surge detected (from inference rule NLB-TRAFFIC-02, CRIT at 5GB)"
+  MetricName: ProcessedBytes
+  Namespace: AWS/NetworkELB
+  Dimensions:
+    - Name: LoadBalancer
+      Value: "{{user.resource_id}}"
+  Statistic: Sum
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 1000000000
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- EC-CPU-01: ElastiCache CPU utilization elevated ---
+# Inference: CPU >= 70% → WARNING, >= 85% → CRITICAL
+# Source: _inference.py EC-CPU-01, threshold_warning=70, threshold_critical=85
+ec_cpu_alarm:
+  AlarmName: "Cruise-EC-CPU-01-{{user.resource_id}}"
+  AlarmDescription: "ElastiCache CPU utilization elevated (from inference rule EC-CPU-01, CRIT at 85%)"
+  MetricName: CPUUtilization
+  Namespace: AWS/ElastiCache
+  Dimensions:
+    - Name: CacheClusterId
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 70
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- EC-MEM-01: ElastiCache memory usage pressure ---
+# Inference: memory >= 80% → WARNING, >= 95% → CRITICAL
+# Source: _inference.py EC-MEM-01, threshold_warning=80, threshold_critical=95
+ec_mem_alarm:
+  AlarmName: "Cruise-EC-MEM-01-{{user.resource_id}}"
+  AlarmDescription: "ElastiCache memory usage pressure (from inference rule EC-MEM-01, CRIT at 95%)"
+  MetricName: DatabaseMemoryUsagePercentage
+  Namespace: AWS/ElastiCache
+  Dimensions:
+    - Name: CacheClusterId
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 80
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- EC2-MEM-01: EC2 memory utilization elevated (requires CloudWatch Agent) ---
+# Inference: memory >= 80% → WARNING, >= 90% → CRITICAL
+# Source: threshold-definitions.md EC2 Memory % Used (CW Agent), W=80, C=90
+# Namespace CWAgent (CloudWatch Agent), not AWS/EC2
+ec2_mem_alarm:
+  AlarmName: "Cruise-EC2-MEM-01-{{user.resource_id}}"
+  AlarmDescription: "EC2 memory utilization elevated (from inference rule EC2-MEM-01, CRIT at 90%)"
+  MetricName: mem_used_percent
+  Namespace: CWAgent
+  Dimensions:
+    - Name: InstanceId
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 80
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- DYNAMO-THROTTLE-01: DynamoDB throttled requests detected ---
+# Inference: throttled requests >= 1 → WARNING, >= 10 → CRITICAL
+# Source: _inference.py DYNAMO-THROTTLE-01, threshold_warning=1, threshold_critical=10
+dynamo_throttle_alarm:
+  AlarmName: "Cruise-DYNAMO-THROTTLE-01-{{user.resource_id}}"
+  AlarmDescription: "DynamoDB throttled requests detected (from inference rule DYNAMO-THROTTLE-01, CRIT at 10)"
+  MetricName: ThrottledRequests
+  Namespace: AWS/DynamoDB
+  Dimensions:
+    - Name: TableName
+      Value: "{{user.resource_id}}"
+  Statistic: Sum
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 1
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- CACHE-EVICT-01: ElastiCache evictions elevated ---
+# Inference: evictions >= 100 → WARNING, >= 1000 → CRITICAL
+# Source: _inference.py CACHE-EVICT-01, threshold_warning=100, threshold_critical=1000
+cache_evict_alarm:
+  AlarmName: "Cruise-CACHE-EVICT-01-{{user.resource_id}}"
+  AlarmDescription: "ElastiCache evictions elevated (from inference rule CACHE-EVICT-01, CRIT at 1000)"
+  MetricName: Evictions
+  Namespace: AWS/ElastiCache
+  Dimensions:
+    - Name: CacheClusterId
+      Value: "{{user.resource_id}}"
+  Statistic: Sum
+  Period: 300
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 100
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- ATHENA-COST-01: Athena query cost anomaly ---
+# Inference: processed bytes >= 5GB (6h) → WARNING, >= 20GB → CRITICAL
+# Source: _inference.py ATHENA-COST-01, threshold_warning=5e9, threshold_critical=2e10
+# Period: 21600s (6 hours) — matches the inference window
+athena_cost_alarm:
+  AlarmName: "Cruise-ATHENA-COST-01-{{user.resource_id}}"
+  AlarmDescription: "Athena query cost anomaly (from inference rule ATHENA-COST-01, CRIT at 20GB)"
+  MetricName: ProcessedBytes
+  Namespace: AWS/Athena
+  Dimensions:
+    - Name: WorkGroup
+      Value: "{{user.resource_id}}"
+  Statistic: Sum
+  Period: 21600
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 5000000000
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- CF-ORIGIN-02: CloudFront origin latency elevated ---
+# Inference: origin latency > 1000ms → WARNING, > 3000ms → CRITICAL
+# Source: _inference.py CF-ORIGIN-02, threshold_warning=1000, threshold_critical=3000
+cf_origin_alarm:
+  AlarmName: "Cruise-CF-ORIGIN-02-{{user.resource_id}}"
+  AlarmDescription: "CloudFront origin latency elevated (from inference rule CF-ORIGIN-02, CRIT at 3000ms)"
+  MetricName: OriginLatency
+  Namespace: AWS/CloudFront
+  Dimensions:
+    - Name: DistributionId
+      Value: "{{user.resource_id}}"
+  Statistic: Average
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 1000
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- OS-HEAP-01: OpenSearch JVM memory pressure ---
+# Inference: JVM memory pressure >= 80% → WARNING, >= 95% → CRITICAL
+# Source: _inference.py OS-HEAP-01, threshold_warning=80, threshold_critical=95
+os_heap_alarm:
+  AlarmName: "Cruise-OS-HEAP-01-{{user.resource_id}}"
+  AlarmDescription: "OpenSearch JVM memory pressure (from inference rule OS-HEAP-01, CRIT at 95%)"
+  MetricName: JVMMemoryPressure
+  Namespace: AWS/ES
+  Dimensions:
+    - Name: DomainName
+      Value: "{{user.resource_id}}"
+  Statistic: Maximum
+  Period: 60
+  EvaluationPeriods: 2
+  DatapointsToAlarm: 2
+  Threshold: 80
+  ComparisonOperator: GreaterThanThreshold
+  TreatMissingData: notBreaching
+  AlarmActions:
+    - "arn:aws:sns:{{env.AWS_DEFAULT_REGION}}:{{env.AWS_ACCOUNT_ID}}:{{user.sns_topic_name}}"
+
+# --- SEC-ROTATE-01: Secret rotation stale or disabled ---
+# Inference: rotation age > 90d → WARNING, > 180d or rotation disabled → CRITICAL
+# Source: _inference.py SEC-ROTATE-01, threshold_warning=90, threshold_critical=180
+# NOTE: RotationAgeDays is a COMPUTED value (not a raw CloudWatch metric).
+# This rule cannot be directly expressed as a CloudWatch alarm.
+# It requires a custom metric computed from SecretsManager secret metadata
+# (LastRotatedDate, RotationEnabled) published as a custom CloudWatch metric.
+sec_rotate_alarm:
+  # Placeholder — not directly expressible as CloudWatch alarm.
+  # SEC-ROTATE-01 depends on computed RotationAgeDays from secret metadata.
+  # Implementation options:
+  #   A. Lambda-backed custom metric: publish RotationAgeDays to custom namespace
+  #   B. EventBridge rule: check secret rotation on schedule, publish to CloudWatch
+  #   C. AWS Config rule: periodic check against secret last-rotated timestamp
+  # Thresholds: WARNING=90 days, CRITICAL=180 days
+  AlarmName: "Cruise-SEC-ROTATE-01-{{user.resource_id}}"
+  AlarmDescription: "[PLACEHOLDER] Secret rotation stale (from inference rule SEC-ROTATE-01) — requires custom metric"
+  # No standard CloudWatch metric exists for this rule
