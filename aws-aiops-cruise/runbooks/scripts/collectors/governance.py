@@ -21,7 +21,6 @@ def audit_cloudwatch_alarms(region: str, scope_ids: set[str], run_id: str, custo
         for alarm in data.get("MetricAlarms", []):
             name = alarm.get("AlarmName", "")
             dims = {d["Name"]: d["Value"] for d in alarm.get("Dimensions", [])}
-            subject = next(iter(dims.values()), name)
             if scope_ids and not any(resource_in_scope(v, scope_ids) for v in dims.values()):
                 continue
             incidents.append(
@@ -105,19 +104,10 @@ def audit_security_hub(region: str, run_id: str, customer: str) -> tuple[list[di
     if not data:
         return incidents, {"SecurityHub": signals}
     findings = data.get("Findings", [])
-    for f in findings:
-        fid = f.get("Id", "")
-        comp = f.get("Compliance", {})
-        workflow = f.get("WorkflowStatus", "")
-        signals[fid] = {
-            "ComplianceStatus": comp.get("ComplianceStatus", "UNKNOWN"),
-            "WorkflowStatus": workflow,
-            "FirstObservedAt": f.get("FirstObservedAt", ""),
-            "Title": f.get("Title", ""),
-            "ProductName": f.get("ProductName", ""),
-            "SeverityLabel": f.get("SeverityLabel", ""),
-        }
     if findings:
+        for f in findings:
+            fid = f.get("Id", "")
+            signals[fid] = {"ComplianceStatus": f.get("Compliance", {}).get("ComplianceStatus", "UNKNOWN"), "WorkflowStatus": f.get("WorkflowStatus", ""), "FirstObservedAt": f.get("FirstObservedAt", ""), "Title": f.get("Title", ""), "ProductName": f.get("ProductName", ""), "SeverityLabel": f.get("SeverityLabel", "")}
         incidents.append(
             make_incident(
                 run_id=run_id,
@@ -209,22 +199,15 @@ def audit_guardduty(region: str, run_id: str, customer: str) -> tuple[list[dict]
             title = f.get("Title", "")[:120]
             ftype = f.get("Type", "")
             level = "CRITICAL" if sev >= 8 else "WARNING"
-            fid = f.get("Id", "")
-            signals[fid] = {
-                "Severity": sev,
-                "Type": ftype,
-                "ServiceName": f.get("Service", {}).get("ServiceName", ""),
-                "ResourceType": f.get("Resource", {}).get("ResourceType", ""),
-                "CreatedAt": f.get("CreatedAt", ""),
-                "UpdatedAt": f.get("UpdatedAt", ""),
-            }
+            fid = f.get("Id", det_id)[:128]
+            signals[fid] = {"Severity": sev, "Type": f.get("Type", ""), "ServiceName": f.get("Service", {}).get("ServiceName", ""), "CreatedAt": f.get("CreatedAt", ""), "UpdatedAt": f.get("UpdatedAt", "")}
             incidents.append(
                 make_incident(
                     run_id=run_id,
                     customer=customer,
                     region=region,
                     resource_type="GuardDuty",
-                    resource_id=fid[:128],
+                    resource_id=fid,
                     rule_id="GD-HIGH-01",
                     title=f"GuardDuty HIGH+ finding: {title}",
                     level=level,
@@ -285,17 +268,11 @@ def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: st
             continue
         not_after = datetime.fromisoformat(not_after_str.replace("Z", "+00:00"))
         days = (not_after - now).days
+        if days > 30:
+            continue
         cert_arn = cert.get("CertificateArn", "")
         domain = cert.get("DomainName", "")
         in_use = cert.get("InUseBy", [])
-        signals[cert_arn] = {
-            "DomainName": domain,
-            "NotAfter": not_after.timestamp(),
-            "NotAfterDays": days,
-            "InUseBy": in_use,
-        }
-        if days > 30:
-            continue
         if scope_ids:
             if domain in scope_ids:
                 pass
@@ -304,6 +281,7 @@ def audit_acm_expiry(region: str, scope_ids: set[str], run_id: str, customer: st
             else:
                 continue
         level = "CRITICAL" if days <= 7 else "WARNING"
+        signals[cert_arn] = {"DomainName": domain, "NotAfter": not_after.timestamp(), "NotAfterDays": days, "InUseBy": in_use}
         incidents.append(
             make_incident(
                 run_id=run_id,
