@@ -26,6 +26,14 @@ metadata:
     rubric_ref: references/rubric.md
     prompts_ref: references/prompt-templates.md
     pilot: false
+  orchestrator_aware: true
+  orchestrator_compat: ">=0.1.0"
+  delegate:
+    accepts: ['health-check', 'rca']
+    produces_facts: ['metric', 'event']
+    idempotency_ttl: "PT24H"
+    destructive_ops_require_confirm: true
+
 ---
 
 # AWS SNS Ops Skill
@@ -171,3 +179,53 @@ Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (TopicArn echoed from
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
+
+## AIOps Delegate Contract
+
+This skill is orchestrator-aware. When invoked by
+`aws-aiops-orchestrator`, it MUST honor the delegate contract.
+
+### Recognition
+
+If the incoming prompt contains an `aiops_delegate:` block (see
+[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
+parse and validate:
+
+- `request_id` — non-empty string
+- `parent_intent` — one of: health-check | rca | self-heal
+  | cost-forecast | capacity-forecast | change-impact
+  | compliance-scan | forensic
+- `action_mode` — observe | recommend | auto-heal | manual
+- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
+- `scope.resource_ids` — array (may be empty for discovery)
+
+### Behavior rules
+
+1. **Idempotency**: every write operation MUST accept an
+   `idempotency_key` parameter. If the same key was executed within
+   the last 24h, return the cached result with
+   `aiops_context.status: "ok"` and
+   `aiops_context.facts[*].deduplicated: true`.
+2. **Confirmation gate**: any destructive operation (delete, terminate,
+   deregister, detach, disable, rotate) MUST require a
+   `confirmation_token`. If absent, refuse and return
+   `aiops_context.status: "failed"` with summary
+   `"confirmation_token required for destructive op"`.
+3. **Decision tier respect**:
+   - `decision_tier: MANUAL` — never execute writes; recommendations only.
+   - `decision_tier: AI_ASSIST` — recommendations; execute only if
+     `confirmation_token` is present.
+   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
+     directly; destructive ones still require `confirmation_token`.
+4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
+   `trace_id` from the delegate block in the User-Agent header
+   (`User-Agent: aiops-orchestrator/<trace_id>`).
+5. **Output format**: always include a final `aiops_context:` JSON
+   block in the response, even on failure.
+
+### Cross-reference
+
+This skill participates in the orchestrator's runbook library. See
+[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
+for which runbooks invoke this skill.
+

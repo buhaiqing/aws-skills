@@ -83,6 +83,66 @@ DELEGATE_CONFIG = {
         "accepts": ["compliance-scan", "change-impact"],
         "produces_facts": ["config"],
     },
+    "aws-athena-ops": {
+        "accepts": ["health-check", "cost-forecast"],
+        "produces_facts": ["metric", "cost", "state"],
+    },
+    "aws-cloudfront-ops": {
+        "accepts": ["health-check", "self-heal", "change-impact"],
+        "produces_facts": ["metric", "config", "state"],
+    },
+    "aws-ecr-ops": {
+        "accepts": ["health-check", "self-heal", "change-impact"],
+        "produces_facts": ["state", "config"],
+    },
+    "aws-efs-ops": {
+        "accepts": ["health-check", "self-heal", "change-impact"],
+        "produces_facts": ["state", "metric"],
+    },
+    "aws-eks-ops": {
+        "accepts": ["health-check", "rca", "self-heal", "change-impact"],
+        "produces_facts": ["metric", "state", "event"],
+    },
+    "aws-elasticache-ops": {
+        "accepts": ["health-check", "rca", "self-heal", "change-impact", "capacity-forecast"],
+        "produces_facts": ["metric", "state"],
+    },
+    "aws-eventbridge-ops": {
+        "accepts": ["health-check", "rca", "change-impact"],
+        "produces_facts": ["event", "config"],
+    },
+    "aws-lambda-ops": {
+        "accepts": ["health-check", "rca", "self-heal", "capacity-forecast"],
+        "produces_facts": ["metric", "state"],
+    },
+    "aws-opensearch-ops": {
+        "accepts": ["health-check", "rca", "self-heal", "change-impact"],
+        "produces_facts": ["metric", "state", "finding"],
+    },
+    "aws-ram-ops": {
+        "accepts": ["compliance-scan", "change-impact"],
+        "produces_facts": ["config", "state"],
+    },
+    "aws-secretsmanager-ops": {
+        "accepts": ["compliance-scan", "change-impact", "self-heal"],
+        "produces_facts": ["state", "config"],
+    },
+    "aws-sns-ops": {
+        "accepts": ["health-check", "rca"],
+        "produces_facts": ["metric", "event"],
+    },
+    "aws-sqs-ops": {
+        "accepts": ["health-check", "rca"],
+        "produces_facts": ["metric", "event", "state"],
+    },
+    "aws-ssm-ops": {
+        "accepts": ["health-check", "self-heal", "compliance-scan", "change-impact"],
+        "produces_facts": ["state", "event", "config"],
+    },
+    "aws-stepfunctions-ops": {
+        "accepts": ["health-check", "rca", "change-impact"],
+        "produces_facts": ["state", "event"],
+    },
 }
 
 SECTION_TEMPLATE = """## AIOps Delegate Contract
@@ -214,7 +274,7 @@ def patch_skill(skill_dir: Path, repo_root: Path) -> bool:
 
 
 def main():
-    repo_root = Path("/Users/bohaiqing/opensource/git/aws-skills")
+    repo_root = Path(__file__).resolve().parents[1]
     skills = list(DELEGATE_CONFIG.keys())
     print(f"Patching {len(skills)} skills...")
     patched = 0
