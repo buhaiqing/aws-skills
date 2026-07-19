@@ -688,6 +688,21 @@ codegraph install -t all      # project codegraph MCP into all installed agents'
 > This gate works with §13 CADL and the Operational Guidelines
 > "Fan-out Subagents": each subtask must still go through the corresponding
 > routing + asset distillation.
+>
+> **`sync` is not enough (finer lesson, 2026-07-19 Task #10 retro):**
+> when CodeGraph *is* the right tool (code files), running only `codegraph sync .`
+> builds the index but yields **nothing actionable** — the high-value step is the
+> **integration-point query** (`explore` / `node` / `callers`) that reveals
+> the call graph, signatures, and cross-file contracts *before* editing.
+> This session, a fan-out added 5 collectors + inline inference blocks; `sync` ran but
+> the `callers`/`node` queries were skipped during coding and only run post-hoc
+> to answer a user challenge — they immediately surfaced the `(incidents, {svc:
+> signals})` collector→inference contract and the `test_all_collectors_run`
+> test that exercises all collectors, which Read-alone would have taken longer.
+> **Disposition:** for code changes, run `sync` *then* `explore`/`callers`/`node`
+> to locate integration points and callers **before** stitching — not just baseline sync.
+> Do not claim "CodeGraph integrated" if only `sync` ran; be precise about what
+> was actually done (matches the honesty bar in §12's wrong-query lesson).
 
 > **Asset landing (correct CADL placement):** The most transferable lesson from
 > this experiment — "a **wrong query (bad glob/regex) is more insidious than a
