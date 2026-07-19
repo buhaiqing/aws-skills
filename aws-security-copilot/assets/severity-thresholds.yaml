@@ -1,0 +1,59 @@
+# Severity Thresholds Configuration
+# Used by aws-security-copilot to triage findings
+
+thresholds:
+  critical:
+    value: 0
+    action: HALT
+    notify: true
+    requires_confirmation: true
+    sla_minutes: 15
+
+  high:
+    value: 1
+    action: MANUAL
+    notify: true
+    requires_confirmation: true
+    sla_minutes: 60
+
+  medium:
+    value: 2
+    action: AUTO_HEAL
+    notify: false
+    requires_confirmation: false
+    sla_minutes: 480
+
+  low:
+    value: 3
+    action: LOG_ONLY
+    notify: false
+    requires_confirmation: false
+    sla_minutes: 1440
+
+# Overall score calculation
+# Count of CRITICAL + HIGH findings determines overall score
+overall_score:
+  A:
+    critical: 0
+    high: 0
+  B:
+    critical: 0
+    high_le_3: true
+  C:
+    critical: 0
+    high_le_10: true
+  D:
+    critical_le_1: true
+    high_le_20: true
+  F:
+    critical_gt_1: true
+    high_gt_20: true
+
+# Finding age thresholds (days)
+finding_age:
+  fresh:
+    max_days: 1
+  stale:
+    max_days: 7
+  historic:
+    max_days: 30
