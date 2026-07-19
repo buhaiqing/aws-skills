@@ -1,0 +1,228 @@
+# CIS AWS Foundations Benchmark v1.5.0 Conformance Pack
+# Direct deployment: aws configservice put-conformance-pack --conformance-pack-name cis-baseline --template-body 'file://cis-conformance-pack.yaml'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CIS AWS Foundations Benchmark v1.5.0 Conformance Pack"
+
+Resources:
+  # CIS 1.1 - VPC Default Security Group
+  VPCDefaultSecurityGroupClosed:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "vpc-default-security-group-closed"
+      Description: "Checks that the default security group of a VPC does not allow inbound or outbound traffic."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "VPC_DEFAULT_SECURITY_GROUP_CLOSED"
+      MaximumExecutionFrequency: One_Hour
+      InputParameters: {}
+
+  # CIS 1.2 - Restricted SSH
+  RestrictedSSH:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "restricted-ssh"
+      Description: "Checks whether security groups that are in use disallow SSH traffic from 0.0.0.0/0."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "INCOMING_SSH_DISABLED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 2.1 - MFA Enabled for IAM Console
+  MFAEnabledForIAMConsoleAccess:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "mfa-enabled-for-iam-console-access"
+      Description: "Checks whether AWS MFA is enabled for all AWS IAM users that use a console password."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "MFA_ENABLED_FOR_IAM_CONSOLE_USERS"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 2.2 - IAM Password Policy
+  IAMPasswordPolicy:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "iam-password-policy"
+      Description: "Checks whether the account password policy for IAM users meets the specified requirements."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "IAM_PASSWORD_POLICY"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 2.3 - Access Key Rotated
+  AccessKeyRotated:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "access-key-rotated"
+      Description: "Checks whether the active access keys are rotated within the configured number of days."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "ACCESS_KEYS_ROTATED"
+      MaximumExecutionFrequency: Twelve_Hours
+      InputParameters:
+        maxAccessKeyAge: "90"
+
+  # CIS 2.4 - Root Account MFA
+  RootAccountMFAEnabled:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "iam-user-mfa-enabled"
+      Description: "Checks whether AWS IAM users have MFA enabled."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "MFA_ENABLED_FOR_IAM_CONSOLE_USERS"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 3.1 - CloudTrail to CloudWatch
+  CloudTrailCloudWatchLogsEnabled:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "cloud-trail-cloud-watch-logs-enabled"
+      Description: "Checks whether AWS CloudTrail is configured to send logs to CloudWatch Logs."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "CLOUD_TRAIL_CLOUD_WATCH_LOGS_ENABLED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 3.2 - CloudTrail Encryption
+  CloudTrailEncryptionEnabled:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "cloud-trail-encryption-enabled"
+      Description: "Checks whether CloudTrail is configured to use the server side encryption (SSE) with AWS KMS."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "CLOUD_TRAIL_SSE_KMS_ENABLED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 3.3 - S3 Bucket Logging
+  S3BucketLoggingEnabled:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "s3-bucket-logging-enabled"
+      Description: "Checks whether logging is enabled for S3 buckets."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "S3_BUCKET_LOGGING_ENABLED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 4.1 - CloudWatch Alarm Actions
+  CloudWatchAlarmActionCheck:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "cloudwatch-alarm-action-check"
+      Description: "Checks whether CloudWatch alarms have at least one alarm action."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "CLOUDWATCH_ALARM_ACTION_CHECK"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 5.1 - S3 Public Read Prohibited
+  S3BucketPublicReadProhibited:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "s3-bucket-public-read-prohibited"
+      Description: "Checks that S3 buckets do not allow public read access."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 5.2 - S3 Public Write Prohibited
+  S3BucketPublicWriteProhibited:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "s3-bucket-public-write-prohibited"
+      Description: "Checks that S3 buckets do not allow public write access."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "S3_BUCKET_PUBLIC_WRITE_PROHIBITED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 5.3 - EBS Encryption
+  EBSEncryptionEnabled:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "ebs-encryption-enabled"
+      Description: "Checks whether EBS encryption is enabled by default for your account."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "EBS_ENCRYPTION_ENABLED_BY_DEFAULT"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 6.1 - RDS Public Access
+  RDSInstancePublicAccessCheck:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "rds-instance-public-access-check"
+      Description: "Checks whether RDS instances are publicly accessible."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "RDS_INSTANCE_PUBLIC_ACCESS_CHECK"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 6.2 - RDS Storage Encrypted
+  RDSStorageEncrypted:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "rds-storage-encrypted"
+      Description: "Checks whether storage encryption is enabled for RDS instances."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "RDS_STORAGE_ENCRYPTED"
+      MaximumExecutionFrequency: One_Hour
+
+  # CIS 6.3 - Multi-AZ RDS
+  RDSMultiAZCheck:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "rds-multi-az-support"
+      Description: "Checks whether RDS instances have Multi-AZ enabled."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "RDS_MULTI_AZ_SUPPORT"
+      MaximumExecutionFrequency: One_Hour
+
+  # FSBP - S3 Bucket Level Public Access
+  S3BucketLevelPublicAccessProhibited:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "s3-bucket-level-public-access-prohibited"
+      Description: "Checks that S3 buckets do not allow public access at bucket level."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITION"
+      MaximumExecutionFrequency: One_Hour
+
+  # FSBP - DynamoDB Table Encrypted
+  DynamoDBTableEncryptedKMS:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "dynamodb-table-encrypted-kms"
+      Description: "Checks whether DynamoDB tables are encrypted with KMS."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "DYNAMODB_TABLE_ENCRYPTED_KMS"
+      MaximumExecutionFrequency: One_Hour
+
+  # FSBP - ELB ACM Certificate
+  ELBv2ACMCertificateRequired:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "elbv2-acm-certificate-required"
+      Description: "Checks whether ALB/NLB uses ACM certificates."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "ALB_HTTP_TO_HTTPS_REDIRECTION_RULE"
+      MaximumExecutionFrequency: One_Hour
+
+  # FSBP - Redshift Cluster Encrypted
+  RedshiftClusterEncryption:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: "redshift-cluster-encryption"
+      Description: "Checks whether Redshift clusters have encryption enabled."
+      Source:
+        Owner: AWS
+        SourceIdentifier: "REDSHIFT_CLUSTER_ENCRYPTION_ENABLED"
+      MaximumExecutionFrequency: One_Hour
