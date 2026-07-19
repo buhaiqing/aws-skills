@@ -125,6 +125,15 @@ Swap-in requires only a different `audit_eks_nodes` collector; the inference rul
 - Action: delegate `aws-secretsmanager-ops`
 - Source: `audit_secrets_rotation` (collector) → `signals["SecretsManager"]`
 
+### Cross-Service Correlation Addendum
+
+| Correlation ID | Chain | Implemented |
+|----------------|-------|-------------|
+| R53-ALB-01 | Route53 HC → ALB healthy → DNS/CloudFront | ✅ live |
+| WAF-ALB-01 | WAF blocks → ALB 5XX → rate rule/geo | ✅ live |
+| LAMBDA-THROTTLE-APIGW-01 | Lambda throttles → API GW 5XX → concurrency | ✅ live |
+| CF-EDGE-CACHE-01 | CloudFront edge errors → origin latency → cache miss amplification | ✅ live |
+
 ## CloudWatch Alarm Definitions
 
 The inference rules above detect conditions via periodic patrol. To also receive
