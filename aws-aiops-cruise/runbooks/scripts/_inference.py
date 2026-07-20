@@ -1453,7 +1453,260 @@ def apply_chain_inference(
                     )
                 )
 
+        # === Application Auto Scaling detection (v1.3.0, per-namespace inference rules) ===
+        incidents.extend(detect_app_autoscaling_lambda(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_dynamodb(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_spot_fleet(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_emr(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_sagemaker(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_comprehend(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+        incidents.extend(detect_app_autoscaling_cassandra(
+            signals, run_id=run_id, customer=customer, region=region,
+            existing_rule_ids=existing_rule_ids))
+
     return incidents, lines
+
+
+def detect_app_autoscaling_lambda(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("Lambda", {}).items():
+        throttled = m.get("Throttles") or 0
+        util = m.get("ProvisionedConcurrencyUtilization")
+        if throttled >= 1 and "FD-AUTO-LAMBDA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Lambda", resource_id=rid, rule_id="FD-AUTO-LAMBDA-01",
+                title=f"Lambda `{rid}` PC throttled {throttled:.0f}/hr",
+                level="WARNING", metric="Throttles", current_value=float(throttled),
+                recommendation="register_scalable_target Lambda PC MaxCapacity raise"))
+        if util is not None and util > 80 and "PD-AUTO-LAMBDA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Lambda", resource_id=rid, rule_id="PD-AUTO-LAMBDA-01",
+                title=f"Lambda `{rid}` PC util {util:.1f}%",
+                level="WARNING", metric="ProvisionedConcurrencyUtilization",
+                current_value=float(util),
+                recommendation="register_scalable_target Lambda PC MaxCapacity raise"))
+        if util is not None and util < 20 and "CO-AUTO-LAMBDA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Lambda", resource_id=rid, rule_id="CO-AUTO-LAMBDA-01",
+                title=f"Lambda `{rid}` PC util {util:.1f}% low",
+                level="INFO", metric="ProvisionedConcurrencyUtilization",
+                current_value=float(util),
+                recommendation="register_scalable_target Lambda PC MinCapacity lower"))
+    return out
+
+
+def detect_app_autoscaling_dynamodb(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("DynamoDB", {}).items():
+        throttled = m.get("ThrottledRequests") or 0
+        util_r = m.get("ProvisionedReadCapacityUtilization")
+        if throttled >= 1 and "FD-AUTO-DYNAMODB-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="DynamoDB", resource_id=rid, rule_id="FD-AUTO-DYNAMODB-01",
+                title=f"DynamoDB `{rid}` throttled {throttled:.0f}",
+                level="CRITICAL" if throttled >= 10 else "WARNING",
+                metric="ThrottledRequests", current_value=float(throttled),
+                recommendation="register_scalable_target DynamoDB MaxCapacity raise"))
+        if util_r is not None and util_r > 80 and "PD-AUTO-DYNAMODB-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="DynamoDB", resource_id=rid, rule_id="PD-AUTO-DYNAMODB-01",
+                title=f"DynamoDB `{rid}` read util {util_r:.1f}%",
+                level="WARNING", metric="ProvisionedReadCapacityUtilization",
+                current_value=float(util_r),
+                recommendation="register_scalable_target read MaxCapacity raise"))
+        if util_r is not None and util_r < 20 and "CO-AUTO-DYNAMODB-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="DynamoDB", resource_id=rid, rule_id="CO-AUTO-DYNAMODB-01",
+                title=f"DynamoDB `{rid}` read util {util_r:.1f}% low",
+                level="INFO", metric="ProvisionedReadCapacityUtilization",
+                current_value=float(util_r),
+                recommendation="register_scalable_target read MinCapacity lower"))
+    return out
+
+
+def detect_app_autoscaling_spot_fleet(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("EC2SpotFleetRequest", {}).items():
+        actual = m.get("ActualCapacity")
+        target = m.get("TargetCapacity")
+        if actual is None or target is None:
+            continue
+        if actual < target and "PD-AUTO-SPOT-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="EC2SpotFleetRequest", resource_id=rid,
+                rule_id="PD-AUTO-SPOT-01",
+                title=f"Spot Fleet `{rid}` Actual {actual:.0f} < Target {target:.0f}",
+                level="WARNING", metric="ActualCapacity",
+                current_value=float(actual),
+                recommendation="register_scalable_target raise MaxCapacity"))
+        if 0 < target and actual > target * 0.8 and "CO-AUTO-SPOT-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="EC2SpotFleetRequest", resource_id=rid,
+                rule_id="CO-AUTO-SPOT-01",
+                title=f"Spot Fleet `{rid}` Actual {actual:.0f} > 80% Target",
+                level="INFO", metric="ActualCapacity",
+                current_value=float(actual),
+                recommendation="register_scalable_target lower MaxCapacity"))
+    return out
+
+
+def detect_app_autoscaling_emr(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("ElasticMapReduce", {}).items():
+        idle = m.get("IsIdle")
+        cpu = m.get("JobFlowCPUUtilization")
+        if idle == 1 and "FD-AUTO-EMR-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="ElasticMapReduce", resource_id=rid,
+                rule_id="FD-AUTO-EMR-01",
+                title=f"EMR `{rid}` idle ≥30m",
+                level="WARNING", metric="IsIdle", current_value=1.0,
+                recommendation="terminate cluster via EMR console if no jobs"))
+        if cpu is not None and cpu > 85 and "PD-AUTO-EMR-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="ElasticMapReduce", resource_id=rid,
+                rule_id="PD-AUTO-EMR-01",
+                title=f"EMR `{rid}` JobFlowCPU {cpu:.1f}%",
+                level="CRITICAL", metric="JobFlowCPUUtilization",
+                current_value=float(cpu),
+                recommendation="register_scalable_target InstanceGroup MaxCapacity raise"))
+        if cpu is not None and cpu < 20 and "CO-AUTO-EMR-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="ElasticMapReduce", resource_id=rid,
+                rule_id="CO-AUTO-EMR-01",
+                title=f"EMR `{rid}` JobFlowCPU {cpu:.1f}% low",
+                level="INFO", metric="JobFlowCPUUtilization",
+                current_value=float(cpu),
+                recommendation="register_scalable_target MinCapacity lower"))
+    return out
+
+
+def detect_app_autoscaling_sagemaker(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("SageMaker", {}).items():
+        inv_5xx = m.get("Invocation5XXErrors")
+        per_inst = m.get("InvocationsPerInstance")
+        if inv_5xx is not None and inv_5xx >= 5 and "FD-AUTO-SAGEMAKER-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="SageMaker", resource_id=rid,
+                rule_id="FD-AUTO-SAGEMAKER-01",
+                title=f"SageMaker `{rid}` invocation 5XX {inv_5xx:.0f}",
+                level="CRITICAL", metric="Invocation5XXErrors",
+                current_value=float(inv_5xx),
+                recommendation="deregister then register_scalable_target; or rollback model artifact"))
+        if per_inst is not None and per_inst > 0.8 and "PD-AUTO-SAGEMAKER-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="SageMaker", resource_id=rid,
+                rule_id="PD-AUTO-SAGEMAKER-01",
+                title=f"SageMaker `{rid}` InvPerInst {per_inst:.2f}",
+                level="WARNING", metric="InvocationsPerInstance",
+                current_value=float(per_inst),
+                recommendation="register_scalable_target variant MaxCapacity raise"))
+        if per_inst is not None and per_inst < 0.3 and "CO-AUTO-SAGEMAKER-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="SageMaker", resource_id=rid,
+                rule_id="CO-AUTO-SAGEMAKER-01",
+                title=f"SageMaker `{rid}` InvPerInst {per_inst:.2f} low",
+                level="INFO", metric="InvocationsPerInstance",
+                current_value=float(per_inst),
+                recommendation="register_scalable_target variant MinCapacity lower"))
+    return out
+
+
+def detect_app_autoscaling_comprehend(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("Comprehend", {}).items():
+        throttle = m.get("ThrottledException") or 0
+        util = m.get("InferenceRequestCount")
+        if throttle >= 1 and "FD-AUTO-COMPREHEND-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Comprehend", resource_id=rid,
+                rule_id="FD-AUTO-COMPREHEND-01",
+                title=f"Comprehend `{rid}` throttled {throttle:.0f}",
+                level="WARNING", metric="ThrottledException",
+                current_value=float(throttle),
+                recommendation="register_scalable_target raise MaxCapacity"))
+        if util is not None and util > 16 and "PD-AUTO-COMPREHEND-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Comprehend", resource_id=rid,
+                rule_id="PD-AUTO-COMPREHEND-01",
+                title=f"Comprehend `{rid}` InferenceReq {util:.0f}",
+                level="WARNING", metric="InferenceRequestCount",
+                current_value=float(util),
+                recommendation="register_scalable_target InferenceUnits raise"))
+        if util is not None and util < 4 and "CO-AUTO-COMPREHEND-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Comprehend", resource_id=rid,
+                rule_id="CO-AUTO-COMPREHEND-01",
+                title=f"Comprehend `{rid}` InferenceReq {util:.0f} low",
+                level="INFO", metric="InferenceRequestCount",
+                current_value=float(util),
+                recommendation="register_scalable_target InferenceUnits lower"))
+    return out
+
+
+def detect_app_autoscaling_cassandra(signals, *, run_id, customer, region, existing_rule_ids):
+    out = []
+    for rid, m in signals.get("Cassandra", {}).items():
+        throttle = m.get("ProvisionedThroughputExceededException") or 0
+        consumed = m.get("ConsumedReadCapacityUnits")
+        if throttle >= 1 and "FD-AUTO-CASSANDRA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Cassandra", resource_id=rid,
+                rule_id="FD-AUTO-CASSANDRA-01",
+                title=f"Keyspace `{rid}` throughput exceeded {throttle:.0f}",
+                level="CRITICAL", metric="ProvisionedThroughputExceededException",
+                current_value=float(throttle),
+                recommendation="register_scalable_target raise MaxCapacity"))
+        if consumed is not None and consumed > 80 and "PD-AUTO-CASSANDRA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Cassandra", resource_id=rid,
+                rule_id="PD-AUTO-CASSANDRA-01",
+                title=f"Keyspace `{rid}` consumed {consumed:.0f}/prov",
+                level="WARNING", metric="ConsumedReadCapacityUnits",
+                current_value=float(consumed),
+                recommendation="register_scalable_target raise MaxCapacity"))
+        if consumed is not None and consumed < 20 and "CO-AUTO-CASSANDRA-01" not in existing_rule_ids:
+            out.append(make_incident(
+                run_id=run_id, customer=customer, region=region,
+                resource_type="Cassandra", resource_id=rid,
+                rule_id="CO-AUTO-CASSANDRA-01",
+                title=f"Keyspace `{rid}` consumed {consumed:.0f}/prov low",
+                level="INFO", metric="ConsumedReadCapacityUnits",
+                current_value=float(consumed),
+                recommendation="register_scalable_target lower MinCapacity"))
+    return out
 
 
 def correlate_native_findings(

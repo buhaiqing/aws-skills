@@ -187,6 +187,171 @@ ALB listener using cert expiring < 30d → TLS handshake failures masquerading a
 | Metrics | `RunningTaskCount`/`DesiredTaskCount` (AWS/ECS) + `ECSServiceAverageCPUUtilization` (Container Insights) |
 | Fix path | Verify `PredefinedMetricSpecification` in `describe-scaling-policies`; verify CloudWatch metric has data; delegate `aws-application-autoscaling-ops` to recreate policy |
 
+## Application Auto Scaling — 8 Namespaces
+
+> Per ServiceNamespace coverage. Initial 4 ECS rules shipped in v1.1.0; following 7 namespaces covered in v1.3.0 (21 new rules; FD + PD + CO each).
+
+### Lambda
+
+#### FD-AUTO-LAMBDA-01: Lambda Provisioned Concurrency throttled
+
+| Symptoms | `ConcurrentExecutions >= 95% ProvisionedConcurrency` 持续 ≥ 5m |
+| Inference | PC ceilings hit;Lambda 业务 throttle(FailuresInvocations 飙) |
+| Metrics | Namespace `AWS/Lambda` — `ConcurrentExecutions` + `Failures`(per function dimension) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `put-scaling-policy` TargetTracking 提升 MaxCapacity;verify Reserved vs Provisioned 区别 |
+
+#### PD-AUTO-LAMBDA-01: Lambda concurrent close to Provisioned ceiling
+
+| Symptoms | `ProvisionedConcurrencyUtilization > 80%` 持续 ≥ 10m |
+| Inference | PC ceiling 即将 hit;业务增长前需主动 raise MaxCapacity |
+| Metrics | `AWS/Lambda` — `ProvisionedConcurrencyUtilization`(per function) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <new>` |
+
+#### CO-AUTO-LAMBDA-01: Lambda Provisioned Concurrency over-provisioned
+
+| Symptoms | `ProvisionedConcurrencyUtilization < 20%` 持续 ≥ 24h |
+| Inference | 预热资源过冗余;非高峰期持续 billing |
+| Metrics | `AWS/Lambda` — `ProvisionedConcurrencyUtilization` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>`(keep ≥ recent p99 usage) |
+
+### DynamoDB (Table + Index)
+
+#### FD-AUTO-DYNAMODB-01: DynamoDB throttle detected
+
+| Symptoms | `UserErrors:ThrottledRequests > 0`(per table + index dim) |
+| Inference | Application 接近 provisioned cap,需要 raise Min/MaxCapacity |
+| Metrics | Namespace `AWS/DynamoDB` — `UserErrors` + `ProvisionedReadCapacityUtilization` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` for the throttling table/index |
+
+#### PD-AUTO-DYNAMODB-01: DynamoDB consumed capacity > 80%
+
+| Symptoms | `ProvisionedReadCapacityUtilization` 或 `ProvisionedWriteCapacityUtilization` > 80%(7-day average) |
+| Inference | Headroom shrunk;再 spike 必 throttle |
+| Metrics | `AWS/DynamoDB` — `ProvisionedReadCapacityUtilization` / `ProvisionedWriteCapacityUtilization` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <new>` |
+
+#### CO-AUTO-DYNAMODB-01: DynamoDB over-provisioned capacity
+
+| Symptoms | `ProvisionedReadCapacityUtilization` 或 `WriteCapacityUtilization` 7-day avg < 20% |
+| Inference | Provisioned 过多;cost 浪费 |
+| Metrics | `AWS/DynamoDB` — `ProvisionedReadCapacityUtilization` + `ProvisionedWriteCapacityUtilization` 7-day avg |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` |
+
+### Spot Fleet (ec2:spot-fleet-request)
+
+#### FD-AUTO-SPOT-01: Spot Fleet interruption spike
+
+| Symptoms | Spot interruption rate > 5 events/hour 持续 24h |
+| Inference | Spot price / capacity 不稳定;AWS 建议 evaluate on-demand mix |
+| Metrics | Namespace `AWS/EC2SpotFleetRequest` — `IsSpotInterruptCount` + `TargetCapacity` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target` with capacity strategy mix |
+
+#### PD-AUTO-SPOT-01: Spot Fleet ActualCapacity < TargetCapacity
+
+| Symptoms | `ActualCapacity < TargetCapacity` 持续 ≥ 15m(spot 容量不足) |
+| Inference | 业务需求未达;scale 上限可能不足 |
+| Metrics | `AWS/EC2SpotFleetRequest` — `TargetCapacity` / `ActualCapacity` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>`(补充 capacity) |
+
+#### CO-AUTO-SPOT-01: Spot Fleet target capacity over-provisioned
+
+| Symptoms | 7-day `ActualCapacity` 平均 < `TargetCapacity` × 80%(max 全时间未跑满) |
+| Inference | Target 设大了;cost 浪费 |
+| Metrics | `AWS/EC2SpotFleetRequest` — `TargetCapacity` vs 7d `ActualCapacity` avg |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <lower>` |
+
+### EMR (elasticmapreduce)
+
+#### FD-AUTO-EMR-01: EMR cluster idle
+
+| Symptoms | `IsIdle` bool = true 持续 ≥ 30m |
+| Inference | 无 active job;EMR cluster 浪费 billing |
+| Metrics | Namespace `AWS/ElasticMapReduce` — `IsIdle`(per cluster) |
+| Fix path | delegate `aws-ecs-ops` (cross-skill) / consider terminate cluster via EMR console |
+
+#### PD-AUTO-EMR-01: EMR JobFlowCPU saturated
+
+| Symptoms | `JobFlowCPUUtilization > 85%` 持续 ≥ 15m |
+| Inference | 当前 instance group 已饱和;业务将 backlog |
+| Metrics | `AWS/ElasticMapReduce` — `JobFlowCPUUtilization`(per instance group) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` for the saturating InstanceGroup |
+
+#### CO-AUTO-EMR-01: EMR over-scaled InstanceGroup
+
+| Symptoms | 7-day `JobFlowCPUUtilization` 平均 < 20% over provisioned instance group |
+| Inference | InstanceGroup capacity 过冗余;cost 浪费 |
+| Metrics | `AWS/ElasticMapReduce` — `IsIdle` + `JobFlowCPUUtilization` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` |
+
+### SageMaker (sagemaker:variant)
+
+#### FD-AUTO-SAGEMAKER-01: SageMaker invocation 5XX
+
+| Symptoms | `Invocations 5XX` rate > 1% 持续 ≥ 10m |
+| Inference | Endpoint variant instance pool hit transient error;可能 need scale 或 model artifact rollback |
+| Metrics | Namespace `AWS/SageMaker` — `Invocations` + `Invocation5XXErrors`(per Endpoint-Variant) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `deregister-scalable-target` 然后 `register-scalable-target` with new config |
+
+#### PD-AUTO-SAGEMAKER-01: SageMaker invocations > 80% target
+
+| Symptoms | `InvocationsPerInstance > 0.8 * MaxInvocations` 持续 ≥ 15m |
+| Inference | 单 instance 接近 invocation 阈值;延后将 throttle |
+| Metrics | `AWS/SageMaker` — `InvocationsPerInstance`(per variant) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` for variant |
+
+#### CO-AUTO-SAGEMAKER-01: SageMaker variant over-provisioned
+
+| Symptoms | `InvocationsPerInstance` 7-day p95 < 30% of `ProvisionedInvocations` |
+| Inference | Variant 实例数过冗余;cost 浪费 |
+| Metrics | `AWS/SageMaker` — `InvocationsPerInstance` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` |
+
+### Comprehend (comprehend:document-classifier)
+
+#### FD-AUTO-COMPREHEND-01: Comprehend ThrottledInference
+
+| Symptoms | `ThrottledInferenceException` count > 0 持续 24h |
+| Inference | Inference units 接近 provisioned;需要 raise Max |
+| Metrics | Namespace `AWS/Comprehend` — `InferenceRequestCount`(Sum 24h) + `ThrottledException` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` |
+
+#### PD-AUTO-COMPREHEND-01: Comprehend utilization > 80%
+
+| Symptoms | `InferenceRequestCount` / `ProvisionedInferenceUnits` > 0.8 持续 ≥ 15m |
+| Inference | Inference units 充足度 < 20%;接近 throttle |
+| Metrics | `AWS/Comprehend` — `InferenceRequestCount`(per endpoint) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` |
+
+#### CO-AUTO-COMPREHEND-01: Comprehend inference units over-provisioned
+
+| Symptoms | `InferenceRequestCount` 7-day avg < 20% ProvisionedInferenceUnits |
+| Inference | Provisioned inference units 过冗余;cost 浪费 |
+| Metrics | `AWS/Comprehend` — `InferenceRequestCount`(per endpoint) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` |
+
+### Keyspace (cassandra:table)
+
+#### FD-AUTO-CASSANDRA-01: Keyspace ProvisionedThroughputExceeded
+
+| Symptoms | `ProvisionedThroughputExceededException` > 0 per table |
+| Inference | Application 接近 provisioned cap;throttling |
+| Metrics | Namespace `AWS/Cassandra` — `ProvisionedThroughputExceededException` + `ConsumedReadCapacityUnits` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` for throttling keyspace/table |
+
+#### PD-AUTO-CASSANDRA-01: Keyspace capacity > 80%
+
+| Symptoms | `ConsumedReadCapacityUnits` > 80% Provisioned 持续 ≥ 15m(per table + dim ReadCapacityUnits) |
+| Inference | Capacity 即将 hit ceiling;throttle 风险 |
+| Metrics | `AWS/Cassandra` — `ConsumedReadCapacityUnits` / `ConsumedWriteCapacityUnits`(per table) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <higher>` |
+
+#### CO-AUTO-CASSANDRA-01: Keyspace over-provisioned
+
+| Symptoms | `ConsumedReadCapacityUnits` 7-day avg < 20% Provisioned(per table) |
+| Inference | Provisioned 过多;cost 浪费 |
+| Metrics | `AWS/Cassandra` — `ConsumedReadCapacityUnits` 7-day avg |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` |
+
 ## Data layer
 
 ### RDS + Performance Insights
