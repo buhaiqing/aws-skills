@@ -25,6 +25,9 @@ metadata:
     - idle-resource-discovery
     - tag-compliance-reporting
     - ri-sp-coverage-analysis
+    - ecs-idle-service-discovery
+    - ecs-fargate-rightsizing
+    - ecs-fargate-spot-optimization
     - budget-alert-review
   delegate:
     ec2-idle: aws-ec2-ops
@@ -35,6 +38,9 @@ metadata:
     elb-idle: aws-elb-ops
     s3-anomaly: aws-s3-ops
     lambda-idle: aws-lambda-ops
+    ecs-idle: aws-ecs-ops
+    ecs-rightsizing: aws-ecs-ops
+    ecs-fargate-spot: aws-ecs-ops
 ---
 
 ## Trigger & Scope
@@ -81,6 +87,9 @@ Idle Detection (delegate to base skills)
   ├─ Snapshot → aws-ec2-ops  (orphaned snapshots)
   ├─ Lambda   → aws-lambda-ops (Invocations=0 ≥ 30 days)
   └─ RDS      → aws-rds-ops  (DatabaseConnections=0 ≥ {{user.idle_days}} days)
+  ├─ ECS Service       → aws-ecs-ops  (desiredCount=0 & runningCount=0)
+  ├─ Fargate Right-Sizing → aws-ecs-ops  (Compute Optimizer ECS recommendations)
+  └─ Fargate Spot      → aws-ecs-ops  (capacity provider weight tuning)
 
 Anomaly Analysis
   └─ 7-day baseline → flag cost > threshold_pct

@@ -15,6 +15,12 @@
 | `ThrottlingException` | Backoff and retry; reduce API call rate |
 | `ServiceNotActiveException` | Service must be ACTIVE to update/delete |
 | `UnableToAssumeRoleError` | Verify task execution role ARN is valid |
+| `SpotInterruption` | Fargate Spot was reclaimed; consider raising FARGATE weight or migrating to on-demand |
+| `EssentialContainerExited` | App container exited non-zero; inspect CloudWatch Logs for the task's log group |
+| `CannotPullContainerError` | Image pull failed; verify ECR perms + NAT / VPC endpoint + image URI tag exists |
+| `ResourceInitializationFailed` | ENI / EBS init failed; check VPC subnet + security group + IAM execution role |
+| `OOMKilled` (task stopped reason) | Container memory limit too low; raise `memory` in task def + verify JVM heap args |
+| `TimeoutError` | Stop task exceeded grace period; raise `--stop-timeout` on container agent or app shutdown handling |
 
 ## Polling Limits
 - Service stable: wait up to 10 min
@@ -37,3 +43,8 @@ aws ecs describe-services --cluster "{{user.cluster_name}}" --services "{{user.s
 - Check deployment circuit breaker: `deployments[0].rolloutState == "FAILED"`
 - Verify task definition revision exists
 - Check load balancer target group health checks
+
+### Deployment circuit breaker tripped
+- Indicator: `deployments[0].rolloutState == "FAILED"` or `service.deploymentController.ROLLBACK` engaged
+- See: [references/deployment-health.md](references/deployment-health.md) for full circuit breaker / `rolloutState` / deployment alarms workflow
+- Inspect `service.events[]` for `Service deployment failed: <reason>` message (CloudWatch Events also surfaces this)

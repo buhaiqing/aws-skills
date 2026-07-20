@@ -491,7 +491,7 @@ aws sts get-caller-identity --output json
 | aws-apigateway-ops | API Gateway (REST/HTTP API) | ✅ 完成 v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ 完成 v1.1.0 |
 | aws-ec2-ops | EC2 (虚拟机) | ✅ 完成 v1.4.0 |
-| aws-ecs-ops | ECS (容器编排) | ✅ 完成 v1.0.0 |
+| aws-ecs-ops | ECS (容器编排) | ✅ **完成 v1.1.0** — AIOps+FinOps 信号（Container Insights、Fargate Spot、Tag 治理、部署健康）；委托至 aws-finops-core |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.1.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
 | aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.1.0 |

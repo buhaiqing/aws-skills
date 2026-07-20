@@ -10,8 +10,16 @@ compatibility: >-
   to AWS endpoints.
 metadata:
   author: aws
-  version: "1.0.0"
-  last_updated: "2026-07-06"
+  version: "1.1.0"
+  provides:
+    - ecs-cluster-lifecycle
+    - ecs-service-lifecycle
+    - ecs-task-definition-lifecycle
+    - ecs-task-lifecycle
+    - ecs-idle-service-discovery
+    - ecs-fargate-rightsizing
+    - ecs-fargate-spot-optimization
+  last_updated: "2026-07-21"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -48,7 +56,17 @@ metadata:
 
 ## Overview
 
-AWS Elastic Container Service (ECS) is a fully managed container orchestration service. This skill covers **cluster, service, task definition, and task lifecycle management** with Fargate and EC2 launch types.
+AWS Elastic Container Service (ECS) is a fully managed container orchestration service. This skill covers **cluster, service, task definition, and task lifecycle management** with Fargate and EC2 launch types, plus AIOps detection signals (Container Insights) and FinOps levers (Fargate Spot, Compute Optimizer, tag governance, idle discovery).
+
+## Common Container Insights metric path
+
+```
+Cluster     — aws.ecs.cluster.cpu.utilization, aws.ecs.cluster.memory.utilization
+Container   — ContainerInsights_CPUUtilization, ContainerInsights_MemoryUtilization
+Service     — ECSServiceAverageCPUUtilization, ECSServiceAverageMemoryUtilization
+Task stoppedReason — EssentialContainerExited, CannotPullContainerError, SpotInterruption, ResourceInitializationFailed
+Deployment  — .services[].deployments[].{rolloutState, taskDefinition, failedTasks}
+```
 
 ## Trigger & Scope
 
@@ -75,6 +93,11 @@ AWS Elastic Container Service (ECS) is a fully managed container orchestration s
 | `{{output.cluster_arn}}` | Last API response | `.clusters[0].clusterArn` |
 | `{{output.service_arn}}` | Last API response | `.service.serviceArn` |
 | `{{output.task_arn}}` | Last API response | `.task.taskArn` |
+| `{{user.opt_in_spot}}` | User input | Y/N; required before Capacity Provider Spot toggle |
+| `{{user.tag_project}}` | User input | Cost Allocation: Project tag value |
+| `{{user.tag_environment}}` | User input | Cost Allocation: Environment tag value |
+| `{{user.tag_cost_center}}` | User input | Cost Allocation: CostCenter tag value |
+| `{{output.cluster_capacity_providers}}` | Last API response | `.cluster.capacityProviders` |
 
 ## Execution Flow Pattern
 
@@ -129,6 +152,7 @@ aws ecs register-task-definition \
     "image": "{{user.container_image}}",
     "portMappings": [{"containerPort": 80, "protocol": "tcp"}]
   }]' \
+  --tags Key=Project,Value={{user.tag_project}} Key=Environment,Value={{user.tag_environment}} Key=ManagedBy,Value=aiops \
   --output json
 ```
 
@@ -158,6 +182,7 @@ aws ecs create-service \
     securityGroups=[{{user.security_groups}}],
     assignPublicIp=ENABLED
   }" \
+  --tags Key=Project,Value={{user.tag_project}} Key=Environment,Value={{user.tag_environment}} Key=CostCenter,Value={{user.tag_cost_center}} Key=ManagedBy,Value=aiops \
   --output json
 ```
 
@@ -230,6 +255,50 @@ aws ecs deregister-task-definition \
   --output json
 ```
 
+### Operation: Update Capacity Providers
+
+#### Pre-flight
+
+| Check | Method | On Failure |
+|-------|--------|------------|
+| `{{user.opt_in_spot}} == Y` | User confirm | HALT — safety |
+| Cluster exists | `aws ecs describe-clusters` | HALT |
+| Current capacity providers | `.cluster.capacityProviders` | Read first |
+
+#### Execute — CLI
+```bash
+aws ecs put-cluster-capacity-providers \
+  --cluster "{{user.cluster_name}}" \
+  --capacity-providers 'capacityProvider=[{name=FARGATE,weight={{user.fargate_weight|default(20)}},base={{user.fargate_base|default(20)}}},{name=FARGATE_SPOT,weight={{user.spot_weight|default(80)}},base={{user.spot_base|default(0)}}}]' \
+  --output json
+```
+
+#### Execute — boto3
+```python
+client = boto3.client('ecs', region_name='{{env.AWS_DEFAULT_REGION}}')
+client.put_cluster_capacity_providers(
+  cluster='{{user.cluster_name}}',
+  capacityProviders=[
+    {'name':'FARGATE','weight':{{user.fargate_weight|default(20)}},'base':{{user.fargate_base|default(20)}}},
+    {'name':'FARGATE_SPOT','weight':{{user.spot_weight|default(80)}},'base':{{user.spot_base|default(0)}}},
+  ]
+)
+```
+
+#### Validate
+```bash
+aws ecs describe-clusters --clusters "{{user.cluster_name}}" \
+  --query "clusters[0].capacityProviders"
+```
+
+```
+[WARN] Toggling capacity provider may interrupt running tasks. Type 'UPDATE_CAPACITY_PROVIDERS {{user.cluster_name}}' to confirm.
+```
+
+| Error | Action |
+|-------|--------|
+| `InvalidParameterException` | Verify weight / base are integers; FARGATE_SPOT must be one of providers |
+
 ### Operation: Delete Cluster
 
 **Safety Gate**: Cluster must have no services. Confirm before deletion.
@@ -264,6 +333,8 @@ Type 'DELETE_CLUSTER {{user.cluster_name}}' to confirm.
 - [boto3 SDK Usage](references/boto3-sdk-usage.md)
 - [Core Concepts](references/core-concepts.md)
 - [Troubleshooting](references/troubleshooting.md)
+- [Cost Optimization](references/cost-optimization.md) — Fargate Spot / Compute Optimizer / Savings Plans / Idle / Gateway Endpoint / Tag governance
+- [Deployment Health](references/deployment-health.md) — Circuit breaker / `rolloutState` / deployment alarms
 
 ## Token Efficiency
 

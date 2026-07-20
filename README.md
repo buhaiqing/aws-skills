@@ -492,7 +492,7 @@ aws sts get-caller-identity --output json
 | aws-apigateway-ops | API Gateway (REST/HTTP APIs) | ✅ Complete v1.0.0 |
 | aws-skill-generator | Meta Skill | ✅ Complete v1.1.0 |
 | aws-ec2-ops | EC2 (Virtual Machine) | ✅ Complete v1.4.0 |
-| aws-ecs-ops | ECS (Container Orchestration) | ✅ Complete v1.0.0 |
+| aws-ecs-ops | ECS (Container Orchestration) | ✅ **Complete v1.1.0** — AIOps+FinOps signals (Container Insights, Fargate Spot, tag governance, deployment health); delegate → aws-finops-core |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.1.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
 | aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.1.0 |
