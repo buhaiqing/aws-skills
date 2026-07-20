@@ -1,0 +1,45 @@
+# Application Auto Scaling example configuration
+# ECS-only MVP. Substitute placeholders, use as reference.
+# YAML anchors (&anchor / *anchor) share common fields (TE-5).
+
+ecs_target_common: &ecs_target_common
+  service_namespace: ecs
+  scalable_dimension: ecs:service:DesiredCount
+  resource_id: "service/{{user.cluster_name | default('my-cluster')}}/{{user.service_name | default('my-service')}}"
+
+# Canonical AIOps auto-heal recipe (FinOps + AIOps leverage)
+target_tracking_cpu_50: &target_tracking_cpu_50
+  <<: *ecs_target_common
+  policy_type: TargetTrackingScaling
+  target_value: 50
+  predefined_metric_type: ECSServiceAverageCPUUtilization
+  scale_out_cooldown: 60
+  scale_in_cooldown: 300
+
+# Batch / memory-bound services
+target_tracking_memory_70: &target_tracking_memory_70
+  <<: *ecs_target_common
+  policy_type: TargetTrackingScaling
+  target_value: 70
+  predefined_metric_type: ECSServiceAverageMemoryUtilization
+  scale_out_cooldown: 120
+  scale_in_cooldown: 600
+
+# Step scaling with CloudWatch alarms
+step_scaling_burst:
+  <<: *ecs_target_common
+  policy_type: StepScaling
+  adjustment_type: ChangeInCapacity
+  step_adjustments:
+    - metric_interval_lower_bound: 0
+      scaling_adjustment: 2
+  cooldown: 60
+
+# Concrete deployable examples
+deployments:
+  web_service:
+    register_target: *target_tracking_cpu_50
+  batch_worker:
+    register_target: *target_tracking_memory_70
+  burst_handler:
+    register_target: *step_scaling_burst

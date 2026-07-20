@@ -28,6 +28,8 @@ metadata:
     - ecs-idle-service-discovery
     - ecs-fargate-rightsizing
     - ecs-fargate-spot-optimization
+    - app-autoscaling-ecs-targets
+    - app-autoscaling-policies
     - budget-alert-review
   delegate:
     ec2-idle: aws-ec2-ops
@@ -41,6 +43,8 @@ metadata:
     ecs-idle: aws-ecs-ops
     ecs-rightsizing: aws-ecs-ops
     ecs-fargate-spot: aws-ecs-ops
+    app-autoscaling-ecs-targets: aws-application-autoscaling-ops
+    app-autoscaling-policies: aws-application-autoscaling-ops
 ---
 
 ## Trigger & Scope

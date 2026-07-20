@@ -2,6 +2,11 @@
 
 All notable changes to `aws-ecs-ops`.
 
+## [1.2.0] - 2026-07-21
+
+### Changed
+- `references/cost-optimization.md` ADR defer stub (line 49) replaced with valid cross-reference to `aws-application-autoscaling-ops` (new L1 skill shipped same day per ADR defer §`docs/superpowers/plans/2026-07-21-aws-ecs-ops-aiops-finops.md`). Compounds the FinOps savings with AIOps auto-heal on `ECSServiceAverageCPUUtilization`.
+
 ## [1.1.0] - 2026-07-21
 
 ### Added (AIOps)

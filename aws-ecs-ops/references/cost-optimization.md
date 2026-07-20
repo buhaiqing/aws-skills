@@ -46,4 +46,4 @@
 
 ## ADR defer
 
-- `aws-application-autoscaling-ops` (TODO: not yet in repo). ECS Service Auto Scaling recipes deferred to next plan — see `docs/superpowers/plans/2026-07-21-aws-ecs-ops-aiops-finops.md` §ADR defer for rationale and decision options.
+- `aws-application-autoscaling-ops` shipped v1.0.0 (2026-07-21, same plan day). See [aws-application-autoscaling-ops/SKILL.md](../../aws-application-autoscaling-ops/SKILL.md) for ECS Service target tracking on `ECSServiceAverageCPUUtilization` (compounds the FinOps savings in this file with AIOps auto-heal). For Lambda/DynamoDB namespaces, tracked as follow-up plans.
