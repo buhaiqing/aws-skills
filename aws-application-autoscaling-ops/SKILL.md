@@ -13,7 +13,7 @@ compatibility: >-
   access to Application Auto Scaling endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
+  version: "1.2.0"
   last_updated: "2026-07-21"
   runtime: Harness AI Agent
   cli_applicability: dual-path
@@ -363,6 +363,10 @@ aws application-autoscaling list-tags-for-resource \
 - [GCL Rubric](references/rubric.md) — 5-dimension scoring (v1)
 - [GCL Prompt Templates](references/prompt-templates.md) — shared skeleton specialization
 - [Example Config](assets/example-config.yaml) — YAML anchors for ECS patterns
+- [EMR Patterns](references/emr.md) — EMR InstanceGroup scaling
+- [SageMaker Patterns](references/sagemaker.md) — endpoint variant
+- [Comprehend Patterns](references/comprehend.md) — NLP inference units
+- [Keyspace Patterns](references/keyspace.md) — Cassandra-compatible
 - [Lambda Patterns](references/lambda.md) — Lambda Provisioned Concurrency
 - [DynamoDB Patterns](references/dynamodb.md) — DynamoDB Table / GSI capacity
 - [Spot Fleet Patterns](references/spot-fleet.md) — ec2:spot-fleet-request:TargetCapacity

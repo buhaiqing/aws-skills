@@ -2,6 +2,20 @@
 
 All notable changes to `aws-application-autoscaling-ops`.
 
+## [1.2.0] - 2026-07-21
+
+### Added (ServiceNamespace expansion)
+- `references/emr.md` — EMR InstanceGroup (`elasticmapreduce:instancegroup:InstanceCount`)
+- `references/sagemaker.md` — SageMaker endpoint variant (`sagemaker:variant:DesiredInstanceCount`)
+- `references/comprehend.md` — Comprehend NLP inference units (`comprehend:document-classifier:DesiredInferenceUnits`)
+- `references/keyspace.md` — Keyspace (Cassandra-compatible, `cassandra:table:{Read,Write}CapacityUnits`)
+- `references/core-concepts.md` ServiceNamespace 表 +5 行 (EMR + SageMaker + Comprehend + Keyspace × 2)
+
+### Deferred (next plan)
+- Per-namespace inference rules in `aws-aiops-cruise` (各 ServiceNamespace 专属 CloudWatch metric namespace 须独立 rule 设计)
+- Python handler 实施 (`aws-aiops-cruise/runbooks/scripts/_inference.py` 新 rule detector)
+- Schedule actions (Lambda cron / 全 namespace) 完整覆盖
+
 ## [1.1.0] - 2026-07-21
 
 ### Added (ServiceNamespace expansion)

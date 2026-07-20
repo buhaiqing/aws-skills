@@ -19,6 +19,11 @@ ad-hoc scaling integrations.
 | `dynamodb`       | `dynamodb:index:ReadCapacityUnits` | v1.1.0 — full coverage |
 | `dynamodb`       | `dynamodb:index:WriteCapacityUnits` | v1.1.0 — full coverage |
 | `ec2`            | `ec2:spot-fleet-request:TargetCapacity` | v1.1.0 — full coverage |
+| `elasticmapreduce` | `elasticmapreduce:instancegroup:InstanceCount` | v1.2.0 — full coverage |
+| `sagemaker`         | `sagemaker:variant:DesiredInstanceCount` | v1.2.0 — full coverage |
+| `comprehend`       | `comprehend:document-classifier:DesiredInferenceUnits` | v1.2.0 — full coverage |
+| `cassandra`        | `cassandra:table:ReadCapacityUnits`  | v1.2.0 — full coverage |
+| `cassandra`        | `cassandra:table:WriteCapacityUnits` | v1.2.0 — full coverage |
 
 ## Scaling Policy Types
 
