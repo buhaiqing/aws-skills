@@ -13,10 +13,12 @@ ad-hoc scaling integrations.
 | ServiceNamespace | ScalableDimension | Status in this skill |
 |------------------|-------------------|----------------------|
 | `ecs`            | `ecs:service:DesiredCount` | MVP — full coverage |
-
-<!-- TODO: follow-up plan reference/lambda.md → lambda:function:ProvisionedConcurrency -->
-<!-- TODO: follow-up plan reference/dynamodb.md → dynamodb:table:ReadCapacityUnits / WriteCapacityUnits / dynamodb:index:*CapacityUnits -->
-<!-- TODO: follow-up plan reference/spot-fleet.md → ec2:spot-fleet-request:TargetCapacity -->
+| `lambda`         | `lambda:function:ProvisionedConcurrency` | v1.1.0 — full coverage |
+| `dynamodb`       | `dynamodb:table:ReadCapacityUnits` | v1.1.0 — full coverage |
+| `dynamodb`       | `dynamodb:table:WriteCapacityUnits` | v1.1.0 — full coverage |
+| `dynamodb`       | `dynamodb:index:ReadCapacityUnits` | v1.1.0 — full coverage |
+| `dynamodb`       | `dynamodb:index:WriteCapacityUnits` | v1.1.0 — full coverage |
+| `ec2`            | `ec2:spot-fleet-request:TargetCapacity` | v1.1.0 — full coverage |
 
 ## Scaling Policy Types
 

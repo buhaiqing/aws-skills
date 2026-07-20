@@ -157,6 +157,36 @@ ALB listener using cert expiring < 30d → TLS handshake failures masquerading a
 
 **LAMBDA-THROTTLE-01** + **APIGW-5XX-01**: throttles correlate with API 5xx → concurrency / downstream RDS timeout.
 
+## Application Auto Scaling
+
+### PD-AUTOSCALING-01: ECS Service at max capacity (no scaling headroom)
+
+| Symptoms | `runningCount == MaxCapacity` 持续 ≥ 10m,target tracking active |
+| Inference | Target tracking 已 saturate 上限,业务增长前需主动 raise MaxCapacity |
+| Metrics | Namespace `AWS/ECS` — dimension `ClusterName` + `ServiceName`; metric `RunningTaskCount` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --max-capacity <new>`. Runbook `RB-AUTOSCALING-01` |
+
+### CO-AUTOSCALING-01: ECS Service scaled to ceiling (0 headroom)
+
+| Symptoms | `MinCapacity == MaxCapacity`,target tracking active |
+| Inference | 无安全 headroom,无法 scale-down 节省费用 |
+| Metrics | Compare `MinCapacity` vs `MaxCapacity` on `describe-scalable-targets` |
+| Fix path | delegate `aws-application-autoscaling-ops` — `register-scalable-target --min-capacity <lower>` (keep ≥ desiredCount). Runbook `RB-AUTOSCALING-01` |
+
+### CO-AUTOSCALING-02: TargetTracking ScaleInCooldown > 600s (cost risk)
+
+| Symptoms | `describe-scaling-policies` shows `ScaleInCooldown > 600` for ECS target tracking |
+| Inference | 缩容反应慢,非高峰期持续 billing → cost risk |
+| Metrics | Application Auto Scaling API (not CloudWatch) |
+| Fix path | delegate `aws-application-autoscaling-ops` — `put-scaling-policy` with `ScaleInCooldown=300`. Inform `aws-finops-core` |
+
+### FD-AUTOSCALING-01: ECS service deficit + active scaling policy not firing
+
+| Symptoms | `runningCount < desiredCount` 持续 + active target tracking 不扩容 |
+| Inference | Target tracking not responding to metric spike (wrong metric namespace, alarm misconfig) |
+| Metrics | `RunningTaskCount`/`DesiredTaskCount` (AWS/ECS) + `ECSServiceAverageCPUUtilization` (Container Insights) |
+| Fix path | Verify `PredefinedMetricSpecification` in `describe-scaling-policies`; verify CloudWatch metric has data; delegate `aws-application-autoscaling-ops` to recreate policy |
+
 ## Data layer
 
 ### RDS + Performance Insights

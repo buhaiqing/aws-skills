@@ -1575,6 +1575,94 @@ runbook:
 | RB-025 | Aurora Writer Failure | FD-16, RDS-PROXY-AURORA-01 | MANUAL | PT15M | aurora, cloudwatch |
 | RB-026 | Aurora Global DB Lag | PD-09, AURORA-GDB-01 | MANUAL | PT1H | aurora, cloudwatch |
 | RB-027 | Aurora Connection Storm (Proxy) | PD-04, RDS-PROXY-AURORA-02 | AI_ASSIST | PT30M | aurora, ssm, cloudwatch |
+| RB-AUTOSCALING-01 | App Auto Scaling Right-Size | PD-AUTOSCALING-01, CO-AUTOSCALING-01 | AI_ASSIST | PT15M | application-autoscaling, ecs, cloudwatch |
+
+## 28. RB-AUTOSCALING-01 — Application Auto Scaling Right-Sizing (ECS target)
+
+**Trigger**: PD-AUTOSCALING-01, CO-AUTOSCALING-01
+**Decision tier**: AI_ASSIST (capacity change > $100/mo boundary per AGENTS.md)
+**Goal**: balance runningCount capacity against cost — raise max when saturated, trim min when 0-headroom, tune cooldown when cost-risk.
+
+```yaml
+runbook:
+  id: RB-AUTOSCALING-01
+  name: "Application Auto Scaling Right-Sizing (ECS target)"
+  trigger_rules: [PD-AUTOSCALING-01, CO-AUTOSCALING-01]
+  default_decision_tier: AI_ASSIST
+  preconditions:
+    - Action targets ECS Service only (other ServiceNamespace deferred per ADR)
+    - Cost change estimated <= $1000/month OR operator confirms higher
+
+  steps:
+    - id: S1
+      skill: aws-application-autoscaling-ops
+      action: describe_scalable_targets
+      params: { service_namespace: "ecs", resource_id: "{{u.resource_id}}" }
+
+    - id: S2
+      skill: aws-application-autoscaling-ops
+      action: describe_scaling_policies
+      params: { service_namespace: "ecs", resource_id: "{{u.resource_id}}" }
+
+    - id: S3
+      skill: aws-ecs-ops
+      action: describe_service
+      params: { cluster: "{{u.cluster}}", service: "{{u.service}}" }
+      # Get desiredCount, runningCount, deployment status
+
+    - id: S4 [decision gate]
+      skill: orchestrator
+      action: decide_capacity_action
+      # branches: raise_max | lower_min | tune_cooldown | no_change
+
+    - id: S5 [raise_max branch]
+      skill: aws-application-autoscaling-ops
+      action: register_scalable_target_raise_max
+      params:
+        service_namespace: "ecs"
+        resource_id: "{{u.resource_id}}"
+        scalable_dimension: "ecs:service:DesiredCount"
+        min_capacity: "{{S1.ScalableTargets[0].MinCapacity}}"
+        max_capacity: "{{S4.new_max}}"
+      requires_confirm: true
+
+    - id: S6 [lower_min branch]
+      skill: aws-application-autoscaling-ops
+      action: register_scalable_target_lower_min
+      params:
+        min_capacity: "{{S4.new_min}}"
+        max_capacity: "{{S1.ScalableTargets[0].MaxCapacity}}"
+      requires_confirm: true
+
+    - id: S7 [tune_cooldown branch]
+      skill: aws-application-autoscaling-ops
+      action: put_scaling_policy
+      params:
+        policy_name: "{{S2.ScalingPolicies[0].PolicyName}}"
+        target_tracking_scaling_policy_configuration:
+          scale_out_cooldown: "{{S4.scale_out}}"
+          scale_in_cooldown: "{{S4.scale_in}}"
+      requires_confirm: true
+
+    - id: S8 [always]
+      skill: aws-cloudwatch-ops
+      action: put_metric_alarm_audit
+      params:
+        alarm_name: "AppAutoScalingAudit-{{u.resource_id}}"
+        metric_name: "RunningTaskCount"
+        threshold: "{{S1.ScalableTargets[0].MaxCapacity - 1}}"
+      requires_confirm: false
+
+  post_checks:
+    - describe_scalable_targets returns updated Min/Max
+    - scaling policy active (Alarms[] populated within PT5M)
+    - runningCount recovers to desiredCount or headroom restored
+
+  estimated_mttr: PT15M
+  rollback_strategy: "register-scalable-target with previous Min/Max - fully reversible."
+  owner: platform
+  tested_in: [staging]
+```
 
 **Coverage check**:
 
