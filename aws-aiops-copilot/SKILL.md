@@ -1,31 +1,29 @@
 ---
 name: aws-aiops-copilot
-description: >-
-  Unified AIOps entry point. Use when a user wants a health check, root-cause
-  analysis, or patrol across AWS services and needs the right AIOps skill
-  selected and delegated (single-service patrol vs cross-service correlation).
+description: Unified AIOps entry point. Use when a user wants a health check, root-cause
+  analysis, or patrol across AWS services and needs the right AIOps skill selected
+  and delegated (single-service patrol vs cross-service correlation).
 license: MIT
-compatibility: >-
-  AWS CLI v2, valid AWS credentials, network access to AWS endpoints;
+compatibility: AWS CLI v2, valid AWS credentials, network access to AWS endpoints;
   delegates to aws-aiops-cruise and aws-aiops-orchestrator.
 metadata:
   author: aws
-  version: "0.1.0"
-  status: "design-draft"
+  version: 0.1.0
+  status: validated
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible
   type: composite
   provides:
-    - "aiops-health-check"
-    - "aiops-rca"
+  - aiops-health-check
+  - aiops-rca
   delegate:
     aws-aiops-cruise:
-      - "health-check"
-      - "rca"
+    - health-check
+    - rca
     aws-aiops-orchestrator:
-      - "cross-service-rca"
+    - cross-service-rca
   cross_skill_deps:
-    - aws-aiops-cruise
-    - aws-aiops-orchestrator
+  - aws-aiops-cruise
+  - aws-aiops-orchestrator
   gcl:
     enabled: true
     class: recommended

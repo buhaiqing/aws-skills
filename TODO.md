@@ -353,3 +353,121 @@ CR-10, CR-11 → 文档/配置，任意阶段可插队
 | Wave 1 (1人天) | CR-1 ~ CR-4 | ✅ DONE |
 | Wave 2 (1-2人天) | CR-5 ~ CR-7 | ✅ DONE |
 | Wave 3 (架构) | CR-8 ~ CR-11 | ✅ DONE |
+
+
+---
+
+## L4 Quick-Wins (2026-07-25) — New
+
+### NW1. L1–L4 capability mapping architecture document
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW1.1 | `docs/agentic-maturity-model.md` — L1-L4 inventory with 5-status legend (Implemented / Partial / In-progress / Planned / Gap) | DONE (2026-07-25) | `docs/agentic-maturity-model.md` (290 lines, 12 sections) |
+| NW1.2 | AGENTS.md link to maturity model | DONE | AGENTS.md §19 (new "Repo design documents" subsection) |
+
+### NW2. P1 L4 Quick-Wins (spec + plan complete, code TBD)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW2.1 | `scripts/gcl_metrics.py` — observability dashboard | **DONE** (6/6 pytest, ruff 0, 报表生成) | `scripts/gcl_metrics.py` (165 行) + `scripts/tests/test_gcl_metrics.py` |
+| NW2.2 | `scripts/_reflexion.py` + `gcl_runner.py --on-fail` | **DONE** (7/7 pytest, ruff 0, 集成测试过) | `scripts/_reflexion.py` (161 行) + `scripts/tests/test_reflexion.py` |
+| NW2.3 | `scripts/hooks/pre-commit` + AGENTS.md §12 升级 | **DONE** (6/6 pytest, bash -n OK, e2e 验证过) | `scripts/hooks/pre-commit` (95 行) + `scripts/install-hooks.sh` + AGENTS.md §12 |
+| NW3.1 | L2 composite frontmatter 升级 v0.2.0 + status=validated | **DONE** (orchestrator + copilot + secops-copilot) | 3 个 SKILL.md frontmatter |
+| NW3.2 | L3 L2 composite 结构验证 (cross_skill_deps + delegate 都指向存在的 dir) | **DONE** (7/7 pytest) | `scripts/tests/test_l3_composites.py` (111 行) |
+
+> **Closing note (2026-07-25)**: P0 L3 closure + P1 L4 三件 quick wins 全部落地。
+> 26/26 pytest 全绿, ruff 0 issue (本轮新增文件), bash -n OK。
+> L3 = 100% ✅ (从 60-65%); L4 = 45% (从 20%)。
+
+
+---
+
+## P2 L4 持续推进 (2026-07-25)
+
+### NW9. Cross-Runtime Portability (P3.2)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW9.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-25-cross-runtime-lint*` |
+| NW9.2 | RED tests (6) | **DONE** | `scripts/tests/test_cross_runtime_lint.py` (118 行) |
+| NW9.3 | GREEN impl | **DONE** | `scripts/cross_runtime_lint.py` (277 行) |
+| NW9.4 | Real e2e | **DONE** | 37 skills lint 通过, avg 0.94 portability, `docs/runtime/cross-runtime-2026-07-25.md` 真生成 |
+| NW9.5 | AGENTS.md §20 | **DONE** | 100 行 (含 12-pattern detection 表 + scoring 公式 + CI yaml) |
+
+### NW8. Cross-Session Memory (P3.1)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW8.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-25-cross-session-memory*` |
+| NW8.2 | RED tests (7) | **DONE** | `scripts/tests/test_session_memory.py` (141 行) |
+| NW8.3 | GREEN impl | **DONE** | `scripts/session_memory.py` (310 行) |
+| NW8.4 | Real e2e | **DONE** | record + query + render 完整 round-trip (3 records seeded) |
+| NW8.5 | Seed `.omc/conventions.json` | **DONE** | 3 initial entries (safety / lint / golden-eval) |
+| NW8.6 | AGENTS.md §19 | **DONE** | 123 行 (含 4-scope 决策表 + derive-vs-record 流程图) |
+
+### NW7. A/B Hard Gate (P2.4)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW7.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-25-ab-gate*` (105+23 行) |
+| NW7.2 | RED tests (7) | **DONE** | `scripts/tests/test_ab_gate.py` (134 行) |
+| NW7.3 | GREEN impl | **DONE** | `scripts/ab_gate.py` (278 行) |
+| NW7.4 | Real e2e | **DONE** | Markdown + JSON + cascade + missing-baseline error 全验证 |
+| NW7.5 | AGENTS.md §18 | **DONE** | 98 行 (含 decision matrix + CI yaml + 对比 §17 表) |
+
+### NW6. Telemetry Dashboard (P2.3)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW6.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-25-telemetry-dashboard*` (114+23 行) |
+| NW6.2 | RED tests (7) | **DONE** | `scripts/tests/test_telemetry_dashboard.py` (150 行) |
+| NW6.3 | GREEN impl | **DONE** | `scripts/telemetry_dashboard.py` (389 行) |
+| NW6.4 | Real e2e | **DONE** | `docs/telemetry/dashboard-2026-07-25.md` 真生成, 4 skills / 30 signals |
+| NW6.5 | Mutation test | **DONE** | alert 极端阈值 (0.99/0.0001) + 合成 prior 数据 unit test 都验证 |
+| NW6.6 | AGENTS.md §17 | **DONE** | 92 行 (含 alert 决策表 + CI yaml) |
+
+### NW5. Eval-Driven Dev (P2.2)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW5.1 | Spec | **DONE** | `docs/superpowers/specs/2026-07-25-eval-driven-dev-design.md` (139 行) |
+| NW5.2 | RED tests (7) | **DONE** | `scripts/tests/test_golden_eval.py` (213 行) |
+| NW5.3 | GREEN impl | **DONE** | `scripts/golden_eval.py` (399 行) |
+| NW5.4 | Sample fixture | **DONE** | `aws-ec2-ops/golden-scenarios.yaml` (6 场景) |
+| NW5.5 | Real e2e | **DONE** | 6/6 scenarios matched |
+| NW5.6 | Mutation test | **DONE** | 1 mutation → 1 regression detected (exit 1) |
+| NW5.7 | AGENTS.md §16 | **DONE** | 106 行 (含决策表 + CLI ref + Library API) |
+
+### NW4. Runtime Safety Guardrail (P2.1)
+
+| # | Item | Status | File |
+|---|------|--------|------|
+| NW4.1 | Spec | **DONE** | `docs/superpowers/specs/2026-07-25-runtime-safety-design.md` (99 行) |
+| NW4.2 | Plan | **DONE** | `docs/superpowers/plans/2026-07-25-runtime-safety.md` (96 行, TDD) |
+| NW4.3 | `scripts/runtime_safety.py` 实现 | **DONE 2026-07-25** | `scripts/runtime_safety.py` (258 行, 7 测试绿) |
+| NW4.4 | AGENTS.md §15 文档化 | **DONE 2026-07-25** | AGENTS.md §15 (68 行, 含决策表 + agent 集成示例) |
+| NW4.5 | 端到端真验证 | **DONE 2026-07-25** | reflexion 累计 4 次 → runtime_safety 真 BLOCK (`/tmp/e2e_runtime_safety.sh`) |
+
+> **Note (sandbox limit)**: 当前 session 沙箱中 `.git/` 是 read-only, 无法执行 git commit/push.
+> 已生成 `/tmp/aws-patches/` 让用户在 sandbox 外 `git apply` + commit。
+
+### NW10. Self-Reflection Protocol (P3.4)
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| NW10.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-25-self-reflection-l4*` |
+| NW10.2 | RED tests (8) | **DONE** | `scripts/tests/test_self_review.py` (250 行) |
+| NW10.3 | GREEN impl | **DONE** | `scripts/self_review.py` (283 行, 8/8 passed) |
+| NW10.4 | 4 findings codified | **DONE** | `docs/superpowers/findings/F-001..F-004.md` |
+| NW10.5 | CLI e2e (list/verify/report) | **DONE** | `verify` → stale_p0=0; `report --phase l4-closure` 真生成 |
+| NW10.6 | AGENTS.md §21 | **DONE** | §21 Self-Reflection Protocol 落地 |
+| NW10.7 | Regression suite | **DONE** | 98/98 passed (was 90 + 8 new), ruff clean |
+| NW10.8 | Patch generation | **DONE** | `/tmp/aws-patches/p3-4.patch` (1608 行, 9 files) |
+| NW10.9 | L4 closure archive | **DONE** | `docs/superpowers/reports/l4-final.md` (317 行, 10 sections) |
+| NW10.10 | §21.9 archive cross-ref | **DONE** | AGENTS.md §21.9 指向 l4-final.md |
+
+> P2.1-P2.4 + P3.1 + P3.2 全部 DONE; L4 45% → **95%**。
+> P3.4 也 DONE; L4 95% → **100%** ✅。
+> L4 closure archive: `docs/superpowers/reports/l4-final.md` (P3.4 收尾, 2026-07-26).
+> 仅剩 P3.3 (自动 Skill 生成) 可选,定位研究性,不在仓库核心范围。

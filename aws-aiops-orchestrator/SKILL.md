@@ -1,75 +1,85 @@
 ---
 name: aws-aiops-orchestrator
-description: >-
-  Use when the user asks cross-service questions that span multiple AWS resources
-  at once, such as: "is the system healthy right now", "why is the site slow",
-  "what will fail next month", "where is money being wasted", "investigate the 502
-  spike", "predict next quarter's cost", or "auto-heal production". This skill is
-  the **AIOps orchestrator brain** — it does NOT execute AWS operations directly.
-  It routes intents to specific `aws-*-ops` skills, correlates signals across
-  services, runs cross-service RCA, drives multi-skill remediation workflows,
-  and provides capacity / cost forecasting with a global view.
+description: 'Use when the user asks cross-service questions that span multiple AWS
+  resources at once, such as: "is the system healthy right now", "why is the site
+  slow", "what will fail next month", "where is money being wasted", "investigate
+  the 502 spike", "predict next quarter''s cost", or "auto-heal production". This
+  skill is the **AIOps orchestrator brain** — it does NOT execute AWS operations directly.
+  It routes intents to specific `aws-*-ops` skills, correlates signals across services,
+  runs cross-service RCA, drives multi-skill remediation workflows, and provides capacity
+  / cost forecasting with a global view.
 
-  Coverage: anomaly detection, root cause analysis (cross-service), self-healing
-  orchestration, capacity prediction, cost optimization, change-impact analysis,
-  and the unified AIOps closed-loop across all 30 `aws-*-ops` skills.
+  Coverage: anomaly detection, root cause analysis (cross-service), self-healing orchestration,
+  capacity prediction, cost optimization, change-impact analysis, and the unified
+  AIOps closed-loop across all 30 `aws-*-ops` skills.
 
-  SHOULD NOT be loaded for single-service operations — delegate to the
-  appropriate `aws-*-ops` skill instead.
+  SHOULD NOT be loaded for single-service operations — delegate to the appropriate
+  `aws-*-ops` skill instead.'
 license: MIT
-compatibility: >-
-  AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network access to
-  CloudWatch / CloudTrail / AWS Config / Cost Explorer / Compute Optimizer /
-  DevOps Guru endpoints. Depends on at least one `aws-*-ops` skill being
-  available in the same agent runtime.
+compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, network
+  access to CloudWatch / CloudTrail / AWS Config / Cost Explorer / Compute Optimizer
+  / DevOps Guru endpoints. Depends on at least one `aws-*-ops` skill being available
+  in the same agent runtime.
 metadata:
   author: aws
-  version: "0.1.0"
-  last_updated: "2026-06-10"
-  status: "design-draft"
+  version: 0.1.0
+  last_updated: '2026-06-10'
+  status: validated
   runtime: Harness AI Agent
-  cli_applicability: read-mostly # orchestrator reads + invokes other skills;
-                                  # writes go through delegated skills
+  cli_applicability: read-mostly
   type: orchestrator-meta
   aiops_level: cross-service-orchestrator
   reuses:
-    - aws-elb-ops/references/aiops-automation-engine.md  # 6-layer closed-loop blueprint
-    - aws-cloudwatch-ops                                  # metrics / anomaly / forecast
-    - aws-cloudtrail-ops                                  # change event correlation
-    - aws-config-ops                                      # compliance / drift
+  - aws-elb-ops/references/aiops-automation-engine.md
+  - aws-cloudwatch-ops
+  - aws-cloudtrail-ops
+  - aws-config-ops
   cross_skill_deps:
-    - aws-cloudwatch-ops   # primary metrics + anomaly + forecast
-    - aws-cloudtrail-ops   # change event timeline
-    - aws-config-ops       # resource compliance + config drift
-    - aws-elb-ops          # most mature AIOps engine; first-class delegate
-    - aws-ec2-ops          # compute-side diagnosis + auto-reboot
-    - aws-rds-ops          # standalone RDS diagnosis
-    - aws-aurora-ops       # Aurora cluster diagnosis (lag, failover, Serverless)
-    - aws-vpc-ops          # network-side diagnosis
-    - aws-acm-ops          # certificate lifecycle
-    - aws-waf-ops          # traffic anomaly mitigation
-    - aws-route53-ops      # DNS failover
-    - aws-autoscaling-ops  # capacity scaling actions
-    - aws-kms-ops          # encryption compliance
-    - aws-iam-ops          # permissions drift
-    - aws-guardduty-ops    # threat correlation
-    - aws-securityhub-ops  # cross-account security findings
-    - aws-s3-ops           # storage cost + lifecycle
-    - aws-lambda-ops       # serverless health
-    - aws-stepfunctions-ops
-    - aws-eventbridge-ops  # event-driven remediation triggers
-    - aws-aiops-cruise     # read-only full-chain patrol producer
-    - aws-topo-discovery   # topology manifest + health overlay + causal graph (RCA)
-    - aws-sns-ops          # alert fanout
-    - aws-sqs-ops          # async work queue
-    - aws-dynamodb-ops     # NoSQL throttling + GSI diagnosis
-    - aws-elasticache-ops  # In-memory store diagnosis
-    - aws-opensearch-ops   # Search/analytics cluster diagnosis
-    - aws-eks-ops          # Kubernetes control-plane + node diagnosis
-    - aws-cloudfront-ops   # CDN origin + cache diagnosis
-    - aws-athena-ops       # Query cost + scan-volume diagnosis
-    - aws-ram-ops          # Resource share diagnosis
-    - aws-secretsmanager-ops  # Secret rotation diagnosis
+  - aws-cloudwatch-ops
+  - aws-cloudtrail-ops
+  - aws-config-ops
+  - aws-elb-ops
+  - aws-ec2-ops
+  - aws-rds-ops
+  - aws-aurora-ops
+  - aws-vpc-ops
+  - aws-acm-ops
+  - aws-waf-ops
+  - aws-route53-ops
+  - aws-autoscaling-ops
+  - aws-kms-ops
+  - aws-iam-ops
+  - aws-guardduty-ops
+  - aws-securityhub-ops
+  - aws-s3-ops
+  - aws-lambda-ops
+  - aws-stepfunctions-ops
+  - aws-eventbridge-ops
+  - aws-aiops-cruise
+  - aws-topo-discovery
+  - aws-sns-ops
+  - aws-sqs-ops
+  - aws-dynamodb-ops
+  - aws-elasticache-ops
+  - aws-opensearch-ops
+  - aws-eks-ops
+  - aws-cloudfront-ops
+  - aws-athena-ops
+  - aws-ram-ops
+  - aws-secretsmanager-ops
+  provides:
+  - cross-service-rca
+  - capacity-forecast
+  - cost-anomaly-detection
+  - change-impact-analysis
+  - coordinated-auto-healing
+  - predictive-failure-detection
+  - security-posture-summary
+  gcl:
+    enabled: true
+    class: recommended
+    max_iter: 3
+    rubric_version: v1
 ---
 
 # AWS AIOps Orchestrator

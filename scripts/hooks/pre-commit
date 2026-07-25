@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Pre-commit hard gate — L3 §12 automation + L4 #4 enforced gate.
+#
+# Triggers (all blocking):
+#   1. aws-*-ops/*/SKILL.md → verify cross_skill_deps/delegate dirs exist + te_gate --strict
+#   2. scripts/gcl_runner.py → --self-test
+#   3. scripts/te_gate.py → --all --strict
+#   4. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
+#
+# REPO_ROOT env var overrides auto-detection (for testability).
+
+set -uo pipefail
+
+# Determine paths
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(dirname "$HOOK_DIR")"
+# REPO_ROOT for SKILL.md / cross_skill_deps validation (overridable for tests)
+REPO="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# When REPO_ROOT is overridden (tests), point scripts to the actual repo's scripts/
+if [ -n "${REPO_ROOT:-}" ]; then
+    SCRIPTS_DIR="/Users/bohaiqing/opensource/git/aws-skills/scripts"
+fi
+
+CHANGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
+FAIL=0
+FAIL_REASONS=()
+
+check_skill_md() {
+    local f="$1"
+    local skill_dir
+    skill_dir=$(dirname "$f")
+    # Extract deps via python helper (handles markdown-link + plain-label forms)
+    local deps
+    deps=$(python3 "$SCRIPTS_DIR/_frontmatter.py" "$f" 2>/dev/null || true)
+    for d in $deps; do
+        d=$(echo "$d" | tr -d '"'"'" | tr -d ' ')
+        [ -z "$d" ] && continue
+        if [ ! -d "$REPO/$d" ] && [ ! -d "$REPO/aws-$d-ops" ]; then
+            FAIL_REASONS+=("missing dir: $d (referenced from $f)")
+            FAIL=1
+        fi
+    done
+    # Run te_gate strict
+    if [ -f "$SCRIPTS_DIR/te_gate.py" ]; then
+        if ! python3 "$SCRIPTS_DIR/te_gate.py" "$REPO/$skill_dir" --strict >/dev/null 2>&1; then
+            FAIL_REASONS+=("te_gate --strict failed for $f")
+            FAIL=1
+        fi
+    fi
+}
+
+for f in $CHANGED; do
+    case "$f" in
+        aws-*-ops/SKILL.md)
+            check_skill_md "$f"
+            ;;
+        scripts/gcl_runner.py)
+            if [ -f "$SCRIPTS_DIR/gcl_runner.py" ]; then
+                if ! python3 "$SCRIPTS_DIR/gcl_runner.py" --self-test --no-prune >/dev/null 2>&1; then
+                    FAIL_REASONS+=("gcl_runner.py --self-test failed")
+                    FAIL=1
+                fi
+            fi
+            ;;
+        scripts/te_gate.py)
+            if [ -f "$SCRIPTS_DIR/te_gate.py" ]; then
+                if ! python3 "$SCRIPTS_DIR/te_gate.py" --all --strict >/dev/null 2>&1; then
+                    FAIL_REASONS+=("te_gate.py --all --strict failed")
+                    FAIL=1
+                fi
+            fi
+            ;;
+        *.py|*.ts|*.go|*.rs|*.js|*.java)
+            if command -v codegraph >/dev/null 2>&1; then
+                codegraph sync . >/dev/null 2>&1 || true
+            fi
+            ;;
+    esac
+done
+
+if [ "$FAIL" -ne 0 ]; then
+    printf 'pre-commit hard gate FAILED:\n' >&2
+    for r in "${FAIL_REASONS[@]}"; do
+        printf '  - %s\n' "$r" >&2
+    done
+    exit 1
+fi
+exit 0

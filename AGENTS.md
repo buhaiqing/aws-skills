@@ -16,6 +16,22 @@ There is exactly one meta-skill, `aws-skill-generator/`, that scaffolds and
 governs all `aws-<service>-ops/` skills. Treat it as the source of truth for
 structure, frontmatter, and review rules.
 
+## Repo design documents (orientation)
+
+Before editing skills, also consult these architecture docs:
+
+- [`docs/agentic-maturity-model.md`](docs/agentic-maturity-model.md) — **L1–L4 capability inventory**
+  (implemented vs partial vs in-progress vs planned vs gap). Single source of truth
+  for "what maturity level does this repo achieve today" and the path to L4.
+- [`docs/level3-progress.md`](docs/level3-progress.md) — Level 3 cross-skill routing
+  coverage (8 skills closed-loop).
+- [`docs/gcl-per-skill-defaults.md`](docs/gcl-per-skill-defaults.md) — GCL 37-line
+  Per-Skill Defaults table.
+- [`docs/te-hard-gate.md`](docs/te-hard-gate.md) — Token Efficiency G1–G6 hard gate
+  full definition.
+- [`docs/failure-patterns.md`](docs/failure-patterns.md) — Reflexion memory
+  (cross-session failure patterns).
+
 ## Source-of-truth files (read these before editing skills)
 
 - `aws-skill-generator/SKILL.md` — generation process, Charter (C1–C6),
@@ -713,6 +729,26 @@ codegraph install -t all      # project codegraph MCP into all installed agents'
 > to `docs/failure-patterns.md` (pitfall assets go to failure-patterns, not
 > AGENTS.md), for any future agent to retrieve and reuse.
 
+
+### Pre-commit Hard Gate (硬门禁 — automation, not suggestion)
+
+The rules above are **enforced**, not advisory. `scripts/hooks/pre-commit` runs
+automatically on `git commit` (after one-time `bash scripts/install-hooks.sh`).
+Four triggers, all blocking:
+
+1. `aws-*-ops/*/SKILL.md` staged → for each changed skill, verify every name in
+   `metadata.cross_skill_deps` / `metadata.delegate` keys points to an existing
+   directory in this repo (`test -d`); fail commit if any miss.
+2. `scripts/gcl_runner.py` or `scripts/te_gate.py` staged → run their
+   `--self-test` / `--all --strict` modes respectively; fail commit on regression.
+3. Code files (`.py`/`.ts`/`.go`/`.rs`/`.js`/`.java`) staged → `codegraph sync .`
+   runs as part of the hook (mandatory pre-flight per §12 above).
+4. `REPO_ROOT` env var overrides auto-detection (testability only).
+
+**Bypass**: only for emergency hotfixes, with `git commit --no-verify`; the
+bypass event MUST be logged in the commit body.
+
+
 ## 13. Compound-Asset Distillation Loop (CADL)
 
 **A working loop, not a single rule**: after any substantive task, the Agent
@@ -834,6 +870,593 @@ compound interest.
 > the discipline "obey itself", so any agent reviewing the commit can verify the
 > discipline was dogfooded, not merely declared.
 
+## 15. Runtime Safety Hook Protocol (L4 dim #6)
+
+The compile-time checks (A1–A16, GCL rubric, §12 cross-skill sync) defend
+against unsafe *patterns*. The runtime hook (`scripts/runtime_safety.py`,
+L4 dim #6) defends against unsafe *executions* by checking an in-flight
+tool call against the historical failure library
+(`docs/failure-patterns.md`, written by `_reflexion.py`).
+
+> **Hard rule**: every agent that executes destructive AWS ops
+> (`delete*` / `terminate*` / `detach*` / `revoke*` / `disable*` /
+> `deregister*` / `drop*` / `destroy*`) MUST invoke the runtime hook
+> in its `pre_tool_use` phase. Skipping it is treated as a §11 GCL
+> violation and a §14 TE gate violation.
+
+### Decision table
+
+| `is_destructive` | `safety_confirm` | Pattern match (count ≥ 3) | Pattern match (count < 3) | No match | Decision |
+|---|---|---|---|---|---|
+| `false` | any | — | — | — | **ALLOW** |
+| `true`  | empty | — | — | — | **WARN** |
+| `true`  | non-empty | — | — | yes | **ALLOW** |
+| `true`  | any | yes | — | — | **BLOCK** |
+| `true`  | non-empty | — | yes | — | **WARN** |
+
+`count >= 3` is the empirically chosen threshold (L4 maturity model's
+gap #3 fix). Lower it cautiously — every lower threshold
+inflates false-positive BLOCKs and erodes agent trust.
+
+### Agent integration
+
+```bash
+echo '{"tool_name":"aws ec2 terminate-instances","args":{"instance_ids":["i-xxx"]},"is_destructive":true,"safety_confirm":"<token>"}' \
+  | python3 scripts/runtime_safety.py --patterns docs/failure-patterns.md
+# stdout: {"decision":"ALLOW|WARN|BLOCK","reason":"...","matched_patterns":[...]}
+# exit 0 = ALLOW, 1 = BLOCK, 2 = WARN
+```
+
+| Runtime | Integration point |
+|---|---|
+| OpenCode / Codex CLI | `pre_tool_use` hook in `~/.codex/config.toml` |
+| Claude Code | `PreToolUse` matcher in `settings.json` → call `runtime_safety.py` |
+| Custom agent | invoke via subprocess; respect exit code (0/1/2) |
+
+`is_destructive` is **statically determined** by the calling agent
+(keyword scan on the tool name) — the runtime hook does not inspect
+arguments. False negatives (a destructive op that isn't flagged) cause
+silent skip; false positives (a non-destructive op flagged) cause WARN
+at worst.
+
+### Library API
+
+```python
+from runtime_safety import ToolCall, CheckResult, check_tool_call
+
+call = ToolCall(
+    tool_name="aws ec2 terminate-instances",
+    args={"instance_ids": ["i-xxx"]},
+    is_destructive=True,
+    safety_confirm="CONFIRM-X",
+)
+patterns = load_failure_patterns(Path("docs/failure-patterns.md"))
+result: CheckResult = check_tool_call(call, patterns)
+# result.decision ∈ {"ALLOW", "WARN", "BLOCK"}
+```
+
+Spec: [`docs/superpowers/specs/2026-07-25-runtime-safety-design.md`](docs/superpowers/specs/2026-07-25-runtime-safety-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-runtime-safety.md`](docs/superpowers/plans/2026-07-25-runtime-safety.md).
+
+## 16. Eval-Driven Dev Protocol (L4 #7)
+
+The compile-time gates (§11 / §12 / §14) enforce invariants; the runtime gate
+(§15) catches dangerous executions. **Eval-Driven Dev** (L4 #7) catches
+*silent capability regressions*: a SKILL.md change that breaks a happy-path
+scenario without violating any compile-time rule.
+
+> **Hard rule**: every L1/L2 skill must ship a `golden-scenarios.yaml`
+> fixture with **≥5 scenarios**. Any PR that touches `aws-<svc>-ops/SKILL.md`
+> or its `references/` MUST re-run `python3 scripts/golden_eval.py diff`
+> and report `0 regressions` before merge.
+
+### Scenario anatomy
+
+```yaml
+# aws-<svc>-ops/golden-scenarios.yaml
+---
+skill: aws-<svc>-ops
+description: |
+  Golden suite for aws-<svc>-ops v<version>. <N> scenarios.
+scenarios:
+  - id: <unique-scenario-id>
+    description: <1-line human description>
+    request: <user natural-language request>
+    expected_status: PASS | SAFETY_FAIL | MAX_ITER
+    user_region: <aws-region>       # optional, defaults to ""
+    safety_confirm: <token>         # optional, defaults to ""
+```
+
+`expected_status` MUST be one of `PASS`, `SAFETY_FAIL`, `MAX_ITER` (the
+three GCL termination outcomes from `gcl-spec.md` §5). Other strings
+rejected at load time.
+
+### Coverage minimums
+
+Per skill, scenarios should cover the matrix:
+
+| Bucket | Min count | Examples |
+|---|---|---|
+| Read-only happy path | ≥2 | `list X`, `describe Y` |
+| Confirmed destructive | ≥2 | `terminate with --confirm=...` |
+| Destructive without confirm | ≥1 | `terminate without --confirm` |
+| Idempotency check | ≥1 | request followed by same request |
+
+For a base skill that is small (e.g. `aws-ram-ops`), 5 scenarios is
+acceptable. For composite skills (`aws-aiops-copilot` etc.), 10+.
+
+### CLI reference
+
+```bash
+# 1. Run all scenarios, persist JSON results
+python3 scripts/golden_eval.py run \
+  --skill aws-ec2-ops \
+  --scenarios aws-ec2-ops/golden-scenarios.yaml \
+  --out audit-results/golden/aws-ec2-ops.json
+
+# 2. Save the current run as the canonical baseline (one-time, in CI hook)
+python3 scripts/golden_eval.py run ... --out /path/to/baseline.json
+git add aws-ec2-ops/golden-scenarios.yaml audit-results/golden/aws-ec2-ops.json
+
+# 3. Detect regressions on subsequent runs
+python3 scripts/golden_eval.py diff \
+  --current audit-results/golden/aws-ec2-ops.json \
+  --baseline audit-results/golden/aws-ec2-ops-baseline.json
+# exit 0 = no regression, 1 = regression detected
+```
+
+### Library API
+
+```python
+from golden_eval import (
+    Scenario, ScenarioResult, BaselineReport,
+    load_scenarios, run_scenario, run_scenarios,
+    compare_to_baseline, save_results, load_results,
+)
+
+scenarios = load_scenarios(Path("aws-ec2-ops/golden-scenarios.yaml"))
+results = run_scenarios(scenarios, skill="aws-ec2-ops")
+baseline = load_results(Path("audit-results/golden/baseline.json"))
+report = compare_to_baseline(results, baseline)
+if report.has_regression:
+    raise SystemExit(f"regressions: {report.regressions}")
+```
+
+### Decision table — when to add scenarios
+
+| Trigger | Action |
+|---|---|
+| New skill published | bootstrap with 5 scenarios |
+| New operation in `references/aws-cli-usage.md` | add ≥1 scenario |
+| Operator reports a real-world failure | add scenario that **reproduces** the failure (`expected_status: SAFETY_FAIL`) |
+| F-# (failure-pattern) added with count ≥ 5 | promote the failure to a golden scenario so the suite covers it |
+| Quarterly review | scan last 30 days of `gcl-trace-*.json`, derive new scenarios from real user requests |
+
+### Strict-mode gate (CI integration)
+
+Add to `.github/workflows/golden.yml` (out of scope for this PR):
+
+```yaml
+- run: python3 scripts/golden_eval.py diff --current audit-results/golden/$SKILL.json --baseline audit-results/golden/$SKILL-baseline.json
+  name: golden regression check
+```
+
+Spec: [`docs/superpowers/specs/2026-07-25-eval-driven-dev-design.md`](docs/superpowers/specs/2026-07-25-eval-driven-dev-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-eval-driven-dev.md`](docs/superpowers/plans/2026-07-25-eval-driven-dev.md).
+
+## 17. Telemetry Dashboard Protocol (L4 #8)
+
+§11 (GCL) writes traces; §13 (CADL) writes reflection; §15 (Runtime Safety)
+writes blocks; §16 (Golden Eval) writes baselines. **§17 (Telemetry Dashboard)**
+unifies all of them into a single 30-day rolling view that human reviewers
+and CI bots can both read.
+
+> **Hard rule**: every CI pipeline that runs GCL/Golden must also
+> run `python3 scripts/telemetry_dashboard.py alert` and respect exit
+> code 1 as a blocking alert.
+
+### Sources (3 readers, 1 schema)
+
+| Source | Path | Schema |
+|---|---|---|
+| GCL trace | `audit-results/gcl-trace-*.json` | `{skill, final.status, iterations[].critic.scores}` |
+| Golden run | `audit-results/golden/*.json` | `{skill, results:[{matched_status, ...}]}` |
+| Reflexion | `docs/failure-patterns.md` (count >= 3 rows) | `{skill, command, count}` |
+
+All three sources normalize into `SignalSlice { skill, status, timestamp, source }`,
+then aggregate into `Dashboard { by_skill: [SkillMetric], by_fail_mode, ... }`.
+
+### CLI reference
+
+```bash
+# Render dashboard
+python3 scripts/telemetry_dashboard.py dashboard \
+  --audit-dir audit-results/ \
+  --window-days 30 \
+  --out docs/telemetry/dashboard.md
+
+# CI alert: exit 1 if any skill's pass_rate drops ≥ threshold vs prior 30 days
+python3 scripts/telemetry_dashboard.py alert \
+  --audit-dir audit-results/ \
+  --window-days 30 \
+  --drop-threshold 0.05
+# stdout: ## Alerts
+#         - aws-ec2-ops: pass_rate 1.00 -> 0.77 (Δ-0.23)
+# exit 0 = no regression, 1 = regression detected
+```
+
+### Library API
+
+```python
+from telemetry_dashboard import (
+    SignalSlice, SkillMetric, Dashboard,
+    load_signals, compute_dashboard,
+    detect_regressions, render_markdown,
+)
+
+signals = load_signals(Path("audit-results/"))
+dash = compute_dashboard(signals, window_days=30, prior_window_days=30)
+flagged = detect_regressions(dash, drop_threshold=0.05)
+md = render_markdown(dash)
+```
+
+### Alert decision table
+
+| Current window | Prior window | Delta | Threshold=0.05 | Action |
+|---|---|---|---|---|
+| ≥1 signal | ≥1 signal | >= -0.05 | safe | **exit 0** |
+| ≥1 signal | ≥1 signal | < -0.05 (e.g. -0.10) | regressed | **exit 1** alert |
+| ≥1 signal | 0 signals | n/a | insufficient history | **exit 0** (do not alert on first 30 days) |
+| 0 signals | any | n/a | no recent activity | **exit 0** |
+
+The "first 30 days" exclusion prevents false alarms when telemetry is
+first wired up — it's a generous warm-up window.
+
+### CI integration
+
+```yaml
+# .github/workflows/telemetry-alert.yml
+- name: Telemetry regression check
+  run: |
+    python3 scripts/telemetry_dashboard.py alert \
+      --audit-dir audit-results/ \
+      --drop-threshold 0.05
+- name: Generate dashboard artifact
+  if: always()
+  run: |
+    python3 scripts/telemetry_dashboard.py dashboard \
+      --audit-dir audit-results/ \
+      --out docs/telemetry/dashboard.md
+- uses: actions/upload-artifact@v4
+  with:
+    name: telemetry-dashboard
+    path: docs/telemetry/dashboard.md
+```
+
+Spec: [`docs/superpowers/specs/2026-07-25-telemetry-dashboard-design.md`](docs/superpowers/specs/2026-07-25-telemetry-dashboard-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-telemetry-dashboard.md`](docs/superpowers/plans/2026-07-25-telemetry-dashboard.md).
+
+## 18. A/B Test Hard Gate Protocol (L4 #9)
+
+P2.2 (`§16 Eval-Driven Dev`) ships the **what to test** (golden scenarios).
+P2.3 (`§17 Telemetry Dashboard`) ships the **aggregate view**.
+**§18 (A/B Hard Gate)** ships the **CI gate**: when you change a skill,
+the build fails if any golden scenario regressed.
+
+> **Hard rule**: every PR that touches `aws-<svc>-ops/SKILL.md`, its
+> `references/`, or any L2 composite's `metadata.cross_skill_deps`
+> MUST pass `python3 scripts/ab_gate.py gate --baseline <before.json>
+> --candidate <after.json>` with exit 0. CI uses the `--json` form.
+
+### Decision matrix
+
+| Scenario state | baseline ↦ candidate | Action | exit_code |
+|---|---|---|---|
+| matched | True ↦ True | **unchanged** | 0 |
+| matched | True ↦ False | **regression** | 1 |
+| matched | False ↦ True | **fixed** | 0 |
+| missing_in_baseline | new scenario | not a regression | 0 |
+| missing_in_candidate | scenario disappeared | **regression** | 1 |
+| file not found | n/a | error | **2** |
+| invalid JSON | n/a | error | **2** |
+
+Exit codes follow POSIX conventions: 0 = pass, 1 = regression, 2 = misuse.
+
+### CLI reference
+
+```bash
+# 1. Standard CI gate
+python3 scripts/ab_gate.py gate \
+  --baseline audit-results/golden/aws-ec2-ops-baseline.json \
+  --candidate audit-results/golden/aws-ec2-ops.json
+
+# 2. JSON output (CI consumes directly)
+python3 scripts/ab_gate.py gate \
+  --baseline ... --candidate ... --json
+# stdout: {"regressions":["..."],"fixed":["..."],"unchanged":["..."],"exit_code":1}
+
+# 3. Cascade discovery (advisory, not part of gate decision)
+python3 scripts/ab_gate.py cascade --skill aws-aiops-copilot
+# stdout: cascaded skills for aws-aiops-copilot:
+#         - aws-aiops-cruise
+#         - aws-aiops-orchestrator
+```
+
+### CI workflow integration
+
+```yaml
+# .github/workflows/ab-gate.yml
+- name: A/B gate
+  run: |
+    # baseline is the saved baseline.json from main branch
+    git show origin/main:audit-results/golden/aws-ec2-ops-baseline.json \
+      > /tmp/baseline.json || echo '{"results":[]}' > /tmp/baseline.json
+    python3 scripts/golden_eval.py run \
+      --skill aws-ec2-ops \
+      --scenarios aws-ec2-ops/golden-scenarios.yaml \
+      --out /tmp/candidate.json
+    python3 scripts/ab_gate.py gate \
+      --baseline /tmp/baseline.json \
+      --candidate /tmp/candidate.json \
+      --json
+```
+
+### Library API
+
+```python
+from ab_gate import ABReport, run_ab_gate, cascaded_skills
+
+report = run_ab_gate(
+    Path("audit-results/baseline.json"),
+    Path("audit-results/candidate.json"),
+)
+if report.exit_code == 1:
+    raise SystemExit(f"regressions: {report.regressions}")
+
+cascaded = cascaded_skills("aws-aiops-copilot")
+# Returns list[str] of cross_skill_deps dir names.
+# Advisory; the gate does NOT recurse automatically.
+```
+
+### Why separate from §17 (Telemetry)?
+
+| | §17 Telemetry | §18 A/B Gate |
+|---|---|---|
+| Input | All signals over 30 days | Two snapshots (T0, T1) |
+| Granularity | Per-skill pass-rate delta | Per-scenario matched_status |
+| Latency | Real-time after data accumulates | At PR time |
+| Exit | 1 if any skill regressed | 1 if any scenario regressed |
+| Use case | "is prod healthy?" | "is this PR safe to merge?" |
+
+Both can run in the same CI: gate (fast, per-PR) → telemetry (slow, post-merge).
+A regression caught by gate SHOULD also surface in telemetry within 1 day.
+
+Spec: [`docs/superpowers/specs/2026-07-25-ab-gate-design.md`](docs/superpowers/specs/2026-07-25-ab-gate-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-ab-gate.md`](docs/superpowers/plans/2026-07-25-ab-gate.md).
+
+## 19. Cross-Session Memory Protocol (L4 #10)
+
+P2.1-P2.4 in-memory and file-backed signals (failure patterns, golden
+baselines, telemetry traces). **§19 (Cross-Session Memory)** is the only
+piece that survives an **agent restart** — it persists project-context
+into `.omc/conventions.json`, the sidecar that complements
+(but does not replace) the auto-scanned `.omc/project-memory.json`.
+
+> **Hard rule**: every new agent session SHOULD call
+> `python3 scripts/session_memory.py render --max-chars 2000` at startup
+> and prepend the output to its first user-facing message. This loads
+> prior learnings without re-derivation.
+
+### Sidecar file
+
+`.omc/conventions.json` is an **agent-managed** JSON file. Schema is **flat**
+on purpose — JSON rather than Markdown so any runtime (Python, JS, Shell)
+can parse it cheaply.
+
+```json
+{
+  "version": "1.0.0",
+  "updated_at": "2026-07-25T...",
+  "records": [
+    {
+      "id": "mem-001",
+      "timestamp": "2026-07-25T...",
+      "scope": "convention" | "user-pref" | "repo-fact" | "tool-choice",
+      "summary": "≤ 120 char headline",
+      "detail": "optional longer form",
+      "confidence": 0.0..1.0,
+      "source_session": "session-uuid",
+      "tags": ["safety", "runtime-hook"]
+    }
+  ]
+}
+```
+
+> **NB**: do NOT mix this with `.omc/project-memory.json` (842 lines, auto-
+> scanned tech-stack). They serve different purposes; agents should write
+> only to `.omc/conventions.json`.
+
+### Scopes (decide which one fits)
+
+| Scope | When to use |
+|---|---|
+| `user-pref` | user's explicit preference (e.g., "Chinese docs canonical") |
+| `repo-fact` | hard fact about the repo ("31 skills, 22 required") |
+| `convention` | agreed-upon rule (e.g., "always run ruff before commit") |
+| `tool-choice` | technology decision (e.g., "use ruff instead of flake8") |
+
+### CLI reference
+
+```bash
+# 1. Record (manual or agent-derived)
+python3 scripts/session_memory.py record \
+  --scope convention \
+  --summary "Always invoke runtime_safety before destructive ops" \
+  --detail "§15 hard rule" \
+  --confidence 0.95 \
+  --source-session $OMC_SESSION_ID \
+  --tag safety --tag runtime-hook
+
+# 2. Query (keyword search, top-k)
+python3 scripts/session_memory.py query "aws region safety" --top 3
+
+# 3. Render (for system-prompt injection)
+python3 scripts/session_memory.py render --max-chars 2000
+
+# 4. List (humans debugging)
+python3 scripts/session_memory.py list
+```
+
+### Derive-vs-record flow
+
+Heuristic v0 (`derive_candidates(transcript)`) extracts candidate
+records with `confidence=0.6`. Agent reviews candidates and only
+**explicitly saves** the ones worth keeping. This prevents the
+convention file from filling with noise.
+
+```python
+from session_memory import (
+    MemoryRecord, load_memory, save_memory,
+    derive_candidates, add_record,
+)
+
+# End of session: derive candidates from transcript, save keepers
+transcript = [...]  # [{role, content}, ...]
+records = load_memory(Path(".omc/conventions.json"))
+for c in derive_candidates(transcript, source_session=SESSION_ID):
+    # Agent-judgment filter (user runs review, no auto-save)
+    if c.confidence >= 0.8 and len(c.summary) >= 12:
+        add_record(records, scope=c.scope, summary=c.summary,
+                   detail=c.detail, confidence=c.confidence,
+                   source_session=SESSION_ID, tags=c.tags)
+save_memory(records, Path(".omc/conventions.json"))
+```
+
+### Decision matrix — derive, record, or skip?
+
+| Trigger | Action |
+|---|---|
+| User says "convention: ..." | derive → record (high conf) |
+| User corrects agent behavior | derive → record |
+| Agent discovers new repo fact | record manually (skip heuristic) |
+| One-off task outcome | skip (use failure-patterns.md instead) |
+| Routine Q&A | skip (transient) |
+
+### Pruning (TBD)
+
+Currently no auto-prune. Add `--older-than-days` flag in a future iteration
+when records exceed a few hundred.
+
+### Integration with §15 (Runtime Safety Hook)
+
+The runtime hook already records to `docs/failure-patterns.md`. Cross-session
+memory is **complementary**: failures stay in `failure-patterns.md`
+(canonical, signal-rich), conventions stay in `conventions.json`
+(low-volume, preference-bearing).
+
+Spec: [`docs/superpowers/specs/2026-07-25-cross-session-memory-design.md`](docs/superpowers/specs/2026-07-25-cross-session-memory-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-cross-session-memory.md`](docs/superpowers/plans/2026-07-25-cross-session-memory.md).
+
+## 20. Cross-Runtime Portability Protocol (L4 #11)
+
+§15-§19 ship L4 protocols in one agent runtime (Codex CLI). §20 broadens
+the contract: a skill authored here must be **portable** across the major
+agent runtimes (Codex CLI, Claude Code, Cursor).
+
+> **Hard rule**: every PR that adds a new skill or updates an existing
+> skill's runtime integration must pass
+> `python3 scripts/cross_runtime_lint.py lint --skill <name>` with
+> score >= 0.85. CI runs `lint --all` against the whole repo.
+
+### Why static lint, not "run on all 3 runtimes"?
+
+Each agent runtime requires its own sandbox (Codex CLI shell, Claude Code
+license, Cursor subscription). Running the same prompt through 3 runtimes
+inside one CI job is expensive + flaky. **Static lint catches 80% of
+portability issues** without that overhead. Phase P3.3 (auto skill
+generation) may revisit this with a smaller smoke-test matrix.
+
+### Detection patterns (12 known)
+
+| Pattern | Runtime | Severity |
+|---|---|---|
+| `~/.codex/` hardcode | Codex CLI | high |
+| `~/.claude/` hardcode | Claude Code | high |
+| `~/.cursor/` hardcode | Cursor | high |
+| `/Users/<name>/` in skill content | host path | critical |
+| `/home/<name>/` in skill content | host path | critical |
+| `python3.X.Y` exact pin | py-version | medium |
+| `<N.N.N>` exact version | version-pin | medium |
+| `/usr/local/bin/X` absolute | usr-local | medium |
+| `/usr/bin/X` absolute | usr-bin | low |
+| `wheel install` instructions | wheel-install | low |
+| `sudo apt` instructions | sudo-apt | high |
+| `` `brew install` `` | brew | low |
+
+### Scoring
+
+```python
+score = max(0.0, 1.0 - (sum_weighted_hits / 10.0))
+```
+
+- `score == 1.0` — no detected coupling (clean)
+- `score >= 0.85` — at most minor hits (CI pass)
+- `score 0.6–0.85` — review recommended
+- `score < 0.6` — must fix before merge
+
+The `/ 10.0` divisor makes hit counts additive but bounded:
+1 critical hit + 2 medium hits = (1.5 + 0.4 + 0.4) / 10 = 0.23 → score 0.77.
+
+### CLI reference
+
+```bash
+# Single skill
+python3 scripts/cross_runtime_lint.py lint --skill aws-ec2-ops --repo .
+
+# Whole repo (CI / nightly)
+python3 scripts/cross_runtime_lint.py lint --all \\
+    --out docs/runtime/cross-runtime-2026-07-25.md
+
+# JSON for CI consumption
+python3 scripts/cross_runtime_lint.py lint --skill aws-ec2-ops --json
+```
+
+### Portable-fix hints (auto-generated)
+
+Each runtime triggers a specific fix:
+
+| Runtime hit | Suggested fix |
+|---|---|
+| `codex` | move `~/.codex/config.toml` reference to AGENTS.md §15 integration table; symlink for portability |
+| `claude` | same, for `~/.claude/settings.json` |
+| `host-path` | replace `/Users/<name>/` with `$HOME/` or `python3 scripts/...` |
+| `py-version` | remove `python3.X.Y` pin; rely on shebang `#!/usr/bin/env python3` |
+| `version-pin` | use `>=N.N` instead of exact `N.N.N` |
+
+### CI integration
+
+```yaml
+# .github/workflows/portability.yml
+- name: Cross-runtime portability
+  run: |
+    python3 scripts/cross_runtime_lint.py lint --all \\
+      --out docs/runtime/cross-runtime.md
+    SCORE=$(python3 -c "
+import json,sys
+from cross_runtime_lint import lint_repo
+from pathlib import Path
+r = lint_repo(Path('.'))
+print(min((x.score for x in r.values()), default=1.0))
+")
+    if (( $(echo "$SCORE < 0.85" | bc -l) )); then
+      echo "FATAL: portability score $SCORE < 0.85"
+      exit 1
+    fi
+```
+
+Spec: [`docs/superpowers/specs/2026-07-25-cross-runtime-lint-design.md`](docs/superpowers/specs/2026-07-25-cross-runtime-lint-design.md).
+Plan: [`docs/superpowers/plans/2026-07-25-cross-runtime-lint.md`](docs/superpowers/plans/2026-07-25-cross-runtime-lint.md).
+
 ## Changelog
 
 | Date | Change |
@@ -844,3 +1467,104 @@ compound interest.
 | 2026-07-19 | Added §Operational Guidelines `### Fan-out Subagents (as much as feasible) — MANDATORY`; user hard constraint: fan out independent subtasks to parallel subagents, main Agent only orchestrates+synthesizes, strictly enforced in every subsequent action |
 | 2026-07-19 | CodeGraph A/B comparison experiment (spec+plan+record three-piece set, `99adbde`+`f3f66c9`; data-decision commits `d1f0daa`/`4d77f57`): conclusion = route by file type (code files→CodeGraph, non-code docs `.md`/`.yaml`→Grep), not either/or; 5 reviewers unanimously backed the decision. The gate was merged into §12 Mandatory Split Gate and made language-agnostic (tree-sitter covers all supported languages, not just Python) |
 | 2026-07-19 | Added §Operational Guidelines `### Token Efficiency Monitor (MANDATORY GATE)`; user hard constraint: every task must pass an independent Token Efficiency Monitor subagent (OPTIMAL / REFACTOR-NOW / ACCEPT-SUBOPTIMAL) before being declared done; strictly enforced from next task |
+
+## 21. Self-Reflection Protocol (L4 #12)
+
+> **Rule**: After every Phase (P0/P1/P2/P3) completes, the main Agent **MUST**
+> run the Self-Reflection Protocol via `scripts/self_review.py`. Findings are
+> **never** left in chat context — they go to `docs/superpowers/findings/F-NNN-*.md`
+> so the next session can learn from them.
+
+### 21.1 Why this exists
+
+L3 closure + P0~P3.2 surfaced 23 findings (F-1 ~ F-23). Most lived only in
+chat context — they vanish with the session. **CADL violation** (experience
+must compound, not evaporate). §21 makes self-review a **protocol**, not a
+one-off gesture.
+
+### 21.2 The 4 finding fields (machine-checkable contract)
+
+Every finding has frontmatter:
+
+| Field | Allowed | Example |
+|---|---|---|
+| `id` | `F-NNN` (3-digit zero-pad) | `F-001` |
+| `severity` | `P0` / `P1` / `P2` | `P0` |
+| `status` | `open` / `fixed` / `accepted` | `fixed` |
+| `phase` | the Phase that produced it | `l3-closure` |
+
+### 21.3 Severity semantics
+
+| Severity | Meaning | When to use |
+|---|---|---|
+| `P0` | Block release. Must have a passing test or fix commit before phase closes | Bugs that cause silent data loss (e.g. F-23 0-byte file), or false-positive safety blocks (F-3 substring matcher) |
+| `P1` | Process / convention bug. No code fix possible; document the convention | F-1 multi-replace state desync — fix is "always reverse-verify" |
+| `P2` | Improvement / hygiene. May stay open across phases | F-23 still open if no follow-up committed |
+
+### 21.4 Protocol — when to run
+
+| Trigger | Required action |
+|---|---|
+| End of P0 / P1 / P2 / P3 phase | `python3 scripts/self_review.py record ...` for each new finding |
+| Before declaring phase "DONE" | `python3 scripts/self_review.py verify` must exit `0` (no stale P0) |
+| Before merge to main | `python3 scripts/self_review.py report --phase <id> --out docs/superpowers/reports/<id>.md` |
+
+### 21.5 CLI cheat-sheet
+
+```bash
+# Record a finding (auto-increment id, write .md file)
+python3 scripts/self_review.py record \
+    --severity P0 --title "..." --root-cause "..." \
+    --fix "..." --lesson "..." --phase <phase-id>
+
+# List all P0 (or any severity)
+python3 scripts/self_review.py list --severity P0
+
+# Verify — exit 0 iff no stale P0
+python3 scripts/self_review.py verify
+
+# Generate phase-level Markdown report
+python3 scripts/self_review.py report --phase l4-closure \
+    --out docs/superpowers/reports/l4-closure.md
+```
+
+### 21.6 Reverse-verification principle (the F-1 lesson)
+
+Any time the Agent does multi-step file mutation (heredoc, sed, multi-replace),
+**the protocol demands a reverse-verify step at the end**:
+
+1. `git grep` for stale markers
+2. `pytest` to confirm tests still pass
+3. `ruff check` for new lint regressions
+
+If any reverse-verify fails, the previous mutations are **untrusted** — re-run
+them in a fresh `exec_command`. This is the F-1 lesson codified.
+
+### 21.7 Worked example (F-3 record)
+
+```bash
+python3 scripts/self_review.py record \
+    --severity P0 \
+    --title "runtime_safety substring matcher" \
+    --root-cause "substring match of terminate-instances also hits describe-instances" \
+    --fix "switch to token-level regex \\b\\b in runtime_safety.detect_destructive()" \
+    --lesson "destructive-op detection must use regex word boundary, never str.find()" \
+    --phase l3-closure
+# → writes docs/superpowers/findings/F-001-runtime-safety-substring-matcher.md
+# → returns "F-001"
+```
+
+### 21.8 Cross-references
+
+- §13 CADL — findings are CADL artifacts (experience must compound)
+- §11 GCL — GCL `SAFETY_FAIL` and `MAX_ITER` MUST auto-record as P0 finding
+  via `_reflexion.append_or_increment` integration (already wired in P1)
+- §16 Eval-Driven Dev — golden scenarios that fail repeatedly must record a P2 finding
+
+### 21.9 Final closure archive
+
+The full L3 → L4 closure process is archived at
+[`docs/superpowers/reports/l4-final.md`](docs/superpowers/reports/l4-final.md).
+That document contains the complete timeline, phase-by-phase deliverables,
+tooling stack, patch inventory, codified findings, and verification commands.
+Future agents reproducing or auditing the L4 closure should start there.

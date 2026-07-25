@@ -355,6 +355,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="(self-test) Force idempotency=0 to exercise MAX_ITER path")
     ap.add_argument("--print-critic", action="store_true",
                     help="Print the rendered Critic prompt (after skeleton merge) and exit")
+    ap.add_argument("--on-fail", action="store_true", default=False,
+                    help="Append failure pattern to docs/failure-patterns.md on SAFETY_FAIL/MAX_ITER")
+    ap.add_argument("--failure-patterns", default=str(REPO / "docs" / "failure-patterns.md"),
+                    help="Path to failure-patterns.md (default: docs/failure-patterns.md)")
     ap.add_argument("--no-prune", action="store_true",
                     help="Skip 30-day trace retention prune")
     args = ap.parse_args(argv)
@@ -387,6 +391,17 @@ def main(argv: list[str] | None = None) -> int:
     out_path.write_text(json.dumps(trace, indent=2))
     if not args.no_prune:
         _prune_old_traces()
+
+    # Reflexion hook (L4 dim #3): auto-append failure pattern on FAIL
+    if args.on_fail and trace["final"]["status"] in ("SAFETY_FAIL", "MAX_ITER"):
+        try:
+            from _reflexion import derive_from_trace, append_or_increment
+        except Exception as e:
+            print(f"reflexion: skipped ({e})", file=sys.stderr)
+        else:
+            for pat in derive_from_trace(trace):
+                result = append_or_increment(Path(args.failure_patterns), pat)
+                print(f"reflexion: {result} {pat.skill} | {pat.error}")
 
     print(f"status: {trace['final']['status']}  iter: {trace['final']['iter']}")
     print(f"trace:  {out_path.relative_to(REPO)}")

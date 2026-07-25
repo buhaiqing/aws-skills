@@ -1,35 +1,49 @@
 ---
 name: aws-security-copilot
-description: >-
-  Unified SecOps entry point. Collects findings from GuardDuty, Security Hub,
-  Config, IAM Access Analyzer, Secrets Manager, KMS, and CloudTrail; merges
-  into a security posture summary; prioritizes by severity; routes to the
-  appropriate remediation skill. Orchestrates only; delegates to base skills.
+description: Unified SecOps entry point. Collects findings from GuardDuty, Security
+  Hub, Config, IAM Access Analyzer, Secrets Manager, KMS, and CloudTrail; merges into
+  a security posture summary; prioritizes by severity; routes to the appropriate remediation
+  skill. Orchestrates only; delegates to base skills.
 license: MIT
-compatibility: >-
-  AWS CLI v2, valid credentials, network access; delegates to
-  aws-guardduty-ops, aws-securityhub-ops, aws-config-ops, aws-iam-ops,
-  aws-secretsmanager-ops, aws-kms-ops, aws-cloudtrail-ops.
+compatibility: AWS CLI v2, valid credentials, network access; delegates to aws-guardduty-ops,
+  aws-securityhub-ops, aws-config-ops, aws-iam-ops, aws-secretsmanager-ops, aws-kms-ops,
+  aws-cloudtrail-ops.
 metadata:
   author: aws
-  version: "0.1.0"
-  status: "design-draft"
+  version: 0.1.0
+  status: validated
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible
   type: composite
   provides:
-    - security-posture-summary
-    - finding-investigation
-    - incident-response
-    - compliance-check
+  - security-posture-summary
+  - finding-investigation
+  - incident-response
+  - compliance-check
   delegate:
-    aws-guardduty-ops: [list-findings, get-findings]
-    aws-securityhub-ops: [get-findings, get-insights]
-    aws-config-ops: [get-compliance-summary]
-    aws-iam-ops: [access-analyzer-findings]
-    aws-secretsmanager-ops: [list-secrets]
-    aws-kms-ops: [list-keys]
-    aws-cloudtrail-ops: [lookup-events]
-  cross_skill_deps: [aws-guardduty-ops, aws-securityhub-ops, aws-config-ops, aws-iam-ops, aws-secretsmanager-ops, aws-kms-ops, aws-cloudtrail-ops]
+    aws-guardduty-ops:
+    - list-findings
+    - get-findings
+    aws-securityhub-ops:
+    - get-findings
+    - get-insights
+    aws-config-ops:
+    - get-compliance-summary
+    aws-iam-ops:
+    - access-analyzer-findings
+    aws-secretsmanager-ops:
+    - list-secrets
+    aws-kms-ops:
+    - list-keys
+    aws-cloudtrail-ops:
+    - lookup-events
+  cross_skill_deps:
+  - aws-guardduty-ops
+  - aws-securityhub-ops
+  - aws-config-ops
+  - aws-iam-ops
+  - aws-secretsmanager-ops
+  - aws-kms-ops
+  - aws-cloudtrail-ops
   gcl:
     enabled: true
     class: recommended
