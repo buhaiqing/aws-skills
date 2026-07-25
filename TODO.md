@@ -469,5 +469,21 @@ CR-10, CR-11 → 文档/配置，任意阶段可插队
 
 > P2.1-P2.4 + P3.1 + P3.2 全部 DONE; L4 45% → **95%**。
 > P3.4 也 DONE; L4 95% → **100%** ✅。
+
+### NW11. P0 Closure — composite_lint + setup-hooks CI
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| NW11.1 | Spec + Plan | **DONE** | `docs/superpowers/{specs,plans}/2026-07-26-composite-lint*` |
+| NW11.2 | RED tests (8) | **DONE** | `scripts/tests/test_composite_lint.py` |
+| NW11.3 | GREEN impl | **DONE** | `scripts/composite_lint.py` (~260 行) |
+| NW11.4 | CI workflow | **DONE** | `.github/workflows/setup-hooks.yml` (7 steps, fail-closed) |
+| NW11.5 | Real e2e | **DONE** | 真跑发现 F-005 (9 unresolved delegate ops) |
+| NW11.6 | CI YAML 验证 | **DONE** | `yaml.safe_load` 通过 |
+| NW11.7 | maturity model | **DONE** | L4 88→95%, L2 92→100% |
+| NW11.8 | F-005 finding | **DONE** | `docs/superpowers/findings/F-005-*.md` |
+| NW11.9 | Patch generation | **DONE** | `/tmp/aws-patches/p0-closure.patch` |
+| NW11.10 | F-005 closed | **DONE** | 7 base skills 补 type/provides; composite_lint exit 0; L4 98% |
+
 > L4 closure archive: `docs/superpowers/reports/l4-final.md` (P3.4 收尾, 2026-07-26).
 > 仅剩 P3.3 (自动 Skill 生成) 可选,定位研究性,不在仓库核心范围。

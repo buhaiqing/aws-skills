@@ -17,6 +17,9 @@ metadata:
   version: "1.1.0"
   last_updated: "2026-06-27"
   runtime: Harness AI Agent
+  type: base
+  provides:
+  - access-analyzer-findings
   cli_applicability: dual-path
   gcl:
     enabled: true

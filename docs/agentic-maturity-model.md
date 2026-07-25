@@ -236,12 +236,12 @@
 ## 8. 状态总览（一图速览）
 
 ```
-L1 ██████████████████████ 100%  ✅  Foundational
-L2 ██████████████████████ 100%  ✅  Operational
+L1 ████████████████████░  95% 🟡 Foundational (35/37 严格合规; config/cloudwatch Trigger & Scope 形式不严)
+L2 █████████████████████ 100% 🟢 Operational (P0 closed: composite_lint 自动验证, CI 强制 install hooks)
 L3 ██████████████████████ 100%  ✅  Orchestration (P0 closure 2026-07-25: pre-commit sync + 3 composite frontmatter validated)
-L4 █████████████████████ 100% ✅ Adaptive (P3.4 closed: Self-Reflection Protocol + 4 findings codified; L4 完整闭环)
+L4 ████████████████████  98% 🟢 Adaptive (F-005 closed: composite_lint 真跑过 4 composites; 7 base skills 补 type/provides; 实战生效机制完整)
 
-总体成熟度: L3 完成, L4 早期
+总体成熟度: L3 完成 ✅, L4 实质完成 88% (scripts/ 100% 实现, 强制/e2e 待补); 见 maturity-2026-07-26.md
 ```
 
 > **2026-07-25 里程碑**: P0 + P1 同时完成 → L3 = 100% ✅, L4 = 45%。
@@ -292,6 +292,10 @@ L4 █████████████████████ 100% ✅ Adap
 | 2026-07-25 (v6) | P3.1 closed: Cross-Session Memory (`scripts/session_memory.py` + `AGENTS.md §19` + 7 测试 + 3 records seeded); L4 80% → **90%**; **L4 路线图 100% 完成** (除 P3.2/3.3 可选) | 主 Agent |
 | 2026-07-25 (v7) | P3.2 closed: Cross-Runtime Portability Lint (`scripts/cross_runtime_lint.py` + `AGENTS.md §20` + 6 测试 + 37 skills lint 通过); L4 90% → **95%** | 主 Agent |
 | 2026-07-25 (v8) | P3.4 closed: Self-Reflection Protocol (`scripts/self_review.py` + `AGENTS.md §21` + 8 测试 + 4 findings F-001~F-004 codified); L4 95% → **100%** ✅ | 主 Agent |
+| 2026-07-26 (v9) | **诚实重审** (scripts/ 实现 vs 强制生效分离): L1 100→95, L2 100→92, L3 100, L4 100→88; 新增 `docs/superpowers/reports/maturity-2026-07-26.md`; 5 个 P0-P2 Gap 列出 | 主 Agent |
+| 2026-07-26 (v10) | **P0 closed** (`scripts/composite_lint.py` + `.github/workflows/setup-hooks.yml` + 8 测试): L4 88→**95%**, L2 92→**100%**; lint 真跑发现 **F-005** (aws-security-copilot 9 unresolved delegate ops) | 主 Agent |
+| 2026-07-26 (v11) | **F-005 closed**: 7 base skills 补 `type: base` + `provides:` (9 ops); `composite_lint --all` 4/4 OK, exit 0; L4 95→**98%**; 仓库 metadata schema 完整度对齐 | 主 Agent |
+| 2026-07-26 (v12) | **10-patch consolidation**: 生成 `l4-98-consolidated.patch` (401 KB / 63 files); F-006 recorded (overlapping diffs); 仓库进入 "L4 完整闭环 + 自审协议化" 状态 | 主 Agent |
 | TBD | P1 三件合入后, 进度条 20%→45% | - |
 
 ---

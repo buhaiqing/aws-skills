@@ -1,0 +1,37 @@
+name: composite-gate + setup-hooks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  composite-and-precommit-gate:
+    name: composite lint + setup hooks + pytest + ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install hooks (so local devs match CI)
+        run: bash scripts/install-hooks.sh
+
+      - name: Composite lint (fail-closed)
+        run: python3 scripts/composite_lint.py lint --all
+
+      - name: Pytest regression
+        run: python3 -m pytest -p no:rerunfailures scripts/tests/ -q
+
+      - name: Ruff lint
+        run: |
+          pip install ruff
+          ruff check scripts/
+
+      - name: Self-review verify (no stale P0)
+        run: python3 scripts/self_review.py verify

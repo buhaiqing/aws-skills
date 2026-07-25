@@ -15,6 +15,9 @@ metadata:
   version: "1.1.0"
   last_updated: "2026-07-19"
   runtime: Harness AI Agent
+  type: base
+  provides:
+  - get-compliance-summary
   cli_applicability: dual-path
   gcl:
     enabled: true

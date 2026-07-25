@@ -18,6 +18,9 @@ metadata:
   version: "1.0.0"
   last_updated: "2026-05-15"
   runtime: Harness AI Agent
+  type: base
+  provides:
+  - list-secrets
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
   environment:
