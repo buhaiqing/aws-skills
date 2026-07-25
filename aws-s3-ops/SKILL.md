@@ -34,7 +34,7 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['compliance-scan', 'change-impact', 'cost-forecast']
     produces_facts: ['config', 'state', 'cost']

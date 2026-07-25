@@ -39,7 +39,7 @@ metadata:
     - aws-cloudtrail-ops      # EC2 config change audit
     - aws-ssm-ops             # SSM RunCommand for diagnostics
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'rca', 'self-heal', 'change-impact']
     produces_facts: ['metric', 'state', 'event']

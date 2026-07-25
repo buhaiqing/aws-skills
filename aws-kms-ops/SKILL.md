@@ -40,7 +40,7 @@ metadata:
     - AWS_PROFILE
     - AWS_ACCOUNT_ID
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['compliance-scan', 'change-impact']
     produces_facts: ['state', 'event']

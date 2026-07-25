@@ -35,7 +35,7 @@ metadata:
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'rca', 'self-heal', 'capacity-forecast']
     produces_facts: ['metric', 'state']

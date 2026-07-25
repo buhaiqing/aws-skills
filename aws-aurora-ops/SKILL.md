@@ -33,7 +33,7 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: [health-check, rca, self-heal, change-impact, compliance-scan, capacity-forecast]
     produces_facts: [metric, state, event, finding]

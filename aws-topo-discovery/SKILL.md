@@ -61,7 +61,21 @@ See [references/relationships.md](references/relationships.md).
 
 ## Trigger & Scope
 
-See [references/trigger-scope.md](references/trigger-scope.md) for SHOULD/SHOULD NOT criteria.
+### SHOULD Use When
+
+- Cross-product network topology mapping (VPC + EC2/RDS/ELB/NAT/EIP/EKS/Lambda/S3/SG)
+- Bulk resource inventory across an AWS account
+- Compliance audit needing full resource graph
+
+### SHOULD NOT Use When
+
+- Single-resource operations → respective `aws-*-ops`
+- Real-time monitoring → `aws-cloudwatch-ops`
+- Security findings investigation → `aws-guardduty-ops`
+
+### Delegation
+
+- Full SHOULD/SHOULD NOT criteria: see [references/trigger-scope.md](references/trigger-scope.md)
 
 ## Delegation Rules
 

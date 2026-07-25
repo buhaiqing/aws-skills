@@ -36,7 +36,7 @@ metadata:
     - aws-cloudwatch-ops     # API Gateway metrics and alarms
     - aws-cloudfront-ops     # CloudFront + API GW edge integration
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ["health-check", "rca"]
     produces_facts: ["state", "metric", "event"]

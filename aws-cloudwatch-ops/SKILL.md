@@ -37,7 +37,7 @@ metadata:
     - aws-cloudtrail-ops
     - aws-aurora-ops
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'rca', 'capacity-forecast']
     produces_facts: ['metric', 'log']
@@ -57,7 +57,22 @@ metadata:
 
 ## Trigger & Scope
 
-**SHOULD Use When**: "CloudWatch", "CW", metrics, alarms, monitoring, logs, dashboards, anomaly, metric math, FORECAST, Synthetics, Contributor Insights; AIOps: elb-monitoring, elb-rca, capacity-forecast, cert-expiry. **SHOULD NOT Use When**: EC2/S3/RDS/Lambda/ASG → respective `aws-*-ops`; ELB resource ops → `aws-elb-ops`. **Delegation**: ELB → `aws-elb-ops` | Certs → `aws-acm-ops` | VPC Flow → `aws-vpc-ops` | Patrol/Orch → `aws-aiops-cruise` / `aws-aiops-orchestrator`.
+### SHOULD Use When
+
+- User mentions: "CloudWatch", "CW", metrics, alarms, monitoring, logs, dashboards, anomaly, metric math, FORECAST, Synthetics, Contributor Insights
+- AIOps: elb-monitoring, elb-rca, capacity-forecast, cert-expiry
+
+### SHOULD NOT Use When
+
+- EC2/S3/RDS/Lambda/ASG → respective `aws-*-ops`
+- ELB resource ops → `aws-elb-ops`
+
+### Delegation
+
+- ELB → `aws-elb-ops`
+- Certs → `aws-acm-ops`
+- VPC Flow → `aws-vpc-ops`
+- Patrol/Orch → `aws-aiops-cruise` / `aws-aiops-orchestrator`
 
 ## Variable Convention
 

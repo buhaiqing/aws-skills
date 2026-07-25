@@ -36,7 +36,7 @@ metadata:
     - aws-cloudwatch-ops       # Metric alarms for scaling policies
     - aws-vpc-ops              # Subnet / Security Group management
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['self-heal', 'capacity-forecast']
     produces_facts: ['state', 'metric']

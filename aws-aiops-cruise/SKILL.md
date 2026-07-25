@@ -41,7 +41,7 @@ metadata:
     - aws-ebs-ops
     - aws-aiops-orchestrator
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ["health-check", "rca", "pre-flight-check", "capacity-review"]
     produces_facts: ["metric", "log", "event", "state", "topology"]

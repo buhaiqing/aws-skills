@@ -39,7 +39,7 @@ metadata:
     - aws-cloudwatch-ops    # Alarm source for target tracking
     - aws-cloudtrail-ops    # Change audit for App Auto Scaling API calls
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['capacity-forecast', 'self-heal']
     produces_facts: ['state']

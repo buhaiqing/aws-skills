@@ -41,7 +41,7 @@ metadata:
     - aws-kms-ops             # Encryption key management
     - aws-s3-ops              # Export/import DynamoDB data to S3
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'rca', 'self-heal', 'change-impact']
     produces_facts: ['metric', 'state', 'event']

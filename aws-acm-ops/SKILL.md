@@ -40,7 +40,7 @@ metadata:
     - aws-cloudfront-ops     # Certificate binding to CloudFront distributions
     - aws-cloudwatch-ops     # Certificate expiry metrics and alarms
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'self-heal']
     produces_facts: ['state', 'event']

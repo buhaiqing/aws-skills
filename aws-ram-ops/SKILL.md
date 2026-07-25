@@ -37,7 +37,7 @@ metadata:
     - aws-aurora-ops      # Aurora cluster ARN lookup + consumer validation
     - aws-vpc-ops         # VPC and network resource sharing
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['compliance-scan', 'change-impact']
     produces_facts: ['config', 'state']

@@ -35,7 +35,7 @@ metadata:
     prompts_ref: references/prompt-templates.md
     pilot: false
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['rca', 'change-impact', 'forensic']
     produces_facts: ['event']

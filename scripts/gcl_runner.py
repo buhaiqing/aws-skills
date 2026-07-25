@@ -58,46 +58,13 @@ def _load_yaml_frontmatter(path: Path) -> dict[str, Any]:
     parts = txt.split("---", 2)
     if len(parts) < 3:
         return {}
-    try:
-        import yaml  # PyYAML is already a dep of the other helpers
-        return yaml.safe_load(parts[1]) or {}
-    except Exception:
-        # Fallback: tiny parser for the `metadata.gcl.*` keys we need
-        return _yaml_lite(parts[1])
+    # Per F-007 (2026-07-26): _yaml_lite fallback removed — it incorrectly
+    # flattened nested dicts. PyYAML is a required dep; let exceptions
+    # surface rather than silently returning garbage.
+    import yaml  # PyYAML is a required dep
+    return yaml.safe_load(parts[1]) or {}
 
 
-def _yaml_lite(block: str) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    cur: dict[str, Any] | None = None
-    indent = 0
-    for line in block.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        spaces = len(line) - len(line.lstrip(" "))
-        if spaces == 0 and ":" in line:
-            k, _, v = line.partition(":")
-            v = v.strip().strip('"').strip("'")
-            if v == "":
-                cur = {}
-                out[k.strip()] = cur
-                indent = spaces
-            else:
-                cur = None
-                out[k.strip()] = _coerce(v)
-        elif cur is not None and spaces > indent and ":" in line:
-            k, _, v = line.strip().partition(":")
-            v = v.strip().strip('"').strip("'")
-            cur[k.strip()] = _coerce(v)
-    return out
-
-
-def _coerce(v: str) -> Any:
-    if v.lower() in ("true", "false"):
-        return v.lower() == "true"
-    try:
-        return int(v)
-    except ValueError:
-        return v
 
 
 def load_skill(skill_name: str) -> dict[str, Any]:

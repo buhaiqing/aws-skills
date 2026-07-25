@@ -34,7 +34,7 @@ metadata:
     - aws-s3-ops          # Query result output location (S3 bucket)
     - aws-iam-ops         # Workgroup IAM policies / Service role
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['health-check', 'cost-forecast']
     produces_facts: ['metric', 'cost', 'state']

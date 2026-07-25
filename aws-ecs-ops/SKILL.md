@@ -44,7 +44,7 @@ metadata:
     - aws-cloudwatch-ops     # Container Insights, service metrics
     - aws-vpc-ops            # VPC/networking for tasks
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ["health-check", "rca", "capacity-review"]
     produces_facts: ["state", "metric", "event"]

@@ -40,7 +40,7 @@ metadata:
     - aws-cloudtrail-ops       # Multi-account aggregator trail setup
     - aws-lambda-ops           # Custom config rule Lambda function
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ['compliance-scan', 'change-impact']
     produces_facts: ['config']
@@ -55,13 +55,33 @@ metadata:
 
 Recorder: `.ConfigurationRecorders[0].{name,roleARN,recordingGroup}` | Channel: `.DeliveryChannels[0].{name,s3BucketName,s3KeyPrefix,snsTopicARN}` | Rules: `.ConfigRules[].{ConfigRuleName,ConfigRuleState,Source.{Owner,SourceIdentifier}}` | Compliance: `.EvaluationResults[].{ComplianceType,ConfigRuleInvokedBy}` | Aggregator: `.ConfigurationAggregators[].{ConfigurationAggregatorName,ConfigurationStatus}` | Packs: `.ConformancePackDetails[].{ConformancePackName,ConformancePackStatus}` | Full paths: [`references/operations.md`](references/operations.md)
 
-## Overview & Scope
+## Trigger & Scope
 
 AWS Config records resource configurations and evaluates compliance against rules.
 Pattern: **Pre-flight → Execute (CLI, boto3 fallback after 3 failures) → Validate → Recover**. All CLI uses `--output json`.
 
 **Use for**: Configuration Recorders, Delivery Channels, Config rules (managed/custom), Conformance Packs, Aggregators, Organization Config Rules, compliance evaluation.
 **Delegate**: IAM→`aws-iam-ops` | Lambda→`aws-lambda-ops` | S3 delivery→`aws-s3-ops` | SNS→`aws-sns-ops` | CloudTrail→`aws-cloudtrail-ops`
+
+
+### SHOULD Use When
+
+- User mentions "AWS Config", "config rule", "compliance", "configuration recorder", "conformance pack", "resource compliance", or "config aggregation"
+- Need: configuration recorders, delivery channels, config rules (managed/custom), conformance packs, aggregators, or compliance evaluations
+
+### SHOULD NOT Use When
+
+- Security findings / threat detection → `aws-guardduty-ops` or `aws-securityhub-ops`
+- Audit logs / API activity → `aws-cloudtrail-ops`
+- IAM identity / permission changes → `aws-iam-ops`
+
+### Delegation
+
+- Config service-linked role / custom rule Lambda role → `aws-iam-ops`
+- Delivery channel S3 bucket → `aws-s3-ops`
+- Delivery channel SNS topic → `aws-sns-ops`
+- Multi-account aggregator trail setup → `aws-cloudtrail-ops`
+- Custom config rule Lambda function → `aws-lambda-ops`
 
 ## Variable Convention
 

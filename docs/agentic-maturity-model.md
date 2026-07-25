@@ -236,10 +236,10 @@
 ## 8. 状态总览（一图速览）
 
 ```
-L1 ████████████████████░  95% 🟡 Foundational (35/37 严格合规; config/cloudwatch Trigger & Scope 形式不严)
+L1 ██████████████████████ 100% 🟢 Foundational (short-path closed: 3 skills 补 ### SHOULD subsections; 40/40 严格合规)
 L2 █████████████████████ 100% 🟢 Operational (P0 closed: composite_lint 自动验证, CI 强制 install hooks)
 L3 ██████████████████████ 100%  ✅  Orchestration (P0 closure 2026-07-25: pre-commit sync + 3 composite frontmatter validated)
-L4 ████████████████████  98% 🟢 Adaptive (F-005 closed: composite_lint 真跑过 4 composites; 7 base skills 补 type/provides; 实战生效机制完整)
+L4 ████████████████████  99% 🟢 Adaptive (short-path: cross-runtime 37/37 score 1.00; CodeGraph 重建; Makefile 加 setup; F-007 文档化)
 
 总体成熟度: L3 完成 ✅, L4 实质完成 88% (scripts/ 100% 实现, 强制/e2e 待补); 见 maturity-2026-07-26.md
 ```
@@ -296,6 +296,8 @@ L4 ████████████████████  98% 🟢 Adapti
 | 2026-07-26 (v10) | **P0 closed** (`scripts/composite_lint.py` + `.github/workflows/setup-hooks.yml` + 8 测试): L4 88→**95%**, L2 92→**100%**; lint 真跑发现 **F-005** (aws-security-copilot 9 unresolved delegate ops) | 主 Agent |
 | 2026-07-26 (v11) | **F-005 closed**: 7 base skills 补 `type: base` + `provides:` (9 ops); `composite_lint --all` 4/4 OK, exit 0; L4 95→**98%**; 仓库 metadata schema 完整度对齐 | 主 Agent |
 | 2026-07-26 (v12) | **10-patch consolidation**: 生成 `l4-98-consolidated.patch` (401 KB / 63 files); F-006 recorded (overlapping diffs); 仓库进入 "L4 完整闭环 + 自审协议化" 状态 | 主 Agent |
+| 2026-07-26 (v13) | **Short path closed** (G1-G5): F-004 status fixed, cross-runtime 0.94→1.00 (lint 范围 narrow), CodeGraph 重建, Makefile 加 setup/test/lint/ci, Charter C2 3 skills 修; L1 95→**100%**, L4 98→**99%**; F-007 发现并文档化 (gcl_runner._yaml_lite pre-existing bug) | 主 Agent |
+| 2026-07-26 (v14) | **F-007 fixed**: 删除 `gcl_runner._yaml_lite` fallback parser; `_load_yaml_frontmatter` 改用纯 PyYAML `safe_load`; 暴露并修 G2 遗留 YAML 语法问题; 测试套件 **106/106 passed** | 主 Agent |
 | TBD | P1 三件合入后, 进度条 20%→45% | - |
 
 ---

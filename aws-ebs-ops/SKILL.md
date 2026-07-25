@@ -33,7 +33,7 @@ metadata:
     - aws-ec2-ops            # Instance operations
     - aws-cloudwatch-ops     # EBS metrics (VolumeWriteOps, VolumeReadOps, VolumeQueueLength)
   orchestrator_aware: true
-  orchestrator_compat: ">=0.1.0"
+  orchestrator_compat: ">=0.10"
   delegate:
     accepts: ["health-check", "capacity-review"]
     produces_facts: ["state", "event"]
