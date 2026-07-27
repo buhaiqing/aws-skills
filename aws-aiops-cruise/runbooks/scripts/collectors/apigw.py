@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 
-from _shared import make_incident, resource_in_scope, run_aws, log
+from _shared import make_incident, resource_in_scope, run_aws
 
 
 def audit_apigw_health(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:

@@ -365,7 +365,6 @@ def reverse_lookup_scope(region: str, resource_id: str) -> tuple[str, str, set[s
     """From a resource ID, derive tag scope and expanded scope IDs."""
     tag_key, tag_value = "", ""
     extra: set[str] = {resource_id}
-    prefix = resource_id.split("-")[0] if "-" in resource_id else resource_id[:2]
 
     if resource_id.startswith("i-"):
         data = run_aws(["aws", "ec2", "describe-instances", "--instance-ids", resource_id], region)

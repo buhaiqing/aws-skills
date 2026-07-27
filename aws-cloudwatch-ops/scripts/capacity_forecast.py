@@ -140,7 +140,8 @@ def batch_forecast(
 
 
 if __name__ == "__main__":
-    import json, sys
+    import json
+    import sys
 
     # Demo with synthetic data
     demo_data = [

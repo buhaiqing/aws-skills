@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import subprocess
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 

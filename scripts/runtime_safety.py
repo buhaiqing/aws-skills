@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
 """Runtime Safety Guardrail — pre-tool-use hook for L4 dim #6.
 
-Cross-references an in-flight tool call against the historical failure-pattern
-library (failure-patterns.md, written by `_reflexion.py`) and returns a
-decision: ALLOW / WARN / BLOCK.
+Decision table:
+  is_destructive  safety_confirm  pattern(count≥3)  decision
+  False           any             —                 ALLOW
+  True            empty           —                 WARN
+  True            non-empty       no                ALLOW
+  True            non-empty       yes               BLOCK
 
-Contract — see `docs/superpowers/specs/2026-07-25-runtime-safety-design.md`.
-
-Decision rules:
-    1. Non-destructive             -> ALLOW (no pattern lookup).
-    2. Destructive + no confirm     -> WARN (require confirm).
-    3. Destructive + confirm + no match            -> ALLOW.
-    4. Destructive + match (count >= 3)            -> BLOCK (regardless of confirm).
-    5. Destructive + confirm + match (count < 3)   -> WARN (suggest more confirm).
-
-CLI:
-    echo '{"tool_name":..., "args":..., "is_destructive":..., "safety_confirm":...}' \\
-        | python3 scripts/runtime_safety.py --patterns docs/failure-patterns.md
-    exit 0 = ALLOW, 1 = BLOCK, 2 = WARN.
+Exit codes: ALLOW=0  BLOCK=1  WARN=2
 """
 from __future__ import annotations
 
@@ -25,13 +16,74 @@ import argparse
 import json
 import re
 import sys
+import types as _stdlib_types
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 Decision = Literal["ALLOW", "WARN", "BLOCK"]
 
 _HIGH_FREQ_THRESHOLD = 3
+
+# Global state — lazily populated by _load_reflexion()
+_REFLEXION: Optional[object] = None
+
+
+def _load_reflexion() -> Optional[object]:
+    """Lazily load _reflexion.py from the scripts/ directory via exec().
+
+    Uses direct execution so no __init__.py is required in scripts/.
+    Silently returns None if the file is absent or unimportable.
+    """
+    global _REFLEXION
+    if _REFLEXION is not None:
+        return _REFLEXION
+    rx_path = Path(__file__).parent / "_reflexion.py"
+    if not rx_path.exists():
+        _REFLEXION = None
+        return None
+    try:
+        ns: dict[str, object] = {"__name__": "_reflexion"}
+        ns.update(globals())
+        rx_code = rx_path.read_text(encoding="utf-8")
+        exec(rx_code, ns)
+        _REFLEXION = _stdlib_types.SimpleNamespace(
+            FailurePattern=ns.get("FailurePattern"),
+            append_or_increment=ns.get("append_or_increment"),
+        )
+    except Exception:  # pragma: no cover
+        _REFLEXION = None
+    return _REFLEXION
+
+
+def _reflect_block(patterns_path: Path, call: ToolCall, matched: list[dict]) -> None:
+    """L4 #6+#3闭环: BLOCK 决策时自动追加到 failure-patterns.md."""
+    rx = _load_reflexion()
+    if rx is None:
+        return
+    aws_match = re.match(r"^aws\s+([a-z][a-z0-9-]*)", call.tool_name, re.I)
+    skill = f"{aws_match.group(1)}-ops" if aws_match else call.tool_name
+    sample = next(
+        (p for p in matched if p.get("count", 0) >= _HIGH_FREQ_THRESHOLD),
+        matched[0] if matched else {},
+    )
+    pattern = rx.FailurePattern(
+        skill=sample.get("skill", skill),
+        command=sample.get("command", call.tool_name),
+        error=f"BLOCK: high-freq pattern matched (count={sample.get('count', '?')})",
+        root_cause=(
+            f"runtime_safety BLOCK: '{call.tool_name}' matched failure pattern "
+            f"(count={sample.get('count', '?')}); matched_patterns={len(matched)}"
+        ),
+        fix="Review failure-patterns.md for this command; inspect the blocking pattern",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    try:
+        rx.append_or_increment(patterns_path, pattern)
+    except Exception:  # pragma: no cover — never mask the BLOCK exit
+        pass
+
 
 _HEADER_COLS = (
     "skill", "command", "error", "root_cause", "fix", "count", "timestamp",
@@ -57,54 +109,57 @@ class CheckResult:
 # Pattern loading
 # ---------------------------------------------------------------------------
 
+
 def _split_row(line: str) -> list[str]:
     return [c.strip() for c in line.strip("|").split("|")]
 
 
 def _row_to_pattern(cols: list[str]) -> dict | None:
-    if len(cols) < len(_HEADER_COLS):
+    # 6 required cols: skill | command | error | root_cause | fix | count
+    # col 7 (timestamp) is optional — §1 legacy entries omit it
+    if len(cols) < 6:
         return None
-    skill, command, error, root_cause, fix, count, timestamp = cols[:7]
-    try:
-        count_int = int(count)
-    except (TypeError, ValueError):
+    count_str = cols[5].lstrip("-")
+    if not count_str.isdigit():
         return None
     return {
-        "skill": skill,
-        "command": command,
-        "error": error,
-        "root_cause": root_cause,
-        "fix": fix,
-        "count": count_int,
-        "timestamp": timestamp,
-        "error_signature": f"{skill}|{command}|{error[:50]}",
+        "skill": cols[0].strip("`").lower(),
+        "command": cols[1].strip("`").lower(),
+        "error": cols[2].strip("`"),
+        "root_cause": cols[3].strip("`"),
+        "fix": cols[4].strip("`"),
+        "count": int(count_str),
+        "timestamp": cols[6] if len(cols) >= 7 else "",
     }
 
 
 def load_failure_patterns(path: Path) -> list[dict]:
-    """Parse a markdown table of failure patterns into a list of dicts.
-
-    The expected schema is the 7-column table produced by `_reflexion.py`:
-        `| skill | command | error | root_cause | fix | count | timestamp |`
-
-    Returns an empty list if the file does not exist or has no data rows.
-    Malformed rows are silently dropped (the file is hand-curated).
-    """
-    if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8")
+    """Parse a markdown table of failure patterns into a list of dicts."""
     patterns: list[dict] = []
-    header_seen = False
-    for line in text.splitlines():
-        if not line.startswith("|"):
+    text = path.read_text(encoding="utf-8")
+    in_table = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
             continue
-        if not header_seen:
-            if "---" in line:
-                header_seen = True
+        # Case-insensitive header detection: normalize underscores/spaces
+        normalized = line.lower().replace("_", " ")
+        if "skill" in normalized and "command" in normalized and "root cause" in normalized:
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        if line.startswith("|---") or line.startswith("|-"):
+            continue
+        if not line.startswith("|"):
+            in_table = False
             continue
         cols = _split_row(line)
+        # Header bleed-through guard: skip separator-like rows
+        if cols and cols[0].lstrip("-").isdigit():
+            continue
         pat = _row_to_pattern(cols)
-        if pat is not None:
+        if pat:
             patterns.append(pat)
     return patterns
 
@@ -118,18 +173,19 @@ def load_failure_patterns(path: Path) -> list[dict]:
 # A service-only pattern (no op) intentionally does NOT match any op call,
 # because doing so would over-match every operation on the service
 # (defense vs F-3 over-matching risk).
-_AWS_CMD = re.compile(r"^aws\s+([a-z][a-z0-9-]*)(?:\s+([a-z][a-z0-9-]*))?", re.IGNORECASE)
+_AWS_CMD = re.compile(
+    r"^aws\s+([a-z][a-z0-9-]*)(?:\s+([a-z][a-z0-9-]*))?", re.IGNORECASE
+)
 
 
 def _parse_aws_command(s: str) -> tuple[str | None, str | None]:
     """Return (service, op) lowercased; (None, None) if not an `aws <svc> ...` form."""
-    s = (s or "").strip()
-    if not s:
-        return (None, None)
-    m = _AWS_CMD.match(s)
+    m = _AWS_CMD.match(s.strip())
     if not m:
         return (None, None)
-    op = m.group(2).lower() if m.group(2) else None
+    op = m.group(2)
+    if op:
+        op = op.lower()
     return (m.group(1).lower(), op)
 
 
@@ -167,15 +223,8 @@ def match_patterns(call: ToolCall, patterns: list[dict]) -> list[dict]:
     return [p for p in patterns if _match(call, p)]
 
 
-# ---------------------------------------------------------------------------
-# Decision engine
-# ---------------------------------------------------------------------------
-
 def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
-    """Core decision function: ALLOW / WARN / BLOCK.
-
-    See module docstring for the 5-rule decision table.
-    """
+    """Core decision function: ALLOW / WARN / BLOCK."""
     matched = match_patterns(call, patterns)
     has_confirm = bool(call.safety_confirm.strip())
 
@@ -186,18 +235,13 @@ def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
             matched_patterns=matched,
         )
 
-    if matched and any(
-        p.get("count", 0) >= _HIGH_FREQ_THRESHOLD for p in matched
-    ):
-        sample = next(
-            p for p in matched if p.get("count", 0) >= _HIGH_FREQ_THRESHOLD
-        )
+    if matched and any(p.get("count", 0) >= _HIGH_FREQ_THRESHOLD for p in matched):
         return CheckResult(
             decision="BLOCK",
             reason=(
-                f"destructive op '{call.tool_name}' matches high-freq "
-                f"failure pattern (count={sample['count']}); "
-                f"refusing without dry-run"
+                f"destructive op '{call.tool_name}' matched high-freq "
+                f"failure pattern(s) (count >= {_HIGH_FREQ_THRESHOLD}); "
+                f"refusing to proceed — use a known-safe confirmation token"
             ),
             matched_patterns=matched,
         )
@@ -213,7 +257,6 @@ def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
         )
 
     if matched:
-        # All matches low-freq (count < 3) — caller can re-confirm.
         return CheckResult(
             decision="WARN",
             reason=(
@@ -232,10 +275,8 @@ def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
         matched_patterns=matched,
     )
 
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def _read_patterns_arg(paths: list[Path]) -> list[dict]:
     out: list[dict] = []
@@ -267,6 +308,10 @@ def main(argv: list[str] | None = None) -> int:
         "--patterns", action="append", required=True,
         help="Path to a failure-patterns.md file (repeatable).",
     )
+    parser.add_argument(
+        "--reflect-on-block", action="store_true",
+        help="L4 #6+#3闭环: reflexion-append to failure-patterns.md on BLOCK.",
+    )
     args = parser.parse_args(argv)
 
     raw = sys.stdin.read().strip()
@@ -288,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
     patterns = _read_patterns_arg([Path(p) for p in args.patterns])
     result = check_tool_call(call, patterns)
     _emit(result)
+    if args.reflect_on_block and result.decision == "BLOCK":
+        _reflect_block(Path(args.patterns[0]), call, result.matched_patterns)
     return _decision_exit_code(result.decision)
 
 

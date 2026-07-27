@@ -5,7 +5,6 @@
 
 import argparse
 import json
-import sys
 from collections import defaultdict
 from typing import Any, NamedTuple
 
@@ -71,7 +70,6 @@ class CausalGraph:
         # else edge_parent (the caller's node name) — preserves call chain
         # across unnamed intermediate nodes (e.g. ec2-app subsegment → rds-primary).
         for sub in seg.get("subsegments", []):
-            sub_name = sub.get("name", "").strip().strip('"') or None
             sub_edge_parent = svc_name if svc_name else edge_parent
             self._ingest_segment(sub, root_svc=root_svc, edge_parent=sub_edge_parent)
 

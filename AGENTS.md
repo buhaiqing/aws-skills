@@ -312,7 +312,7 @@ aws-aiops-cruise + aws-aiops-orchestrator).
 
 ## Self-reflection rule (project policy)
 
-> **Rule**: After every skill update, auto-run **2 rounds** of self-review
+> **Rule**: After every skill update, auto-run **3 rounds** of self-review
 > and fix all discovered issues. Do not hand back to the user between rounds.
 >
 > Full spec (check tables, verification scripts, dedup procedures,
@@ -320,9 +320,10 @@ aws-aiops-cruise + aws-aiops-orchestrator).
 > [`docs/post-update-self-review.md`](docs/post-update-self-review.md)
 
 | Round | Scope | Key Checks |
-|-------|-------|-----------|
+|-------|-------|------------|
 | **R1: Structural** | Frontmatter / Trigger / Variables / Token Efficiency | C1–C6, TE-1…TE-6, **C6 MUST PASS** |
-| **R2: Content** | CLI validation / error codes / safety gates / link integrity / dedup / TODO.md sync | F1–F8, **F5/F6/F8 MUST PASS** |
+| **R2: Content** | CLI validation / error codes / safety gates / link integrity / dedup / README sync | F1–F8, **F5/F6/F8 MUST PASS** |
+| **R3: Cross-cutting + Lessons Learned** | CADL consistency / TE audit / delegation drift / lessons captured | §12 split gate, §14 TE hard gate, GCL table sync, **≥1 lesson recorded** |
 
 Each round, for every modified skill:
 
@@ -341,12 +342,15 @@ Each round, for every modified skill:
 8. **Verify README sync** — `README.md` and `README_cn.md` tables reflect state.
 9. **TE Post-Change Audit** — scan references/ for token waste per
    [post-update-self-review.md](docs/post-update-self-review.md) §Content Deduplication.
+10. **R3 CADL Check** — verify §12 split gate not violated (code→CodeGraph, docs→Grep),
+    §14 TE hard gate (SKILL.md ≤ 120 lines), GCL Per-Skill Defaults sync,
+    and record ≥1 lesson in the per-skill `post-update-self-review.md`.
 
-After round 2 passes cleanly, report a one-line summary per modified
-skill: `[OK] aws-<service>-ops v<version> — 2 rounds clean`.
+After round 3 passes cleanly, report a one-line summary per modified
+skill: `[OK] aws-<service>-ops v<version> — 3 rounds clean`.
 
-If round 2 still finds issues, run additional rounds until clean. Do
-**not** stop after 2 rounds if problems remain.
+If round 3 still finds issues, run additional rounds until clean. Do
+**not** stop after 3 rounds if problems remain.
 
 ### Reflexion Memory (cross-session learning)
 

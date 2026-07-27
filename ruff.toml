@@ -1,0 +1,23 @@
+# ruff.toml — repo-wide linter configuration
+# Generated: 2026-07-27
+# Purpose: Baseline ignore for pre-existing diagnostics that require deliberate cleanup
+#          (not auto-fixed, or require contextual judgment).
+# All new code must be clean; existing issues tracked for progressive cleanup.
+
+[lint]
+# E402: Module level import not at top of file
+#    Handled by moving imports in baseline-manager.py / test_cf_origins.py
+# E701: Multiple statements on one line (colon)
+#    Fixed in topo-render.py; re-enable if it recurs
+# E741: Ambiguous variable name `l`
+#    Fixed in topo-render.py by renaming to `elb`; re-enable if it recurs
+# F401: Unused import — cleaned up progressively
+# F541: f-string without placeholders — cleaned up progressively
+# F841: Local variable assigned but never used — cleaned up progressively
+
+[lint.per-file-ignores]
+# Test files may have intentional unused imports in imports-for-side-effect patterns
+"**/tests/*" = ["F401"]
+# Scripts that manipulate sys.path dynamically
+"aws-topo-discovery/scripts/baseline-manager.py" = ["E402"]
+"aws-topo-discovery/tests/test_cf_origins.py" = ["E402"]

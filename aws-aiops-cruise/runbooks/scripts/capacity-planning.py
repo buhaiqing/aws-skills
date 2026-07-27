@@ -10,11 +10,10 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 
-from _report import build_aiops_context, render_markdown_report
+from _report import build_aiops_context
 from _shared import (
     COMMAND_TRACE,
     PRODUCTS,
-    W,
     C,
     alb_dimension,
     jq_filter,

@@ -3,9 +3,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 
-from _shared import make_incident, run_aws, jq_filter
+from _shared import make_incident, run_aws
 
 SENSITIVE_PORTS = {22, 3389, 3306, 5432, 6379, 9200, 27017}
 

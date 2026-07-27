@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
-from _shared import make_incident, resource_in_scope, run_aws, log, get_metric_data_batch
+from _shared import make_incident, resource_in_scope, run_aws, get_metric_data_batch
 
 from collectors._time import json_time
 
@@ -162,7 +161,6 @@ def audit_xray_service_graph(region: str, scope_ids: set[str], run_id: str, cust
         return incidents
     for svc in data.get("Services", []):
         name = svc.get("Name", "")
-        type_ = svc.get("Type", "")
         if scope_ids and name and not any(
             resource_in_scope(name, scope_ids) or name in s for s in scope_ids
         ):

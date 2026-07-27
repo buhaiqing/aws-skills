@@ -66,9 +66,7 @@ def audit_waf_blocked(region: str, scope_ids: set[str], run_id: str, customer: s
     if not wafs:
         return incidents
     for acl in wafs.get("WebACLs", []):
-        arn = acl.get("ARN", "")
         name = acl.get("Name", "")
-        dim = f"{name}-regional"
         end = datetime.now(UTC)
         start = end - timedelta(hours=1)
         data = run_aws(

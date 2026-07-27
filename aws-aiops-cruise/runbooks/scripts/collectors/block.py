@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime
 
-from _shared import make_incident, resource_in_scope, run_aws, log
+from _shared import make_incident, resource_in_scope, run_aws
 
-from collectors._time import json_time
 
 
 def audit_ebs_volumes(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:

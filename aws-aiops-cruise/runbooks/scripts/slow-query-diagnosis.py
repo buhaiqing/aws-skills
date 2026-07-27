@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import uuid
 
 from _aws_native import audit_rds_performance_insights
 from _report import build_aiops_context
-from _shared import get_metric_stats, jq_filter, log, make_incident, preflight, resolve_output_dir, resolve_scope_ids, run_aws, W, C
+from _shared import get_metric_stats, jq_filter, log, make_incident, preflight, resolve_output_dir, resolve_scope_ids, run_aws
 
 
 def main() -> int:

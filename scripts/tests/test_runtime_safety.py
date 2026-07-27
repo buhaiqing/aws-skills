@@ -254,3 +254,164 @@ def test_match_handles_boto3_dotted_method_via_fallback(tmp_path):
         f"boto3 substring fallback should match; got {result.decision} "
         f"(reason: {result.reason})"
     )
+# --- P0-1: reflexion-on-block path ---
+
+
+
+def test_reflect_block_appends_to_failure_patterns_md(tmp_path):
+    # Build a minimal failure-patterns.md with one existing pattern
+    fp = tmp_path / "failure-patterns.md"
+    fp.write_text(
+        "# Failure Patterns\n\n"
+        "| skill | command | error | root_cause | fix | count | timestamp |\n"
+        "|-------|---------|-------|------------|-----|-------|-----------|\n"
+        "| ec2-ops | terminate-instances | MissingParameter | Missing `--instance-ids` | --instance-ids i-xxx | 4 | 2026-07-27T00:00:00+00:00 |\n"
+    )
+    initial_lines = fp.read_text().count("\n")
+
+    call_json = json.dumps({
+        "tool_name": "aws ec2 terminate-instances",
+        "args": {"instance_ids": ["i-xxx"]},
+        "is_destructive": True,
+        "safety_confirm": "CONFIRM-X",
+    })
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "runtime_safety.py"),
+         "--patterns", str(fp), "--reflect-on-block"],
+        input=call_json, capture_output=True, text=True, timeout=10,
+    )
+    # BLOCK → exit 1
+    assert result.returncode == 1, f"expected BLOCK (exit 1), got {result.returncode}\nstderr: {result.stderr}"
+    parsed = json.loads(result.stdout)
+    assert parsed["decision"] == "BLOCK"
+
+    # failure-patterns.md should have one new row appended
+    new_content = fp.read_text()
+    assert new_content.count("\n") > initial_lines, "no new row appended"
+    assert "BLOCK: high-freq pattern matched" in new_content
+
+
+def test_reflect_block_increments_existing_row(tmp_path):
+    """Second BLOCK for same command increments the count (dedup by skill+command+error)."""
+    fp = tmp_path / "failure-patterns.md"
+    # Start with an existing reflexion entry (count=3, high-freq → BLOCK)
+    fp.write_text(
+        "# Failure Patterns\n\n"
+        "| skill | command | error | root_cause | fix | count | timestamp |\n"
+        "|-------|---------|-------|------------|-----|-------|-----------|\n"
+        "| ec2-ops | terminate-instances | BLOCK: high-freq pattern matched (count=3) "
+        "| root cause placeholder | fix placeholder | 3 | 2026-07-27T00:00:00+00:00 |\n"
+    )
+
+    call_json = json.dumps({
+        "tool_name": "aws ec2 terminate-instances",
+        "args": {"instance_ids": ["i-yyy"]},
+        "is_destructive": True,
+        "safety_confirm": "CONFIRM-Y",
+    })
+    # Run once — BLOCK
+    r1 = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "runtime_safety.py"),
+         "--patterns", str(fp), "--reflect-on-block"],
+        input=call_json, capture_output=True, text=True, timeout=10,
+    )
+    assert r1.returncode == 1
+
+    # Count how many "BLOCK: high-freq" rows exist now
+    content = fp.read_text()
+    count = content.count("BLOCK: high-freq pattern matched")
+    # append_or_increment deduplicates by skill|command|error → 1 row
+    assert count == 1, f"expected 1 deduped row, got {count}"
+    # The count column of the reflexion row should have incremented from 3 → 4
+    import re
+    m = re.search(r"BLOCK: high-freq.*?\| (\d+) \|", content)
+    assert m and int(m.group(1)) >= 4, f"count did not increment: {m.group(1) if m else 'no match'}"
+
+def test_reflect_block_noop_without_flag(tmp_path):
+    """Without --reflect-on-block, failure-patterns.md is not modified."""
+    fp = tmp_path / "failure-patterns.md"
+    fp.write_text(
+        "# Failure Patterns\n\n"
+        "| skill | command | error | root_cause | fix | count | timestamp |\n"
+        "|-------|---------|-------|------------|-----|-------|-----------|\n"
+        "| ec2-ops | terminate-instances | MissingParameter | Missing `--instance-ids` | --instance-ids i-xxx | 4 | 2026-07-27T00:00:00+00:00 |\n"
+    )
+    initial = fp.read_text()
+
+    call_json = json.dumps({
+        "tool_name": "aws ec2 terminate-instances",
+        "args": {"instance_ids": ["i-xxx"]},
+        "is_destructive": True,
+        "safety_confirm": "CONFIRM-X",
+    })
+    r = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "runtime_safety.py"),
+         "--patterns", str(fp)],   # NO --reflect-on-block flag
+        input=call_json, capture_output=True, text=True, timeout=10,
+    )
+    assert r.returncode == 1  # BLOCK, but no reflexion
+    assert fp.read_text() == initial, "failure-patterns.md was modified without --reflect-on-block"
+# --- P0-1 boundary: reflexion failure modes ---
+
+def test_reflect_block_silent_on_unreadable_path(tmp_path):
+    """BLOCK decision returns exit 1 even when patterns_path is not writable."""
+    fp = tmp_path / "failure-patterns.md"
+    fp.write_text(
+        "# Failure Patterns\n\n"
+        "| skill | command | error | root_cause | fix | count | timestamp |\n"
+        "|-------|---------|-------|------------|-----|-------|-----------|\n"
+        "| ec2-ops | terminate-instances | MissingParameter | Missing `--instance-ids` | --instance-ids i-xxx | 4 | 2026-07-27T00:00:00+00:00 |\n"
+    )
+    fp.chmod(0o000)   # make unreadable/unwritable
+    try:
+        call_json = json.dumps({
+            "tool_name": "aws ec2 terminate-instances",
+            "args": {"instance_ids": ["i-xxx"]},
+            "is_destructive": True,
+            "safety_confirm": "CONFIRM-X",
+        })
+        r = subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "runtime_safety.py"),
+             "--patterns", str(fp), "--reflect-on-block"],
+            input=call_json, capture_output=True, text=True, timeout=10,
+        )
+        # Must still exit 1 (BLOCK) even though reflexion failed silently
+        assert r.returncode == 1, (
+            f"BLOCK should still exit 1 when reflexion fails; got {r.returncode}\n"
+            f"stderr: {r.stderr}"
+        )
+    finally:
+        fp.chmod(0o644)   # restore so tmp_path cleanup can delete it
+
+
+def test_reflect_block_silent_when_reflexion_mod_missing(tmp_path):
+    """BLOCK exits 1 even when _reflexion.py is absent from scripts/."""
+    rx_path = SCRIPTS_DIR / "_reflexion.py"
+    bak = SCRIPTS_DIR / "_reflexion.py.bak"
+    assert rx_path.exists(), "_reflexion.py must exist for this test to be meaningful"
+    rx_path.rename(bak)
+    try:
+        fp = tmp_path / "failure-patterns.md"
+        fp.write_text(
+            "# Failure Patterns\n\n"
+            "| skill | command | error | root_cause | fix | count | timestamp |\n"
+            "|-------|---------|-------|------------|-----|-------|-----------|\n"
+            "| ec2-ops | terminate-instances | MissingParameter | Missing `--instance-ids` | --instance-ids i-xxx | 4 | 2026-07-27T00:00:00+00:00 |\n"
+        )
+        call_json = json.dumps({
+            "tool_name": "aws ec2 terminate-instances",
+            "args": {"instance_ids": ["i-xxx"]},
+            "is_destructive": True,
+            "safety_confirm": "CONFIRM-X",
+        })
+        r = subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "runtime_safety.py"),
+             "--patterns", str(fp), "--reflect-on-block"],
+            input=call_json, capture_output=True, text=True, timeout=10,
+        )
+        assert r.returncode == 1, (
+            f"BLOCK should exit 1 when _reflexion.py is absent; got {r.returncode}\n"
+            f"stderr: {r.stderr}"
+        )
+    finally:
+        bak.rename(rx_path)   # restore

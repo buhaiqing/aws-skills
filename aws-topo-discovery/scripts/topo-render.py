@@ -10,7 +10,9 @@ Usage:
   python3 topo-render.py <output_dir> <mode:brief|detailed> <timestamp> <region> [--format ascii|mermaid|both] [--health-json path]
 """
 
-import json, sys, os, argparse
+import json
+import os
+import argparse
 
 MERMAID_MAX_NODES = 50
 
@@ -131,17 +133,22 @@ def get_health(resource_id, default='OK'):
         h = health_data.get(key, {})
         if h:
             level = h.get('level', '')
-            if level == 'CRITICAL': return 'CRITICAL'
-            if level == 'WARNING': return 'WARNING'
-            if h.get('z_score', 0) > 2.0: return 'WARNING'
+            if level == 'CRITICAL':
+                return 'CRITICAL'
+            if level == 'WARNING':
+                return 'WARNING'
+            if h.get('z_score', 0) > 2.0:
+                return 'WARNING'
     # Fuzzy: overlay key contained in resource id or vice versa
     for k, h in health_data.items():
         if len(k) < 4:
             continue
         if k in resource_id or resource_id in k:
             level = h.get('level', '')
-            if level == 'CRITICAL': return 'CRITICAL'
-            if level == 'WARNING': return 'WARNING'
+            if level == 'CRITICAL':
+                return 'CRITICAL'
+            if level == 'WARNING':
+                return 'WARNING'
     return default
 
 def mermaid_node_id(prefix, raw):
@@ -169,14 +176,14 @@ for i in ec2:
         'status': i.get('State', {}).get('Name', '')
     })
 
-for l in elbs:
-    for az_info in l.get('AvailabilityZones', []):
+for elb in elbs:
+    for az_info in elb.get('AvailabilityZones', []):
         sid = az_info.get('SubnetId', '')
         sub_map.get(sid, {}).setdefault('elb', []).append({
-            'name': l.get('LoadBalancerName', ''),
-            'id': l.get('LoadBalancerArn', ''),
-            'dns': l.get('DNSName', ''),
-            'type': l.get('Type', '')
+            'name': elb.get('LoadBalancerName', ''),
+            'id': elb.get('LoadBalancerArn', ''),
+            'dns': elb.get('DNSName', ''),
+            'type': elb.get('Type', '')
         })
 
 for d in rds:
@@ -466,9 +473,12 @@ def render_mermaid():
             elb_count = len(vs.get('elb', []))
             rds_count = len(vs.get('rds', []))
             parts = []
-            if ec2_count: parts.append(f"EC2 x{ec2_count}")
-            if elb_count: parts.append(f"ELB x{elb_count}")
-            if rds_count: parts.append(f"RDS x{rds_count}")
+            if ec2_count:
+                parts.append(f"EC2 x{ec2_count}")
+            if elb_count:
+                parts.append(f"ELB x{elb_count}")
+            if rds_count:
+                parts.append(f"RDS x{rds_count}")
             label = " | ".join(parts) if parts else "(empty)"
             safe_id = f"agg_{sid.replace('-','_')[:20]}"
             lines.append(f"        {safe_id}[\"{label}\"]")
@@ -487,11 +497,11 @@ def render_mermaid():
                 lines.append("        empty_spot[(\"(empty)\")]")
         lines.append("    end")
 
-    for l in elbs:
-        lb_name = l.get('LoadBalancerName', '')
-        lb_arn = l.get('LoadBalancerArn', '')
+    for elb in elbs:
+        lb_name = elb.get('LoadBalancerName', '')
+        lb_arn = elb.get('LoadBalancerArn', '')
         safe_lb = mermaid_node_id('lb', lb_arn or lb_name)
-        lines.append(f"    {safe_lb}[\"{lb_name}\\n{l.get('Type','')}\"]")
+        lines.append(f"    {safe_lb}[\"{lb_name}\\n{elb.get('Type','')}\"]")
         apply_health(safe_lb, lb_arn or lb_name)
 
     lines.append("    end")
@@ -503,10 +513,10 @@ def render_mermaid():
         if did:
             cf_id_to_node[did] = mermaid_node_id('cf', did)
     lb_dns_to_node = {}
-    for l in elbs:
-        dns = l.get('DNSName', '')
+    for elb in elbs:
+        dns = elb.get('DNSName', '')
         if dns:
-            lb_dns_to_node[dns] = mermaid_node_id('lb', l.get('LoadBalancerArn') or l.get('LoadBalancerName', ''))
+            lb_dns_to_node[dns] = mermaid_node_id('lb', elb.get('LoadBalancerArn') or elb.get('LoadBalancerName', ''))
     def target_for_origin(origin: dict) -> tuple[str | None, str]:
         """Return (mermaid_node_id, inline_suffix) for an origin dict."""
         domain = origin.get('domain', '')

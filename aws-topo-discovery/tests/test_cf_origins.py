@@ -7,10 +7,10 @@ import sys
 import unittest
 from pathlib import Path
 
+import importlib.util
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-
-import importlib.util
 
 _spec = importlib.util.spec_from_file_location("cf_origins_collector", SCRIPTS / "cf-origins-collector.py")
 _mod = importlib.util.module_from_spec(_spec)

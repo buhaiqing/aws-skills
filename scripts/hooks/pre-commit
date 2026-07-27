@@ -6,7 +6,7 @@
 #   2. scripts/gcl_runner.py → --self-test
 #   3. scripts/te_gate.py → --all --strict
 #   4. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
-#   5. scripts/**/*.py → ruff check (fail-closed; mirrors Makefile `lint`)
+#   5. All .py files staged for commit → ruff check "$REPO" (full repo, fail-closed)
 #
 # REPO_ROOT env var overrides auto-detection (for testability).
 
@@ -47,19 +47,16 @@ check_skill_md() {
     fi
 }
 
-# Lint gate (Layer 1+2): fail-closed ruff on all scripts.
-# Runs once, independent of staged files, so context-breaking lint slips are caught.
-# Skip when scripts/ is absent (e.g. a tmp repo under test) — nothing to lint there.
-if [ -d "$SCRIPTS_DIR" ]; then
-    if command -v ruff >/dev/null 2>&1; then
-        if ! ruff check "$SCRIPTS_DIR" >/dev/null 2>&1; then
-            FAIL_REASONS+=("ruff check scripts/ failed — run: ruff check --fix scripts/")
-            FAIL=1
-        fi
-    else
-        FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
+# Lint gate: fail-closed ruff on full repo (all .py files, independent of staged files).
+# Catches context-breaking lint slips anywhere in the repo, not just in scripts/.
+if command -v ruff >/dev/null 2>&1; then
+    if ! ruff check "$REPO" >/dev/null 2>&1; then
+        FAIL_REASONS+=("ruff check . failed — fix before committing (ruff check --fix .)")
         FAIL=1
     fi
+else
+    FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
+    FAIL=1
 fi
 
 for f in $CHANGED; do

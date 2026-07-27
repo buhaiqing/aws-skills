@@ -13,8 +13,8 @@ setup:          ## Install pre-commit hook + Python dev deps
 test:           ## Run full pytest suite
 	python3 -m pytest -p no:rerunfailures scripts/tests/ -q
 
-lint:           ## Run ruff on all scripts + tests
-	ruff check scripts/
+lint:           ## Run ruff on full repo (all Python files, mirrors CI gate)
+	ruff check .
 
 composite-lint: ## Lint all composite/orchestrator-meta skills
 	python3 scripts/composite_lint.py lint --all

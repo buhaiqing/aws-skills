@@ -17,14 +17,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-_script_dir = Path(__file__).resolve().parent
-if str(_script_dir) not in sys.path:
-    sys.path.insert(0, str(_script_dir))
-
 from lib.baseline_local import LocalBackend
+
+_script_dir = Path(__file__).resolve().parent
 
 
 def parse_args(argv=None):
@@ -280,17 +278,17 @@ def main():
     )
 
     summary_lines = [
-        f"# Infrastructure Baseline Snapshot",
-        f"",
+        "# Infrastructure Baseline Snapshot",
+        "",
         f"**Date**: {manifest['generated_at']}",
         f"**Account**: {manifest['account_id']}",
         f"**Region**: {manifest['region']}",
         f"**Total Resources**: {manifest['resource_count']}",
-        f"",
-        f"## Resource Counts",
-        f"",
-        f"| Type | Count |",
-        f"|------|:-----:|",
+        "",
+        "## Resource Counts",
+        "",
+        "| Type | Count |",
+        "|------|:-----:|",
     ]
     for rtype, count in sorted(inventory["resource_counts"].items()):
         summary_lines.append(f"| {rtype} | {count} |")

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tests for capacity_forecast.py — predict_capacity() and batch_forecast()."""
 
-import pytest
 from capacity_forecast import (
     predict_capacity,
     batch_forecast,
