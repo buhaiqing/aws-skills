@@ -326,10 +326,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.restore:
         if not args.skill:
-            print("--restore requires --skill", file=sys.stderr); return 2
+            print("--restore requires --skill", file=sys.stderr)
+            return 2
         bak = REPO / args.skill / "references" / "prompt-templates.md.bak"
         if not bak.is_file():
-            print(f"no backup: {bak}", file=sys.stderr); return 1
+            print(f"no backup: {bak}", file=sys.stderr)
+            return 1
         shutil.move(str(bak), str(bak.with_suffix("")))
         print(f"restored: {bak.with_suffix('')}")
         return 0
@@ -346,7 +348,6 @@ def main(argv: list[str] | None = None) -> int:
                 shutil.copy2(target, backup)
             new_txt = render(s, target.read_text())
             target.write_text(new_txt)
-            old_lines = len(target.read_text().splitlines()) if False else 0
             new_lines = new_txt.count("\n") + 1
             old_lines = sum(1 for _ in backup.open()) if backup.is_file() else 0
             print(f"  {s}: {old_lines} -> {new_lines} lines")
@@ -357,7 +358,8 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("provide --skill or --all")
     target = REPO / args.skill / "references" / "prompt-templates.md"
     if not target.is_file():
-        print(f"skill not found: {target}", file=sys.stderr); return 1
+        print(f"skill not found: {target}", file=sys.stderr)
+        return 1
     new_txt = render(args.skill, target.read_text())
     if args.dry_run:
         print(new_txt)

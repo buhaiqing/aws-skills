@@ -6,6 +6,7 @@
 #   2. scripts/gcl_runner.py → --self-test
 #   3. scripts/te_gate.py → --all --strict
 #   4. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
+#   5. scripts/**/*.py → ruff check (fail-closed; mirrors Makefile `lint`)
 #
 # REPO_ROOT env var overrides auto-detection (for testability).
 
@@ -14,12 +15,9 @@ set -uo pipefail
 # Determine paths
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(dirname "$HOOK_DIR")"
-# REPO_ROOT for SKILL.md / cross_skill_deps validation (overridable for tests)
+# REPO_ROOT overrides the validated repo (SKILL.md content + dep dir existence),
+# used by tests. The hook's own tooling always lives next to the hook script.
 REPO="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-# When REPO_ROOT is overridden (tests), point scripts to the actual repo's scripts/
-if [ -n "${REPO_ROOT:-}" ]; then
-    SCRIPTS_DIR="/Users/bohaiqing/opensource/git/aws-skills/scripts"
-fi
 
 CHANGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
 FAIL=0
@@ -48,6 +46,21 @@ check_skill_md() {
         fi
     fi
 }
+
+# Lint gate (Layer 1+2): fail-closed ruff on all scripts.
+# Runs once, independent of staged files, so context-breaking lint slips are caught.
+# Skip when scripts/ is absent (e.g. a tmp repo under test) — nothing to lint there.
+if [ -d "$SCRIPTS_DIR" ]; then
+    if command -v ruff >/dev/null 2>&1; then
+        if ! ruff check "$SCRIPTS_DIR" >/dev/null 2>&1; then
+            FAIL_REASONS+=("ruff check scripts/ failed — run: ruff check --fix scripts/")
+            FAIL=1
+        fi
+    else
+        FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
+        FAIL=1
+    fi
+fi
 
 for f in $CHANGED; do
     case "$f" in
