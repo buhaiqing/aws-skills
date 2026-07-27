@@ -1,0 +1,27 @@
+# k8s-workload-ops example config. Substitute {{user.*}} before use; no secrets here.
+# YAML anchors dedupe shared fields across environments (TE-5).
+_defaults: &defaults
+  k8s_cluster_name: "{{user.k8s_cluster_name}}"   # e.g. 爱婴室生产
+  project: "{{user.project}}"
+  namespace: "{{user.namespace}}"
+
+production:
+  <<: *defaults
+  profile: production
+  app: "{{user.app}}"
+  # governance thresholds consumed by governance-audit (see references/core-concepts.md)
+  governance:
+    min_replicas: 2
+    require_probes: true
+    forbid_latest_tag: true
+    util_red_line_pct: 85
+
+staging:
+  <<: *defaults
+  profile: staging
+  app: "{{user.app}}"
+  governance:
+    min_replicas: 1
+    require_probes: true
+    forbid_latest_tag: true
+    util_red_line_pct: 90
