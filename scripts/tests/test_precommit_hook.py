@@ -170,20 +170,17 @@ def test_hook_accepts_markdown_link_dep_to_existing_dir(tmp_path):
     )
 
 
-def _scripts_dir() -> Path:
-    """The hook's own scripts/ that the ruff gate actually lints (HOOK/../)."""
-    return HOOK.parent.parent
-
-
 def test_hook_blocks_on_ruff_error_in_scripts(tmp_path):
-    """Layer 1: a ruff error in scripts/ must make the hook exit 1 (fail-closed).
+    """Layer 1: a ruff error in the linted repo's scripts/ must make the hook exit 1.
 
-    The gate lints the hook's own scripts dir, so we inject a probe there and
-    clean it up afterwards (the hook's repo is the live one under test).
+    Hermetic: the probe is injected into the SAME tmp repo the hook lints via
+    REPO_ROOT, so the test neither mutates the live repo nor contradicts its
+    own setup. (Prior version wrote the probe to the live scripts/ but set
+    REPO_ROOT to a separate clean tmp repo, so the gate never saw the error.)
     """
     repo = _init_tmp_repo(tmp_path)
-    scripts = _scripts_dir()
-    probe = scripts / "_lint_gate_probe.py"
+    (repo / "scripts").mkdir()
+    probe = repo / "scripts" / "_lint_gate_probe.py"
     probe.write_text("x = 1; y = 2\n")  # ruff E702
     try:
         result = _run_hook_in(repo, repo_root=repo)
@@ -199,9 +196,8 @@ def test_hook_blocks_on_ruff_error_in_scripts(tmp_path):
 def test_hook_passes_when_scripts_clean(tmp_path):
     """Layer 1: clean scripts/ must pass ruff gate (exit 0)."""
     repo = _init_tmp_repo(tmp_path)
-    probe = _scripts_dir() / "_lint_gate_probe.py"
-    if probe.exists():
-        probe.unlink()  # deterministic clean state
+    (repo / "scripts").mkdir()
+    # No probe -> tmp repo's scripts/ is clean -> gate passes.
     result = _run_hook_in(repo, repo_root=repo)
     assert result.returncode == 0, (
         f"hook should pass on clean scripts; stdout={result.stdout!r}\nstderr={result.stderr!r}"
