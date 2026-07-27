@@ -168,3 +168,43 @@ def test_hook_accepts_markdown_link_dep_to_existing_dir(tmp_path):
         f"hook should accept existing-dir markdown-link dep; "
         f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
     )
+
+
+def _copy_scripts_into(repo_path: Path) -> Path:
+    """Copy the real repo's scripts/ into repo_path/scripts for lint-gate testing."""
+    import shutil
+
+    dst = repo_path / "scripts"
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(REPO / "scripts", dst)
+    return dst
+
+
+def test_hook_blocks_on_ruff_error_in_scripts(tmp_path):
+    """Layer 1: a ruff error in scripts/ must make the hook exit 1 (fail-closed)."""
+    repo = _init_tmp_repo(tmp_path)
+    scripts = _copy_scripts_into(repo)
+    # Inject a trivial ruff E702 (multiple statements on one line)
+    bad = scripts / "_lint_gate_probe.py"
+    bad.write_text("x = 1; y = 2\n")
+    result = _run_hook_in(repo, repo_root=repo)
+    assert result.returncode != 0, (
+        f"hook should fail on ruff error; stdout={result.stdout!r}\nstderr={result.stderr!r}"
+    )
+    combined = (result.stdout + result.stderr).lower()
+    assert "ruff" in combined, f"failure reason should mention ruff; got: {combined}"
+
+
+def test_hook_passes_when_scripts_clean(tmp_path):
+    """Layer 1: clean scripts/ with no staged py changes must pass ruff gate (exit 0)."""
+    repo = _init_tmp_repo(tmp_path)
+    _copy_scripts_into(repo)
+    # Remove the probe if a prior run left it (deterministic clean state)
+    probe = repo / "scripts" / "_lint_gate_probe.py"
+    if probe.exists():
+        probe.unlink()
+    result = _run_hook_in(repo, repo_root=repo)
+    assert result.returncode == 0, (
+        f"hook should pass on clean scripts; stdout={result.stdout!r}\nstderr={result.stderr!r}"
+    )
