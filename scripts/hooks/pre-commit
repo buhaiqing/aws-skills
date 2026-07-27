@@ -15,11 +15,9 @@ set -uo pipefail
 # Determine paths
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(dirname "$HOOK_DIR")"
-# REPO_ROOT for SKILL.md / cross_skill_deps validation (overridable for tests)
+# REPO_ROOT overrides the validated repo (SKILL.md content + dep dir existence),
+# used by tests. The hook's own tooling always lives next to the hook script.
 REPO="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-# SCRIPTS_DIR is always derived from REPO so the lint gate checks the same repo
-# the hook is validating (portable; testable via REPO_ROOT pointing at a tmp repo).
-SCRIPTS_DIR="$REPO/scripts"
 
 CHANGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
 FAIL=0
@@ -51,14 +49,17 @@ check_skill_md() {
 
 # Lint gate (Layer 1+2): fail-closed ruff on all scripts.
 # Runs once, independent of staged files, so context-breaking lint slips are caught.
-if command -v ruff >/dev/null 2>&1; then
-    if ! ruff check "$SCRIPTS_DIR" >/dev/null 2>&1; then
-        FAIL_REASONS+=("ruff check scripts/ failed — run: ruff check --fix scripts/")
+# Skip when scripts/ is absent (e.g. a tmp repo under test) — nothing to lint there.
+if [ -d "$SCRIPTS_DIR" ]; then
+    if command -v ruff >/dev/null 2>&1; then
+        if ! ruff check "$SCRIPTS_DIR" >/dev/null 2>&1; then
+            FAIL_REASONS+=("ruff check scripts/ failed — run: ruff check --fix scripts/")
+            FAIL=1
+        fi
+    else
+        FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
         FAIL=1
     fi
-else
-    FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
-    FAIL=1
 fi
 
 for f in $CHANGED; do
