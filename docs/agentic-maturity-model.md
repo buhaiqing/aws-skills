@@ -244,6 +244,18 @@ L4 ████████████████████  99% 🟢 Adapti
 总体成熟度: L3 完成 ✅, L4 实质完成 88% (scripts/ 100% 实现, 强制/e2e 待补); 见 maturity-2026-07-26.md
 ```
 
+### 8.1 运行健康证据（机器生成，带日期）
+
+> 上面的 L1–L4 百分比是**人工能力评估**（主观，见各 Level 章节）。其下方列出的"测试全绿 /
+> 门禁通过"等健康声明，**不再手写静态数字**，改为引用由 `make snapshot` 生成的、可复现的证据文件：
+>
+> 📄 **[`docs/status-snapshot.md`](../status-snapshot.md)** — 由 `scripts/status_snapshot.py`
+> 真实跑 pytest + ruff + composite_lint + self_review verify 后产出，含生成日期与四项真实数字。
+>
+> 该文件每次 `make ci` / `make snapshot` 刷新，**手工编辑会被覆盖**。这样"能力评估(人工)"
+> 与"健康证据(机器)"分离：任一侧漂移都能被独立核验，避免叙述性真理与门禁事实脱节
+> （本次项目早期就曾因手写"测试全绿"而漏判 baseline 状态）。
+
 > **2026-07-25 里程碑**: P0 + P1 同时完成 → L3 = 100% ✅, L4 = 45%。
 > - L3 闭环: pre-commit sync 自动化 + 3 个 L2 composite frontmatter 升级 v0.2.0 + status=validated
 > - L4 启动: gcl_metrics 报表 + reflexion 自动 append + pre-commit 硬门禁
