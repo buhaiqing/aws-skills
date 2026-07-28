@@ -6,7 +6,7 @@ Implements the loop defined in `aws-skill-generator/references/gcl-spec.md`:
 
   §4 Loop Flow        Pre-flight → Generate → Critique → Decide
   §5 Termination      PASS / MAX_ITER / SAFETY_FAIL
-  §6 Trace schema     ./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json
+  §6 Trace schema     ./audit-results/gcl-trace-YYYYMMDD-HHMMSS-<run-id>.json
   §7.1 Placeholders   inject {{output.*}} from {{user.*}} before Critic
   §9 Anti-patterns    abort visibly on Safety=0; never silently downgrade
   §10 Phase 2         runtime-agnostic Orchestrator
@@ -34,16 +34,155 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = REPO / "audit-results"
+DEFAULT_COMMAND_TIMEOUT = 60.0
+_RUBRIC_DIMENSIONS = (
+    "correctness", "safety", "idempotency", "traceability", "spec_compliance",
+)
+_SECRET_KEYS = re.compile(
+    r"(?:access.?key|secret|password|passwd|session.?token|keymaterial|"
+    r"plaintext|ciphertextblob|private.?key)", re.IGNORECASE,
+)
+_SECRET_ASSIGNMENT = re.compile(
+    r"(\b(?:aws_secret_access_key|aws_session_token|sessiontoken|password|"
+    r"passwd|token|keymaterial|plaintext|ciphertextblob)\s*[:=]\s*)"
+    r"(['\"]?)([^\s,'\"}]+)", re.IGNORECASE,
+)
+
+
+class CommandTimeout(RuntimeError):
+    """An external Generator/Critic exceeded its execution budget."""
+
+
+class CommandContractError(RuntimeError):
+    """An external Generator/Critic returned an invalid JSON contract."""
+
+
+def redact_sensitive(value: Any, blocked_text: str = "") -> Any:
+    """Recursively redact secret-like keys and credential assignments."""
+    if isinstance(value, dict):
+        return {
+            key: "***" if _SECRET_KEYS.search(str(key)) else redact_sensitive(item, blocked_text)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_sensitive(item, blocked_text) for item in value]
+    if isinstance(value, str):
+        if blocked_text and blocked_text in value:
+            value = value.replace(blocked_text, "<redacted-request>")
+        return _SECRET_ASSIGNMENT.sub(r"\1\2***", value)
+    return value
+
+
+def sanitize_request(request: str) -> str:
+    """Persist only a stable identifier for the raw user request."""
+    digest = hashlib.sha256(request.encode("utf-8")).hexdigest()
+    return f"<request-sha256:{digest}>"
+
+
+def _trace_safe_generator_result(result: Any, request: str) -> Any:
+    safe = redact_sensitive(result, request)
+    if isinstance(safe, dict):
+        safe.pop("safety_confirm_token", None)
+    return safe
+
+
+def invoke_json_command(
+    cmd: list[str], payload: dict[str, Any], timeout: float = DEFAULT_COMMAND_TIMEOUT,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Invoke an isolated JSON subprocess with timeout and object validation."""
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+        env=env,
+    )
+    try:
+        stdout, stderr = proc.communicate(json.dumps(payload), timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            proc.wait(timeout=1)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                pass
+        raise CommandTimeout(f"command exceeded {timeout}s: {cmd[0]}") from exc
+    if proc.returncode != 0:
+        raise RuntimeError(f"external command failed: {stderr.strip()[:500]}")
+    try:
+        result = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise CommandContractError("external command returned invalid JSON") from exc
+    if not isinstance(result, dict):
+        raise CommandContractError("external command must return a JSON object")
+    return result
+
+
+def critic_environment() -> dict[str, str]:
+    """Return a least-privilege environment without AWS credential sources."""
+    allowed = {
+        "PATH", "TMPDIR", "LANG", "LC_ALL", "HTTPS_PROXY", "NO_PROXY",
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
+    }
+    env = {
+        key: value for key, value in os.environ.items()
+        if key in allowed or key.startswith("LC_")
+    }
+    env.update({
+        "HOME": "/nonexistent",
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+        "AWS_CONFIG_FILE": os.devnull,
+    })
+    return env
+
+
+def _validate_generator(result: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        raise CommandContractError("Generator output must be an object")
+    if not isinstance(result.get("command", ""), str):
+        raise CommandContractError("Generator command must be a string")
+    if not isinstance(result.get("args", {}), dict):
+        raise CommandContractError("Generator args must be an object")
+    if not isinstance(result.get("exit_code", 0), int):
+        raise CommandContractError("Generator exit_code must be an integer")
+    return result
+
+
+def _validate_critic(result: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict) or not isinstance(result.get("scores"), dict):
+        raise CommandContractError("Critic output must contain scores object")
+    scores = result["scores"]
+    if set(scores) != set(_RUBRIC_DIMENSIONS):
+        raise CommandContractError("Critic scores must contain exactly five rubric dimensions")
+    if any(isinstance(score, bool) or score not in (0, 0.5, 1) for score in scores.values()):
+        raise CommandContractError("Critic scores must use 0, 0.5, or 1")
+    suggestions = result.get("suggestions", [])
+    if not isinstance(suggestions, list) or not all(isinstance(item, str) for item in suggestions):
+        raise CommandContractError("Critic suggestions must be a string list")
+    if len(suggestions) > 3:
+        raise CommandContractError("Critic suggestions must contain at most three items")
+    if not isinstance(result.get("blocking", False), bool):
+        raise CommandContractError("Critic blocking must be boolean")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +268,7 @@ def render_critic_prompt(skill: dict[str, Any]) -> str:
 def _trace_path() -> Path:
     AUDIT_DIR.mkdir(exist_ok=True)
     ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
-    return AUDIT_DIR / f"gcl-trace-{ts}.json"
+    return AUDIT_DIR / f"gcl-trace-{ts}-{uuid.uuid4().hex[:8]}.json"
 
 
 def _prune_old_traces(retention_days: int = 30) -> None:
@@ -151,19 +290,19 @@ def _invoke_generator(ctx: dict[str, Any], cmd: list[str] | None) -> dict[str, A
     if cmd is None:
         # Self-test stub: produces a synthetic generator_output that surfaces
         # the user-supplied safety_confirm once it's present in the trace.
+        request = (ctx.get("user", {}).get("request") or "").lower()
+        destructive_kw = ("delete", "terminate", "detach", "revoke", "disable", "drop")
         return {
             "command": "aws --self-test",
             "args": {},
             "exit_code": 0,
+            "operation_risk": "destructive" if any(k in request for k in destructive_kw) else "read-only",
             "result_excerpt": json.dumps(
                 {"stub": "self-test", "iter": ctx["iter"]}
             ),
             "safety_confirm_token": ctx.get("user", {}).get("safety_confirm", ""),
         }
-    proc = subprocess.run(cmd, input=json.dumps(ctx), text=True, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"generator cmd failed: {proc.stderr}")
-    return json.loads(proc.stdout)
+    return invoke_json_command(cmd, ctx)
 
 
 def _invoke_critic(
@@ -178,10 +317,7 @@ def _invoke_critic(
         # When `flaky_critic=True` is passed in ctx (via --flaky-critic CLI flag),
         # idempotency is scored 0 to exercise the MAX_ITER termination path.
         gen_out = ctx.get("generator_output", {})
-        req = (ctx.get("user", {}).get("request") or "").lower()
-        destructive_kw = ("delete", "terminate", "detach", "revoke",
-                          "disable-guardduty", "disable", "drop")
-        is_destructive = any(k in req for k in destructive_kw)
+        is_destructive = gen_out.get("operation_risk") == "destructive"
         has_confirm = bool(gen_out.get("safety_confirm_token"))
         safety = 1 if not is_destructive or has_confirm else 0
         idempotency = 0.0 if ctx.get("_flaky_critic") else 1.0
@@ -197,10 +333,116 @@ def _invoke_critic(
             "suggestions": [],
             "blocking": safety == 0,
         }
-    proc = subprocess.run(cmd, input=json.dumps(ctx), text=True, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"critic cmd failed: {proc.stderr}")
-    return json.loads(proc.stdout)
+    return invoke_json_command(cmd, ctx, env=critic_environment())
+
+
+def _run_loop(
+    skill_name: str,
+    request: str,
+    user_region: str,
+    generator,
+    critic,
+    safety_confirm: str = "",
+    flaky_critic: bool = False,
+) -> dict[str, Any]:
+    skill = load_skill(skill_name)
+    trace: dict[str, Any] = {
+        "skill": skill_name,
+        "request": sanitize_request(request),
+        "rubric_version": "v1",
+        "iterations": [],
+        "final": {"status": "MAX_ITER", "iter": 0, "output": None},
+    }
+    best = None
+    feedback: list[str] = []
+    for it in range(1, skill["max_iter"] + 1):
+        output_ns = {
+            "requested_region": user_region or os.environ.get("AWS_DEFAULT_REGION", ""),
+            "safety_confirm_token": safety_confirm,
+            "critic_feedback": feedback,
+        }
+        gen_ctx = {
+            "iter": it,
+            "user": {"request": request, "region": user_region,
+                     "safety_confirm": safety_confirm},
+            "output": output_ns,
+            "rubric": skill["rubric"],
+            "_flaky_critic": flaky_critic,
+            "_critic_prompt_rendered": render_critic_prompt(skill),
+        }
+        try:
+            gen_result = _validate_generator(generator(gen_ctx))
+            crit_ctx = {
+                "iter": it,
+                "output": {
+                    "requested_region": output_ns["requested_region"],
+                    "safety_confirm_token": str(
+                        gen_result.get("safety_confirm_token") or ""
+                    ),
+                    "critic_feedback": feedback,
+                },
+                "rubric": skill["rubric"],
+                "generator_output": redact_sensitive(gen_result, request),
+                "trace": redact_sensitive(gen_result, request),
+            }
+            crit_result = _validate_critic(critic(crit_ctx))
+        except (CommandTimeout, CommandContractError, RuntimeError) as exc:
+            trace["final"] = {
+                "status": "SAFETY_FAIL", "iter": it, "output": None,
+                "reason": redact_sensitive(f"trust boundary failure: {exc}", request),
+            }
+            break
+        decision = _decide(
+            crit_result["scores"], it, skill["max_iter"], crit_result.get("blocking", False)
+        )
+        feedback = crit_result.get("suggestions", [])[:3]
+        trace["iterations"].append({
+            "iter": it,
+            "generator": redact_sensitive({
+                "command": gen_result.get("command", ""),
+                "args": gen_result.get("args", {}),
+                "exit_code": gen_result.get("exit_code", 0),
+                "result_excerpt": (gen_result.get("result_excerpt") or "")[:2048],
+            }, request),
+            "critic": redact_sensitive({
+                "scores": crit_result["scores"],
+                "suggestions": feedback,
+                "blocking": crit_result.get("blocking", False),
+            }),
+            "decision": decision,
+        })
+        if decision == "ABORT":
+            trace["final"] = {"status": "SAFETY_FAIL", "iter": it,
+                              "output": None, "reason": "Safety=0 or blocking"}
+            break
+        if decision == "RETURN":
+            trace["final"] = {"status": "PASS", "iter": it,
+                              "output": _trace_safe_generator_result(gen_result, request)}
+            best = gen_result
+            break
+        if decision == "RETURN_BEST":
+            trace["final"] = {
+                "status": "MAX_ITER", "iter": it,
+                "output": _trace_safe_generator_result(best, request),
+                "reason": "max_iter reached; some dimensions below threshold",
+            }
+            break
+        best = gen_result
+    return trace
+
+
+def run_with_callables(
+    skill_name: str,
+    request: str,
+    user_region: str,
+    generator,
+    critic,
+    safety_confirm: str = "",
+) -> dict[str, Any]:
+    """Run GCL with injected callables for deterministic contract tests."""
+    return _run_loop(
+        skill_name, request, user_region, generator, critic, safety_confirm=safety_confirm
+    )
 
 
 def _decide(
@@ -229,76 +471,16 @@ def run(
     flaky_critic: bool = False,
 ) -> dict[str, Any]:
     """Top-level Orchestrator entry point. Returns the trace object (§6)."""
-    skill = load_skill(skill_name)
-    trace: dict[str, Any] = {
-        "skill": skill_name,
-        "request": request,
-        "rubric_version": "v1",
-        "iterations": [],
-        "final": {"status": "MAX_ITER", "iter": 0, "output": None},
-    }
+    def gen(ctx: dict[str, Any]) -> dict[str, Any]:
+        return _invoke_generator(ctx, generator_cmd)
 
-    best = None
-    for it in range(1, skill["max_iter"] + 1):
-        # §7.1 user→output placeholder mapping, populated by Orchestrator
-        output_ns = {
-            "requested_region": user_region or os.environ.get("AWS_DEFAULT_REGION", ""),
-            "safety_confirm_token": safety_confirm,
-        }
-        gen_ctx = {
-            "iter": it,
-            "user": {"request": request, "region": user_region,
-                      "safety_confirm": safety_confirm},
-            "output": output_ns,
-            "rubric": skill["rubric"],
-            "_flaky_critic": flaky_critic,
-            "_critic_prompt_rendered": render_critic_prompt(skill),
-        }
-        gen_result = _invoke_generator(gen_ctx, generator_cmd)
-        crit_ctx = {
-            **gen_ctx,
-            "generator_output": gen_result,
-            "trace": gen_result,
-        }
-        crit_result = _invoke_critic(crit_ctx, critic_cmd, skill["rubric"])
-        decision = _decide(
-            crit_result["scores"], it, skill["max_iter"], crit_result.get("blocking", False)
-        )
-        trace["iterations"].append({
-            "iter": it,
-            "generator": {
-                "command": gen_result.get("command", ""),
-                "args": gen_result.get("args", {}),
-                "exit_code": gen_result.get("exit_code", 0),
-                "result_excerpt": (gen_result.get("result_excerpt") or "")[:2048],
-            },
-            "critic": {
-                "scores": crit_result["scores"],
-                "suggestions": crit_result.get("suggestions", []),
-                "blocking": crit_result.get("blocking", False),
-            },
-            "decision": decision,
-        })
-        # §5 termination rules
-        if decision == "ABORT":
-            trace["final"] = {"status": "SAFETY_FAIL", "iter": it,
-                              "output": None, "reason": "Safety=0 or blocking"}
-            break
-        if decision == "RETURN":
-            trace["final"] = {"status": "PASS", "iter": it, "output": gen_result}
-            best = gen_result
-            break
-        if decision == "RETURN_BEST":
-            trace["final"] = {
-                "status": "MAX_ITER",
-                "iter": it,
-                "output": best,
-                "reason": "max_iter reached; some dimensions below threshold",
-            }
-            break
-        best = gen_result
+    def crit(ctx: dict[str, Any]) -> dict[str, Any]:
+        return _invoke_critic(ctx, critic_cmd, ctx.get("rubric", ""))
 
-    return trace
+    return _run_loop(
+        skill_name, request, user_region, gen, crit,
+        safety_confirm=safety_confirm, flaky_critic=flaky_critic,
+    )
 
 
 # ---------------------------------------------------------------------------

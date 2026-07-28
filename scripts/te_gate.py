@@ -33,7 +33,7 @@ MAX_SKILL_LINES = 120
 # Marker lines that introduce the single source-of-truth JSON-path block.
 JSON_PATH_HEADER_RE = re.compile(r"^#{1,3}\s*Common JSON Paths\b", re.IGNORECASE)
 # A JSON-path-looking declaration line, e.g.  `.Instances[].InstanceId`
-JSON_PATH_LINE_RE = re.compile(r"^\s*[\w.\[\]]+\s*[=|—-]?\s*`?\.[\w.\[\]]+`?")
+JSON_PATH_LINE_RE = re.compile(r"^\s*#?\s*[\w.\[\]{}]+\s*[:=|—→-]?\s*`?\.[\w.\[\]{}]+`?")
 
 # GCL template body fragments that must NOT appear inline in a skill's
 # prompt-templates.md (they live only in prompt-skeletons.md).
@@ -44,7 +44,7 @@ def check_g1(skill_dir: Path) -> tuple[bool, str]:
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         return False, "SKILL.md missing"
-    lines = skill_md.read_text(encoding="utf-8").count("\n") + 1
+    lines = len(skill_md.read_text(encoding="utf-8").splitlines())
     if lines <= MAX_SKILL_LINES:
         return True, f"{lines} lines (<= {MAX_SKILL_LINES})"
     return False, f"{lines} lines (> {MAX_SKILL_LINES})"
@@ -86,8 +86,13 @@ def check_g3(skill_dir: Path) -> tuple[bool, str]:
             declared_tokens.add(m[-1].strip().strip("`").strip())
 
     body_dupe = []
+    block_end_idx = next(
+        (j for j, ln in enumerate(lines[header_idx + 1:], header_idx + 1)
+         if ln.startswith("##") and not JSON_PATH_HEADER_RE.match(ln)),
+        len(lines),
+    )
     for i, ln in enumerate(lines):
-        if i <= header_idx:
+        if i <= block_end_idx:
             continue
         for tok in declared_tokens:
             if tok and len(tok) > 3 and tok in ln and JSON_PATH_LINE_RE.match(ln):

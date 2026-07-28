@@ -20,6 +20,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from runtime_safety import (  # noqa: E402
     ToolCall,
+    build_confirmation_token,
     load_failure_patterns,
     check_tool_call,
 )
@@ -68,8 +69,8 @@ def test_check_call_allow_for_readonly():
     assert result.matched_patterns == []
 
 
-def test_check_call_warn_for_destructive_without_confirm(tmp_path):
-    """Destructive op + no safety_confirm + no patterns → WARN (require confirm)."""
+def test_check_call_block_for_destructive_without_confirm(tmp_path):
+    """Destructive op + no exact confirmation → BLOCK."""
     p = _make_pattern_file(tmp_path, [])  # empty pattern file
     call = ToolCall(
         tool_name="aws ec2 terminate-instances",
@@ -78,7 +79,7 @@ def test_check_call_warn_for_destructive_without_confirm(tmp_path):
         safety_confirm="",
     )
     result = check_tool_call(call, patterns=load_failure_patterns(p))
-    assert result.decision == "WARN"
+    assert result.decision == "BLOCK"
     assert "confirm" in result.reason.lower()
 
 
@@ -91,8 +92,9 @@ def test_check_call_allow_with_confirm_and_no_pattern(tmp_path):
         tool_name="aws ec2 terminate-instances",
         args={"instance_ids": ["i-123"]},
         is_destructive=True,
-        safety_confirm="CONFIRM-DELETE-i-123",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
     assert result.decision == "ALLOW"
     assert result.matched_patterns == []
@@ -126,10 +128,11 @@ def test_check_call_warn_with_low_freq_pattern_match(tmp_path):
         tool_name="aws ec2 terminate-instances",
         args={},
         is_destructive=True,
-        safety_confirm="CONFIRM",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
-    # Low-freq match → WARN (not BLOCK) — caller can decide to confirm again
+    # Low-freq match → WARN after exact confirmation.
     assert result.decision == "WARN"
     assert len(result.matched_patterns) == 1
 
@@ -175,8 +178,9 @@ def test_match_rejects_service_only_pattern(tmp_path):
         tool_name="aws rds delete-db-instance",
         args={"db_instance_identifier": "x"},
         is_destructive=True,
-        safety_confirm="CONFIRM",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
     # service-only pattern (no op) → no match → ALLOW despite high count
     assert result.decision == "ALLOW", (
@@ -199,8 +203,9 @@ def test_match_rejects_different_op_same_service(tmp_path):
         tool_name="aws rds delete-db-instance",
         args={"db_instance_identifier": "prod-x"},
         is_destructive=True,
-        safety_confirm="CONFIRM",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
     # Different op → no match → ALLOW (warn gate would also be acceptable)
     assert result.decision in ("ALLOW", "WARN"), (
@@ -223,8 +228,9 @@ def test_match_rejects_different_service(tmp_path):
         tool_name="aws s3 rm",
         args={"--recursive": True},
         is_destructive=True,
-        safety_confirm="CONFIRM",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
     assert result.decision == "ALLOW", (
         f"different service must not BLOCK; got {result.decision}"
@@ -246,8 +252,9 @@ def test_match_handles_boto3_dotted_method_via_fallback(tmp_path):
         tool_name="boto3.ec2.terminate_instances",
         args={"InstanceIds": ["i-xxx"]},
         is_destructive=True,
-        safety_confirm="CONFIRM",
+        safety_confirm="",
     )
+    call.safety_confirm = build_confirmation_token(call)
     result = check_tool_call(call, patterns=load_failure_patterns(p))
     # Both are boto3 dotted methods → substring fallback matches → BLOCK (high-freq)
     assert result.decision == "BLOCK", (

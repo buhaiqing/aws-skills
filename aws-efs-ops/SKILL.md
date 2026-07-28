@@ -42,287 +42,59 @@ metadata:
 
 # AWS EFS Operations Skill
 
-## Overview
+Use for EFS file systems, mount targets, access points, policies, encryption, throughput, backups, and lifecycle. Detailed CLI/SDK commands remain in references.
 
-AWS Elastic File System (EFS) provides scalable, elastic NFS file storage for use with AWS cloud services and on-premises resources. This skill covers **file system lifecycle, mount targets, access points, and network configuration**.
+## Common JSON Paths
+
+FileSystem: .{FileSystemId,Name,LifeCycleState,NumberOfMountTargets,Encrypted,ThroughputMode}
+MountTargets: .MountTargets[].{MountTargetId,FileSystemId,SubnetId,LifeCycleState,IpAddress}
+AccessPoints: .AccessPoints[].{AccessPointId,FileSystemId,LifeCycleState,PosixUser,RootDirectory}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "EFS", "Elastic File System", "NFS", "shared file system", "file storage"
-- Task involves CRUD on **EFS resources** (file system, mount target, access point)
-- Keywords: efs, elastic-file-system, nfs, mount-target, access-point, file-system
+EFS file systems, mount targets, access points, throughput, encryption, backup, lifecycle, or NFS connectivity.
 
 ### SHOULD NOT Use When
-- Block-level storage → delegate to: `aws-ebs-ops`
-- EC2 instance store → ephemeral, not EBS/EFS
-- S3 object storage → delegate to: `aws-s3-ops`
-- EC2 instance management → delegate to: `aws-ec2-ops`
+EBS → `aws-ebs-ops`; EC2 lifecycle → `aws-ec2-ops`; S3 object storage → `aws-s3-ops`; VPC/subnets/SGs → `aws-vpc-ops`.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | Skip if AWS_PROFILE or IAM Role used |
-| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | Required for STS temporary credentials |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile (SSO / AssumeRole) |
-| `{{user.region}}` | User input | Ask once; reuse |
-| `{{user.file_system_id}}` | Last API response | `describe-file-systems → .FileSystems[0].FileSystemId` |
-| `{{output.file_system_id}}` | Last API response | Auto-populated from `create-file-system` |
-
-## Config File Placeholders
-
-EFS does not use a standard config file format. CLI parameters are provided inline. `assets/example-config.yaml` documents common parameter combinations.
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.file_system_id}}`, `{{user.mount_target_id}}`, `{{user.access_point_id}}` | User input | Resource IDs |
+| `{{user.subnet_id}}`, `{{user.security_group_ids}}`, `{{user.region}}` | User input | Network configuration |
+| `{{output.*}}` | API response | Reuse IDs/state/IPs |
 
 ## Execution Flow Pattern
 
-Every operation follows: **Pre-flight → Execute → Validate → Recover**
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json`; verify file system, AZ/subnet, SG, encryption, access points, and NFS dependencies. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll lifecycle state; recover with bounded retries and halt on missing resources, occupied dependencies, or invalid network. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Pre-flight │ → │   Execute   │ → │   Validate  │ → │   Recover   │
-│   Checks    │    │ CLI/SDK     │    │   Polling   │    │  On Error   │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-```
+## Operations and Safety
 
-### Operation: Create File System
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Create file system | Validate encryption, tags, throughput/lifecycle; poll available | — |
+| Delete file system | Verify no mount targets, access points, backups, or consumers | `DELETE <file_system_id>` |
+| Create/delete mount target | Validate subnet/AZ and SG; delete only after consumers drain | Human confirmation before deletion |
+| Create/delete access point | Validate POSIX/root directory and consumers | Human confirmation before deletion |
+| Update policy/throughput | Diff access and performance impact; read back | Token for public/widened access or disruptive change |
 
-#### Pre-flight
-```bash
-aws --version && aws sts get-caller-identity --output json
-aws efs describe-file-systems --region {{user.region}} --output json
-```
-Log: `[OK] EFS accessible, N existing file systems`
-
-#### Execute — CLI (Primary)
-```bash
-aws efs create-file-system \
-  --creation-token "{{user.file_system_token}}" \
-  --performance-mode generalPurpose \
-  --throughput-mode bursting \
-  --encrypted \
-  --region "{{user.region}}" \
-  --output json
-```
-- `--creation-token`: idempotency token (use a unique value like `<name>-<timestamp>`)
-- `--performance-mode`: `generalPurpose` (default) or `maxIO`
-- `--throughput-mode`: `bursting` (default) or `provisioned` (requires `--provisioned-throughput-in-mibps`)
-- `--encrypted`: enabled by default; use `--kms-key-id` for custom KMS key
-
-#### Execute — boto3 (Fallback)
-```python
-import boto3
-client = boto3.client('efs', region_name='{{user.region}}')
-response = client.create_file_system(
-    CreationToken='{{user.file_system_token}}',
-    PerformanceMode='generalPurpose',
-    ThroughputMode='bursting',
-    Encrypted=True
-)
-file_system_id = response['FileSystemId']
-```
-
-#### Validate
-```bash
-aws efs describe-file-systems \
-  --file-system-id "{{output.file_system_id}}" \
-  --region "{{user.region}}" \
-  --query 'FileSystems[0].LifeCycleState' --output json
-```
-Expect: `"available"` (may take minutes after creation)
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| `FileSystemAlreadyExists` | Creation token reused — idempotent; return existing FS |
-| `InsufficientThroughputCapacity` | HALT; ask user to request throughput increase |
-| `ThroughputLimitExceeded` | HALT; reduce provisioned throughput |
-| `BadRequest` (invalid KMS key) | Fix KMS key ID or ARN |
-
----
-
-### Operation: Delete File System
-
-**Safety Gate**: MUST obtain explicit user confirmation (`confirm=DELETE <file_system_id>`). File system must have no mount targets and no access points.
-
-#### Pre-flight
-```bash
-# Check mount targets
-aws efs describe-mount-targets --file-system-id "{{user.file_system_id}}" \
-  --region "{{user.region}}" --output json
-# Check access points
-aws efs describe-access-points --file-system-id "{{user.file_system_id}}" \
-  --region "{{user.region}}" --output json
-```
-If mount targets or access points exist, delete them first.
-
-#### Execute — CLI
-```bash
-aws efs delete-file-system \
-  --file-system-id "{{user.file_system_id}}" \
-  --region "{{user.region}}" --output json
-```
-
-#### Validate
-```bash
-aws efs describe-file-systems \
-  --file-system-id "{{user.file_system_id}}" \
-  --region "{{user.region}}" 2>&1 | grep -q "FileSystemNotFoundException" && echo "[DELETE OK]"
-```
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| `FileSystemInUse` | Mount targets/access points exist — list & delete first |
-| `FileSystemNotFoundException` | Already deleted — idempotent |
-| `BadRequest` | File system not in `available` state — wait and retry |
-
----
-
-### Operation: Create Mount Target
-
-#### Pre-flight
-Verify subnet exists and security group allows NFS (port 2049).
-
-```bash
-aws ec2 describe-subnets --subnet-ids "{{user.subnet_id}}" --region "{{user.region}}" --output json
-```
-
-#### Execute — CLI
-```bash
-aws efs create-mount-target \
-  --file-system-id "{{user.file_system_id}}" \
-  --subnet-id "{{user.subnet_id}}" \
-  --security-groups "{{user.security_group_id}}" \
-  --region "{{user.region}}" --output json
-```
-
-#### Validate
-```bash
-aws efs describe-mount-targets \
-  --file-system-id "{{user.file_system_id}}" \
-  --region "{{user.region}}" \
-  --query 'MountTargets[?SubnetId==`{{user.subnet_id}}`].LifeCycleState' \
-  --output json
-```
-Expect: `"available"`
-
----
-
-### Operation: Delete Mount Target
-
-**Safety Gate**: User must confirm.
-
-```bash
-aws efs delete-mount-target \
-  --mount-target-id "{{user.mount_target_id}}" \
-  --region "{{user.region}}" --output json
-```
-
-### Operation: Create Access Point
-
-```bash
-aws efs create-access-point \
-  --file-system-id "{{user.file_system_id}}" \
-  --posix-user Uid=1000,Gid=1000 \
-  --root-directory Path="/data",CreationInfo='{OwnerUid=1000,OwnerGid=1000,Permissions=0755}' \
-  --region "{{user.region}}" --output json
-```
-
-### Operation: Delete Access Point
-
-**Safety Gate**: User must confirm.
-
-```bash
-aws efs delete-access-point \
-  --access-point-id "{{user.access_point_id}}" \
-  --region "{{user.region}}" --output json
-```
-
-## Common JSON Paths
-
-```json
-// describe-file-systems
-{ "FileSystems": [{ "FileSystemId": "fs-12345678", "LifeCycleState": "available" }] }
-// → .FileSystems[0].FileSystemId
-
-// describe-mount-targets
-{ "MountTargets": [{ "MountTargetId": "fsmt-12345678", "SubnetId": "subnet-xxx", "LifeCycleState": "available" }] }
-// → .MountTargets[0].MountTargetId
-
-// describe-access-points
-{ "AccessPoints": [{ "AccessPointId": "fsap-12345678", "FileSystemId": "fs-xxx" }] }
-// → .AccessPoints[].AccessPointId
-```
-
-## Reference Files
-
-- [AWS CLI Usage](references/aws-cli-usage.md)
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-- [Example Config](assets/example-config.yaml)
-
-## Token Efficiency (TE)
-
-- **TE-1**: Use `aws efs describe-file-systems` to query limits/quotas at runtime; no static table.
-- **TE-2**: boto3 code uses inline comments, no docstrings (see `references/boto3-sdk-usage.md`).
-- **TE-3**: Error tables compact — common errors only; see per-operation Recover tables.
-- **TE-4**: JSON paths centralized in Common JSON Paths block above.
-- **TE-5**: YAML anchors in `assets/example-config.yaml` for shared fields.
+Never log mount credentials, policy secrets, NFS client data, or sensitive tags.
 
 ## Quality Gate (GCL)
 
-GCL is **required** for `aws-efs-ops` (max_iter=2) per `AGENTS.md` §11.5. See [`references/rubric.md`](references/rubric.md) for the 5-dimension scoring rubric and [`references/prompt-templates.md`](references/prompt-templates.md) for Generator/Critic/Orchestrator prompt templates.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
+
+## Token Efficiency
+
+TE-1…TE-6 apply; query live filesystem/network state, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
+
+## Reference Files
+
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for destructive/network-impacting actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

@@ -2,10 +2,11 @@
 # Pre-commit hard gate — L3 §12 automation + L4 #4 enforced gate.
 #
 # Triggers (all blocking):
-#   1. aws-*-ops/*/SKILL.md → verify cross_skill_deps/delegate dirs exist + te_gate --strict
+#   1. aws-*-ops/*/SKILL.md → verify cross_skill_deps/delegate dirs exist + te_gate --strict + links_lint --strict (SR-4)
 #   2. scripts/gcl_runner.py → --self-test
 #   3. scripts/te_gate.py → --all --strict
-#   4. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
+#   4. scripts/links_lint.py → --all --strict
+#   5. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
 #   5. All .py files staged for commit → ruff check "$REPO" (full repo, fail-closed)
 #
 # REPO_ROOT env var overrides auto-detection (for testability).
@@ -45,6 +46,14 @@ check_skill_md() {
             FAIL=1
         fi
     fi
+
+    # SR-4 verification: cross-file anchor links must be valid
+    if [ -f "$SCRIPTS_DIR/links_lint.py" ]; then
+        if ! python3 "$SCRIPTS_DIR/links_lint.py" "$REPO/$skill_dir" --strict >/dev/null 2>&1; then
+            FAIL_REASONS+=("links_lint --strict failed for $f (SR-4 broken anchor)")
+            FAIL=1
+        fi
+    fi
 }
 
 # Lint gate: fail-closed ruff on full repo (all .py files, independent of staged files).
@@ -76,6 +85,14 @@ for f in $CHANGED; do
             if [ -f "$SCRIPTS_DIR/te_gate.py" ]; then
                 if ! python3 "$SCRIPTS_DIR/te_gate.py" --all --strict >/dev/null 2>&1; then
                     FAIL_REASONS+=("te_gate.py --all --strict failed")
+                    FAIL=1
+                fi
+            fi
+            ;;
+        scripts/links_lint.py)
+            if [ -f "$SCRIPTS_DIR/links_lint.py" ]; then
+                if ! python3 "$SCRIPTS_DIR/links_lint.py" --all --strict >/dev/null 2>&1; then
+                    FAIL_REASONS+=("links_lint.py --all --strict failed (SR-4)")
                     FAIL=1
                 fi
             fi

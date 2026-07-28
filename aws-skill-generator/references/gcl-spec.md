@@ -103,7 +103,7 @@ Defaults table). Any skill may override its own `max_iter` in its
 Every GCL run MUST persist a JSON trace to:
 
 ```
-./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json
+./audit-results/gcl-trace-YYYYMMDD-HHMMSS-<run-id>.json
 ```
 
 Required schema (JSON object):
@@ -219,6 +219,36 @@ These rules come up often enough to be standardised repo-wide. Each skill's
 - ❌ **AWS CLI `--output json` placed before subcommand** — non-portable; convention is `aws <svc> <op> --output json` (see CLAUDE.md) → banned in examples and traces
 - ❌ **`{{user.*}}` placeholders in Critic templates** — the Critic must score the trace in isolation; any `{{user.*}}` reference inside a Critic prompt template (even inside a fenced code block) lets the Critic see the original request and rubber-stamp. If the Critic needs a value that originates from the user request, the Orchestrator MUST extract it from `{{user.*}}` and re-inject it as `{{output.*}}` before calling the Critic. The only `{{user.*}}` references allowed in a skill's `references/prompt-templates.md` are inside the **Generator** section and the **Variable Convention** documentation table. See the mapping in §7.1 below.
 
+### 9.1 Runtime trust-boundary requirements
+
+The reusable runner enforces the isolation contract, not just the prompt
+template. The Generator context may contain `user.request`; the Critic context
+MUST contain neither a `user` key nor the raw request. Only sanitized Generator
+output, rubric, derived output fields, and prior decision evidence may cross
+that boundary. Critic suggestions MUST be injected into the next Generator
+context before a `RETRY`.
+
+External Generator/Critic commands MUST return a JSON object within the runner
+timeout. Invalid JSON, invalid rubric scores, non-zero exit, or timeout is a
+trust-boundary failure and terminates as `SAFETY_FAIL`; it must never become a
+best-effort pass. Trace persistence MUST recursively redact secret-like keys
+and credential assignments before writing the file.
+
+### 9.1 Runtime trust-boundary requirements
+
+The reusable runner enforces the isolation contract, not just the prompt
+template. The Generator context may contain `user.request`; the Critic context
+MUST contain neither a `user` key nor the raw request. Only sanitized Generator
+output, rubric, derived output fields, and prior decision evidence may cross
+that boundary. Critic suggestions MUST be injected into the next Generator
+context before a `RETRY`.
+
+External Generator/Critic commands MUST return a JSON object within the runner
+timeout. Invalid JSON, invalid rubric scores, non-zero exit, or timeout is a
+trust-boundary failure and terminates as `SAFETY_FAIL`; it must never become a
+best-effort pass. Trace persistence MUST recursively redact secret-like keys
+and credential assignments before writing the file.
+
 ### 7.1 User→Output placeholder mapping (Critic isolation)
 
 When the Critic template needs a value that semantically comes from the user
@@ -244,7 +274,7 @@ original request. (Added in spec v1.11.0, 2026-06-27, see §11 changelog.)
   `aws-iam-ops` follows in the next PR.
 - **Phase 2** (shipped 2026-06-27) — `scripts/gcl_runner.py` exists as a reusable
   Orchestrator (invokes G, then C in isolated context, persists trace to
-  `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json`, enforces §5 termination).
+  `./audit-results/gcl-trace-YYYYMMDD-HHMMSS-<run-id>.json`, enforces §5 termination).
   Independent of any specific agent runtime.
 - **Phase 3** — feed `gcl-trace-*.json` into a CloudWatch dashboard / Athena
   query for Quality Gate pass-rate and per-skill failure-mode histograms.

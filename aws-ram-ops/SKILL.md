@@ -15,27 +15,10 @@ metadata:
   last_updated: "2026-06-27"
   runtime: Harness AI Agent
   cli_applicability: dual-path
-  gcl:
-    enabled: true
-    class: required
-    max_iter: 2
-    rubric_version: v1
-    rubric_ref: references/rubric.md
-    prompts_ref: references/prompt-templates.md
-    pilot: false
+  gcl: {enabled: true, class: required, max_iter: 2, rubric_ref: references/rubric.md, prompts_ref: references/prompt-templates.md, pilot: false}
   destructive_ops_require_confirm: true
-  environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_SESSION_TOKEN
-    - AWS_DEFAULT_REGION
-    - AWS_PROFILE
-  cross_skill_deps:
-    - aws-iam-ops         # Consumer-account IAM after RAM resource visibility
-    - aws-ec2-ops         # VPC Subnet / Security Group sharing
-    - aws-rds-ops         # DB Cluster sharing
-    - aws-aurora-ops      # Aurora cluster ARN lookup + consumer validation
-    - aws-vpc-ops         # VPC and network resource sharing
+  environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION, AWS_PROFILE]
+  cross_skill_deps: [aws-iam-ops, aws-ec2-ops, aws-rds-ops, aws-aurora-ops, aws-vpc-ops]
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:
@@ -66,601 +49,71 @@ AWS RAM helps you securely share resources across AWS accounts or within an orga
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "RAM", "resource share", "resource sharing", "cross-account share"
-- Task involves CRUD on **resource shares**, **permissions**, or **principals**
-- Task involves **accepting/rejecting** resource share invitations
-- Task involves **enabling Organizations sharing** or **disassociating** resources
-- **Multi-account / app-team accounts**: share subnets, SGs, Aurora/RDS clusters to application management accounts
-- **Authorization**: associate/disassociate/replace RAM **permissions** (read-only vs read-write) on a share
-- **Onboarding**: new app account accepts invitation; audit `list-resources` / `list-principals` for a principal
-- Keywords: ram, resource-share, cross-account, sharing, permission, invitation, principal, app account, OU share
+user mentions RAM/resource-share/cross-account/permission/invitation/OU-share; CRUD on shares/permissions/principals; accept/reject invitations; enable Organizations sharing; multi-account (subnets/SGs/Aurora/RDS shared to app accounts); onboarding or audit flows.
 
 ### SHOULD NOT Use When
-- **Creating AWS accounts** or Organizations member accounts → outside RAM; complete account provisioning first, then use this skill to share resources
-- IAM roles/policies **inside** consumer accounts (e.g. `ec2:RunInstances` after subnet is shared) → delegate to: `aws-iam-ops`
-- VPC/Subnet/Security Group operations → delegate to: `aws-vpc-ops`
-- EC2 instances in shared VPC → delegate to: `aws-ec2-ops`
-- RDS cluster sharing details → delegate to: `aws-rds-ops`
-- Standalone resource tagging → use `aws resourcegroupstaggingapi` CLI directly
+(delegates) create AWS accounts → use account provisioning first; IAM inside consumer accounts → `aws-iam-ops`; VPC/subnet/SG ops → `aws-vpc-ops`; EC2 in shared VPC → `aws-ec2-ops`; RDS cluster sharing detail → `aws-rds-ops`; standalone resource tagging → `aws resourcegroupstaggingapi` CLI.
 
 ## Variable Convention
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SESSION_TOKEN}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile over explicit keys |
-| `{{user.region}}` | User input | Ask once; reuse |
-| `{{user.share_name}}` | User input | Resource share name |
-| `{{user.resource_arns}}` | User input | Resource ARNs to share |
-| `{{user.principal_arns}}` | User input | Principal ARNs or account IDs |
-| `{{user.permission_arn}}` | User input | RAM permission ARN |
-| `{{user.invitation_arn}}` | User input | Resource share invitation ARN |
-| `{{user.share_arn}}` | User input | Resource share ARN |
-| `{{user.permission_name}}` | User input | Custom RAM permission name |
-| `{{user.resource_type}}` | User input | e.g. `ec2:Subnet`, `rds:Cluster` — use `list-resource-types` |
-| `{{user.policy_template}}` | User input | JSON policy template for `create-permission` |
-| `{{user.ou_arn}}` | User input | Organizations OU ARN as principal |
-| `{{output.resourceShareArn}}` | Last API response | Parse: `.resourceShare.resourceShareArn` |
-| `{{output.invitationArn}}` | Last API response | Parse: `.resourceShareInvitation.resourceShareInvitationArn` |
+| `{{env.AWS_*}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{user.region}}` / `{{user.share_name}}` / `{{user.share_arn}}` / `{{user.resource_arns}}` / `{{user.principal_arns}}` / `{{user.permission_arn}}` / `{{user.permission_name}}` / `{{user.invitation_arn}}` / `{{user.resource_type}}` / `{{user.policy_template}}` / `{{user.ou_arn}}` | User input | Ask once; reuse |
+| `{{output.resourceShareArn}}` / `{{output.invitationArn}}` | Last API response | Parse: `.resourceShare.resourceShareArn` / `.resourceShareInvitation.resourceShareInvitationArn` |
 
 ## Config File Placeholders
 
-`assets/example-config.yaml` uses `{{env.*}}` for environment values and `{{user.*}}` for resource-specific values:
-
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_DEFAULT_REGION}}` | `.env` or runtime env | Substitute before use |
-| `{{env.AWS_ACCOUNT_ID}}` | `.env` or runtime env | Substitute before use |
-| `{{user.share_name}}` | User input | Ask once; substitute |
-| `{{user.resource_arns}}` | User input | Ask once; substitute |
-
-Before using `example-config.yaml`:
-1. Load `.env` from project root (if present)
-2. Substitute `{{env.*}}` placeholders with loaded values
-3. Collect `{{user.*}}` values from user input
-4. Use rendered config for CLI/SDK commands
+`assets/example-config.yaml` uses `{{env.AWS_DEFAULT_REGION}}` / `{{env.AWS_ACCOUNT_ID}}` (load from `.env` or runtime env) and `{{user.share_name}}` / `{{user.resource_arns}}` (ask once, substitute). Render order: load `.env` → substitute `{{env.*}}` → collect `{{user.*}}` → invoke CLI/SDK.
 
 ## Execution Flow Pattern
 
-Every operation follows: **Pre-flight → Execute → Validate → Recover**
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Pre-flight │ → │   Execute   │ → │   Validate  │ → │   Recover   │
-│   Checks    │    │ CLI/SDK     │    │   Polling   │    │  On Error   │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-```
-
-### Common Pre-flight Steps (all ops)
-
-#### Step 1: Check CLI
-```bash
-aws --version
-```
-Log: `[OK] AWS CLI v2.x.x detected` or `[FAIL] AWS CLI not found. Install: pip install awscli`
-
-#### Step 2: Load & Verify Credentials
-```bash
-aws sts get-caller-identity --output json
-```
-Log format:
-```
-[SKILL] Loading AWS credentials...
-[OK]   AWS_DEFAULT_REGION={{env.AWS_DEFAULT_REGION}} (from env)
-[OK]   AWS_ACCESS_KEY_ID=**** (masked)
-[OK]   Credential verification passed
-[OK]   Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx
-```
-On failure:
-```
-[FAIL] AWS credential verification failed.
-AWS Error: <exact error message>
-Action: See references/troubleshooting.md for diagnosis.
-```
-
-| Check | Method | On Failure |
-|-------|--------|------------|
-| CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; log precise error; guide to troubleshooting.md |
-| Region valid | `aws ram list-resource-types --region {{user.region}}` | Suggest valid region |
-
-### Operation: Create Resource Share
-
-#### Execute — CLI (Primary)
-```bash
-aws ram create-resource-share \
-  --name "{{user.share_name}}" \
-  --resource-arns "{{user.resource_arns}}" \
-  --principals "{{user.principal_arns}}" \
-  --allow-external-principals \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Validate
-`aws ram get-resource-shares --resource-share-arns {{output.resourceShareArn}}` → check status is `ACTIVE`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix args; retry once |
-| ServerException | Retry 3x; HALT |
-| ThrottlingException | Backoff; retry 3x |
-| MalformedArn | HALT — verify ARN format |
-
-#### Execute — boto3 (Fallback)
-```python
-response = client.create_resource_share(
-    name='{{user.share_name}}',
-    resourceArns=['{{user.resource_arns}}'],
-    principals=['{{user.principal_arns}}'],
-    allowExternalPrincipals=True
-)
-share_arn = response['resourceShare']['resourceShareArn']
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-### Operation: Associate Resource Share
-
-#### Execute — CLI (Primary)
-```bash
-aws ram associate-resource-share \
-  --resource-share-arn "{{user.share_arn}}" \
-  --principals "{{user.principal_arns}}" \
-  --resource-arns "{{user.resource_arns}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.associate_resource_share(
-    resourceShareArn='{{user.share_arn}}',
-    principals=['{{user.principal_arns}}'],
-    resourceArns=['{{user.resource_arns}}']
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-share-associations --association-type PRINCIPAL --resource-share-arns {{user.share_arn}}` → check status is `ASSOCIATED`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix args; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Disassociate Resource Share
-
-#### Execute — CLI (Primary)
-```bash
-aws ram disassociate-resource-share \
-  --resource-share-arn "{{user.share_arn}}" \
-  --principals "{{user.principal_arns}}" \
-  --resource-arns "{{user.resource_arns}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.disassociate_resource_share(
-    resourceShareArn='{{user.share_arn}}',
-    principals=['{{user.principal_arns}}'],
-    resourceArns=['{{user.resource_arns}}']
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-share-associations --association-type PRINCIPAL --resource-share-arns {{user.share_arn}}` → confirm principal(s) no longer associated (status `DISASSOCIATED` or absent).
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix args; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Accept Resource Share Invitation
-
-#### Execute — CLI (Primary)
-```bash
-aws ram accept-resource-share-invitation \
-  --resource-share-invitation-arn "{{user.invitation_arn}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-response = client.accept_resource_share_invitation(
-    resourceShareInvitationArn='{{user.invitation_arn}}'
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-share-invitations --resource-share-invitation-arns {{user.invitation_arn}}` → check status is `ACCEPTED`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| MalformedArn | HALT — verify ARN format |
-| InvalidParameter | Fix args; retry once |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Reject Resource Share Invitation
-**Safety Gate**: `confirm=REJECT_INVITATION {{user.invitation_arn}}`
-
-#### Execute — CLI (Primary)
-```bash
-aws ram reject-resource-share-invitation \
-  --resource-share-invitation-arn "{{user.invitation_arn}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.reject_resource_share_invitation(
-    resourceShareInvitationArn='{{user.invitation_arn}}'
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-share-invitations --resource-share-invitation-arns {{user.invitation_arn}}` → check status is `REJECTED`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| ResourceShareInvitationAlreadyRejectedException | HALT — already rejected |
-| InvalidParameter | Fix args; retry once |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Update Resource Share
-
-#### Execute — CLI (Primary)
-```bash
-aws ram update-resource-share \
-  --resource-share-arn "{{user.share_arn}}" \
-  --name "{{user.share_name}}" \
-  --allow-external-principals \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-response = client.update_resource_share(
-    resourceShareArn='{{user.share_arn}}',
-    name='{{user.share_name}}',
-    allowExternalPrincipals=True
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-shares --resource-share-arns {{user.share_arn}}` → confirm name and `allowExternalPrincipals` match expected values.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix args; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Enable Sharing with AWS Organization
-
-#### Execute — CLI (Primary)
-```bash
-aws ram enable-sharing-with-aws-organization \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.enable_sharing_with_aws_organization()
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-Verify with `aws organizations describe-organization` → confirm `FeatureSet` includes `ALL`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| OperationNotPermittedException | HALT — caller must be management account or delegated admin |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Create Permission
-
-#### Execute — CLI (Primary)
-```bash
-aws ram create-permission \
-  --name "{{user.permission_name}}" \
-  --resource-type "{{user.resource_type}}" \
-  --policy-template "{{user.policy_template}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-response = client.create_permission(
-    name='{{user.permission_name}}',
-    resourceType='{{user.resource_type}}',
-    policyTemplate='{{user.policy_template}}'
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-permission --permission-arn {{output.permissionArn}}` → confirm `permissionVersion` and `status`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix policy template or resource type; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Associate Resource Share Permission
-
-#### Execute — CLI (Primary)
-```bash
-aws ram associate-resource-share-permission \
-  --resource-share-arn "{{user.share_arn}}" \
-  --permission-arn "{{user.permission_arn}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.associate_resource_share_permission(
-    resourceShareArn='{{user.share_arn}}',
-    permissionArn='{{user.permission_arn}}'
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-permission --permission-arn {{user.permission_arn}}` + `aws ram get-resource-share-associations --resource-share-arns {{user.share_arn}}` → confirm permission is associated.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix ARNs; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Delete Resource Share
-**Safety Gate**: `confirm=DELETE_RESOURCE_SHARE {{user.share_arn}}`
-
-#### Execute — CLI (Primary)
-```bash
-aws ram delete-resource-share \
-  --resource-share-arn "{{user.share_arn}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-try:
-    client.delete_resource_share(resourceShareArn='{{user.share_arn}}')
-except ClientError as e:
-    if e.response['Error']['Code'] == 'ResourceNotFoundException':
-        print("Resource share not found (may already be deleted)")
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-resource-shares --resource-share-arns {{user.share_arn}}` → status changes to `DELETED` or resource not found.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix ARN; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Delete Permission
-**Safety Gate**: `confirm=DELETE_PERMISSION {{user.permission_arn}}`
-
-#### Execute — CLI (Primary)
-```bash
-aws ram delete-permission \
-  --permission-arn "{{user.permission_arn}}" \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.delete_permission(permissionArn='{{user.permission_arn}}')
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram list-permissions` → permission no longer listed, or `aws ram get-permission --permission-arn {{user.permission_arn}}` returns `ResourceNotFoundException`.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix ARN; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
-### Operation: Delete Permission Version
-**Safety Gate**: `confirm=DELETE_PERMISSION_VERSION {{user.permission_arn}} {{user.permission_version}}`
-
-#### Execute — CLI (Primary)
-```bash
-aws ram delete-permission-version \
-  --permission-arn "{{user.permission_arn}}" \
-  --version {{user.permission_version}} \
-  --region "{{user.region}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-client.delete_permission_version(
-    permissionArn='{{user.permission_arn}}',
-    version={{user.permission_version}}
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-`aws ram get-permission --permission-arn {{user.permission_arn}}` → confirm specified version is no longer listed.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| InvalidParameter | Fix version; retry once |
-| MalformedArn | HALT — verify ARN format |
-| ResourceNotFoundException | HALT — permission or version not found |
-| ThrottlingException | Backoff; retry 3x |
-| ServerException | Retry 3x; HALT |
-
+Every operation follows: **Pre-flight → Execute → Validate → Recover**.
+Per-operation detail (CLI + boto3 + Validate + Recover tables) lives in
+[references/operations.md](references/operations.md).
+
+## Operations Index
+
+| Operation | Detail |
+|-----------|--------|
+| Create Resource Share | [operations.md#create-resource-share](references/operations.md#operation-create-resource-share) |
+| Associate Resource Share | [operations.md#associate-resource-share](references/operations.md#operation-associate-resource-share) |
+| Disassociate Resource Share | [operations.md#disassociate-resource-share](references/operations.md#operation-disassociate-resource-share) |
+| Accept Resource Share Invitation | [operations.md#accept-resource-share-invitation](references/operations.md#operation-accept-resource-share-invitation) |
+| Reject Resource Share Invitation | [operations.md#reject-resource-share-invitation](references/operations.md#operation-reject-resource-share-invitation) |
+| Update Resource Share | [operations.md#update-resource-share](references/operations.md#operation-update-resource-share) |
+| Enable Sharing with AWS Organization | [operations.md#enable-sharing-with-aws-organization](references/operations.md#operation-enable-sharing-with-aws-organization) |
+| Create Permission | [operations.md#create-permission](references/operations.md#operation-create-permission) |
+| Associate Resource Share Permission | [operations.md#associate-resource-share-permission](references/operations.md#operation-associate-resource-share-permission) |
+| Delete Resource Share | [operations.md#delete-resource-share](references/operations.md#operation-delete-resource-share) |
+| Delete Permission | [operations.md#delete-permission](references/operations.md#operation-delete-permission) |
+| Delete Permission Version | [operations.md#delete-permission-version](references/operations.md#operation-delete-permission-version) |
 ## Safety Gates
 
-### Delete Resource Share
-```
-BEFORE delete-resource-share:
-1. Display: "Deleting resource share {{user.share_arn}} — all associated principals will lose access to shared resources"
-2. Ask: "Type 'DELETE_RESOURCE_SHARE {{user.share_arn}}' to confirm"
-3. Pre-flight: list all associated principals and resources
-```
+All destructive ops require explicit human confirmation with the op-specific string:
 
-### Delete Permission
-```
-BEFORE delete-permission:
-1. Display: "Deleting permission {{user.permission_arn}} — all resource shares using this permission will be affected"
-2. Ask: "Type 'DELETE_PERMISSION {{user.permission_arn}}' to confirm"
-3. Pre-flight: list all resource shares associated with this permission
-```
+| Op | Confirmation string |
+|----|---------------------|
+| `delete-resource-share` | `DELETE_RESOURCE_SHARE {{user.share_arn}}` |
+| `delete-permission` | `DELETE_PERMISSION {{user.permission_arn}}` |
+| `delete-permission-version` | `DELETE_PERMISSION_VERSION {{user.permission_arn}} {{user.permission_version}}` |
+| `reject-resource-share-invitation` | `REJECT_INVITATION {{user.invitation_arn}}` |
 
-### Delete Permission Version
-```
-BEFORE delete-permission-version:
-1. Display: "Deleting permission version {{user.permission_version}} for {{user.permission_arn}}"
-2. Ask: "Type 'DELETE_PERMISSION_VERSION {{user.permission_arn}} {{user.permission_version}}' to confirm"
-```
-
-### Reject Resource Share Invitation
-```
-BEFORE reject-resource-share-invitation:
-1. Display: "Rejecting invitation {{user.invitation_arn}} — you will not have access to the shared resources"
-2. Ask: "Type 'REJECT_INVITATION {{user.invitation_arn}}' to confirm"
-```
+Before each: display the impact (principals/shares that will lose access), then require the typed confirmation string.
 
 ## Token Efficiency
 
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded resource type lists — use `list-resource-types` / `list-resources`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+All 6 TE rules applied (see `aws-skill-generator` SKILL.md). Operations detail in `references/operations.md` (TE-6); JSON paths in `## Common JSON Paths` (TE-4); CLI commands preferred over hardcoded tables (TE-1).
 
 ## Reference Files
 
-- [Prompt Examples](references/prompt-examples.md) — multi-account app sharing & authorization scenarios
-- [Integration](references/integration.md) — Organizations, IAM, VPC/RDS/Aurora cross-account sharing
-- [AWS CLI Usage](references/aws-cli-usage.md)
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-- [GCL Rubric](references/rubric.md)
-- [GCL Prompt Templates](references/prompt-templates.md)
+[prompt-examples.md](references/prompt-examples.md) · [integration.md](references/integration.md) · [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [operations.md](references/operations.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## Quality Gate (GCL)
 
-> Phase 1 GCL rollout (2026-06-10, required, max_iter=2). Every execution of
-> `aws-ram-ops` MUST be wrapped by the Generator-Critic-Loop defined in
-> `aws-skill-generator/references/gcl-spec.md`.
-
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-
-| Operation | GCL | Notes |
-|---|---|---|
-| `delete-resource-share` | required | `confirm=DELETE_RESOURCE_SHARE <arn>` — breaks dependent accounts |
-| `delete-permission` | required | `confirm=DELETE_PERMISSION <arn>` — affects all associated shares |
-| `delete-permission-version` | required | `confirm=DELETE_PERMISSION_VERSION <arn> <version>` |
-| `reject-resource-share-invitation` | required | `confirm=REJECT_INVITATION <arn>` |
+`required` · `max_iterations=2` · rubric `references/rubric.md` (v1). Per `aws-skill-generator/references/gcl-spec.md`. Destructive ops (all 4 above) require their `confirm=...` string (see Safety Gates table) and wrap through the Generator-Critic-Loop.
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md). Recognise the `aiops_delegate:` block (`request_id`, `parent_intent`, `action_mode`, `decision_tier`, `scope.resource_ids`) and apply: (1) 24h `idempotency_key` dedup; (2) destructive ops require `confirmation_token` (else `aiops_context.status: "failed"`); (3) `decision_tier` rules: `MANUAL` = no writes, `AI_ASSIST` = recommend + token-gated, `AUTO_HEAL` = non-destructive writes OK; (4) propagate `trace_id` in `User-Agent: aiops-orchestrator/<trace_id>`; (5) always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).
 

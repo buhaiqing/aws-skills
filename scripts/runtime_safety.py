@@ -4,15 +4,16 @@
 Decision table:
   is_destructive  safety_confirm  pattern(count≥3)  decision
   False           any             —                 ALLOW
-  True            empty           —                 WARN
-  True            non-empty       no                ALLOW
+  True            empty           —                 BLOCK
+  True            non-empty       no                ALLOW only with exact token
   True            non-empty       yes               BLOCK
 
-Exit codes: ALLOW=0  BLOCK=1  WARN=2
+Exit codes: ALLOW=0  BLOCK=1  WARN=2 (low-frequency matched pattern)
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -25,6 +26,11 @@ from typing import Literal, Optional
 Decision = Literal["ALLOW", "WARN", "BLOCK"]
 
 _HIGH_FREQ_THRESHOLD = 3
+_DESTRUCTIVE_OPS = {
+    "delete", "destroy", "detach", "deregister", "disable", "drop",
+    "revoke", "terminate", "remove", "rm", "purge", "release",
+    "schedule-key-deletion", "delete-db-instance", "delete-db-cluster",
+}
 
 # Global state — lazily populated by _load_reflexion()
 _REFLEXION: Optional[object] = None
@@ -94,7 +100,7 @@ _HEADER_COLS = (
 class ToolCall:
     tool_name: str
     args: dict
-    is_destructive: bool
+    is_destructive: bool | None = None
     safety_confirm: str = ""
 
 
@@ -103,6 +109,42 @@ class CheckResult:
     decision: Decision
     reason: str
     matched_patterns: list[dict] = field(default_factory=list)
+
+
+def _normalized_tool_name(tool_name: str) -> str:
+    return re.sub(r"\s+", " ", tool_name.strip().lower().replace("_", "-"))
+
+
+def detect_destructive(tool_name: str) -> bool:
+    """Derive destructive risk from the operation name, never caller metadata."""
+    normalized = _normalized_tool_name(tool_name)
+    if normalized.startswith("aws "):
+        parts = normalized.split()
+        if len(parts) >= 3:
+            operation = parts[2]
+            return operation in _DESTRUCTIVE_OPS or any(
+                operation.startswith(f"{verb}-") for verb in _DESTRUCTIVE_OPS
+            )
+    operation = normalized.rsplit(".", 1)[-1].replace("-", "_")
+    return any(
+        operation == verb.replace("-", "_")
+        or operation.startswith(f"{verb.replace('-', '_')}_")
+        for verb in _DESTRUCTIVE_OPS
+    )
+
+
+def _canonical_plan(call: ToolCall) -> str:
+    return json.dumps(
+        {"tool_name": _normalized_tool_name(call.tool_name), "args": call.args},
+        sort_keys=True, separators=(",", ":"), default=str,
+    )
+
+
+def build_confirmation_token(call: ToolCall) -> str:
+    """Build the exact human confirmation token for the normalized tool plan."""
+    digest = hashlib.sha256(_canonical_plan(call).encode("utf-8")).hexdigest()[:16]
+    operation = _normalized_tool_name(call.tool_name).replace(" ", ".")
+    return f"CONFIRM {operation} {digest}"
 
 
 # ---------------------------------------------------------------------------
@@ -226,9 +268,10 @@ def match_patterns(call: ToolCall, patterns: list[dict]) -> list[dict]:
 def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
     """Core decision function: ALLOW / WARN / BLOCK."""
     matched = match_patterns(call, patterns)
-    has_confirm = bool(call.safety_confirm.strip())
+    is_destructive = detect_destructive(call.tool_name)
+    has_confirm = call.safety_confirm.strip() == build_confirmation_token(call)
 
-    if not call.is_destructive:
+    if not is_destructive:
         return CheckResult(
             decision="ALLOW",
             reason="non-destructive op, no guardrail needed",
@@ -248,10 +291,10 @@ def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
 
     if not has_confirm:
         return CheckResult(
-            decision="WARN",
+            decision="BLOCK",
             reason=(
                 f"destructive op '{call.tool_name}' requires "
-                f"safety_confirm before execution"
+                f"exact plan-bound confirmation before execution"
             ),
             matched_patterns=matched,
         )

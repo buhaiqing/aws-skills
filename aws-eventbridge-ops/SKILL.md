@@ -49,270 +49,66 @@ metadata:
 
 # AWS EventBridge Operations Skill
 
-## Common JSON Paths (Centralized)
+Use for EventBridge buses, rules, targets, Scheduler schedules, Pipes, archives, replays, API destinations, connections, routing, and event-driven automation. Detailed commands remain in references.
 
-```
-# Event Buses:  .EventBuses[].{Name,Arn,EventBusName,Policy,Permission,CreationTime}
-# Rules:        .Rules[].{Name,Arn,EventBusName,EventPattern,State,ScheduleExpression,ManagedBy,RoleArn}
-# Targets:      .Targets[].{Id,Arn,RoleArn,Input,InputPath,DlqArn,RetryPolicy.{MaximumRetryAttempts,MaximumEventAgeInSeconds}}
-# Connections:  .Connections[].{Name,ConnectionArn,AuthorizationType,CreationTime,ConnectionState}
-# API Dests:    .ApiDestinations[].{Name,ApiDestinationArn,ConnectionArn,InvocationEndpoint,HttpMethod,InvocationRateLimitPerSecond}
-# Archives:     .Archives[].{ArchiveName,EventSourceArn,RetentionDays,SizeBytes,EventCount,State}
-# Replays:      .Replays[].{ReplayName,EventSourceArn,State,EventStartTime,EventEndTime,ReplayStartTime,ReplayEndTime}
-# Schedules:    .Schedules[].{Name,GroupName,State,ScheduleExpression,Target.{Arn,RoleArn},FlexibleTimeWindow.{Mode,MaximumWindowInMinutes},CreationDate}
-# Schedule Groups: .ScheduleGroups[].{Name,Arn,CreationDate,State}
-# Pipes:         .Pipes[].{Name,Arn,Source,Target,RoleArn,State,CreationTime,LastModifiedTime,DesiredState}
-```
+## Common JSON Paths
 
-## Overview
-
-Serverless event bus for AWS services, SaaS partners, and custom apps.
-Covers EventBus, Rules, Targets, API Destinations, Connections, Archives/Replay, Scheduler, Pipes.
+Rule: .{Name,Arn,EventPattern,ScheduleExpression,State,EventBusName}
+Rules: .Rules[].{Name,Arn,State,EventBusName}
+Targets: .Targets[].{Id,Arn,RoleArn,Input,InputPath,InputTransformer}
+Buses: .EventBuses[].{Name,Arn,Policy}
+Schedule: .{Arn,State,ScheduleExpression,Target}
+Pipe: .{Arn,CurrentState,Source,Target}
+Archive: .{ArchiveArn,State,EventCount,SizeBytes}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "EventBridge", "event bus", "event rule", "event pattern"
-- Task involves **event buses** (create, describe, delete, permissions)
-- Task involves **rules + targets** (put, describe, delete, remove targets)
-- Task involves **API destinations** or **connections** (auth, REST endpoints)
-- Task involves **event archives** and **replay**
-- Task involves **EventBridge Scheduler** (create/delete schedule)
-- Task involves **EventBridge Pipes** (source-target plumbing)
-- Keywords: eventbridge, event-bus, event-rule, event-pattern, scheduler, pipe, api-destination, archive, replay, target
+EventBridge buses/rules/targets, Scheduler, Pipes, archives/replays, API destinations, connections, schedules, or event routing.
 
 ### SHOULD NOT Use When
-- IAM execution roles → delegate to: `aws-iam-ops`
-- Lambda function code → delegate to: `aws-lambda-ops`
-- SQS queue config → delegate to: `aws-sqs-ops`
-- SNS topic config → delegate to: `aws-sns-ops`
-- Step Functions state machine → delegate to: `aws-stepfunctions-ops`
+SNS topics → `aws-sns-ops`; SQS queues → `aws-sqs-ops`; Lambda function CRUD → `aws-lambda-ops`; Step Functions workflows → `aws-stepfunctions-ops`.
 
 ## Variable Convention
 
-| Placeholder | Source | Notes |
-|-------------|--------|-------|
-| `{{env.AWS_ACCESS_KEY_ID}}` / `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Default `us-east-1` if unset |
-| `{{user.region}}` | User | Ask once; reuse |
-| `{{user.bus_name}}` / `{{user.rule_name}}` / `{{user.target_id}}` | User | Event bus (default: `default`), rule name, target id |
-| `{{user.target_arn}}` / `{{user.target_role_arn}}` | User | Resource ARN + execution role ARN |
-| `{{user.event_pattern}}` / `{{user.schedule_expr}}` | User | JSON event pattern or rate/cron expression |
-| `{{user.conn_name}}` / `{{user.api_dest_name}}` / `{{user.api_dest_endpoint}}` | User | Connection name, API destination name + URL |
-| `{{user.archive_name}}` / `{{user.replay_name}}` | User | Archive / replay name |
-| `{{user.schedule_name}}` / `{{user.pipe_name}}` | User | Schedule / pipe name |
-| `{{output.rule_arn}}` | API | Parse: `.Rules[0].Arn` |
-| `{{output.bus_arn}}` | API | Parse: `.EventBuses[0].Arn` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.rule_name}}`, `{{user.bus_name}}`, `{{user.target_id}}` | User input | Bus/rule/target IDs |
+| `{{user.schedule_name}}`, `{{user.pipe_name}}`, `{{user.archive_name}}` | User input | Scheduler/Pipe/archive IDs |
+| `{{user.api_dest_name}}`, `{{user.conn_name}}` | User input | API destination/connection IDs |
+| `{{output.*}}` | API response | Reuse ARNs and target IDs |
 
 ## Execution Flow Pattern
 
-Every operation: **Pre-flight** → **Execute** (CLI, boto3 fallback) → **Validate** → **Recover**.
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json`; verify bus/rule/target ownership, IAM role, downstream target, references, schedules, pipes, archives, and connection users. Use CLI `--output json`, then boto3 after 3 CLI failures. Read back routes/state; recover with bounded retries and halt on access, quota, or unresolved dependencies. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-### Common Pre-flight (all ops)
+## Operations and Safety
 
-```bash
-aws --version && aws sts get-caller-identity --output json
-```
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Modify rule/targets | Diff routing and downstream impact; validate target invocation | Token for production route changes |
+| Remove targets/delete rule | List targets; remove explicitly; then delete rule | `REMOVE_TARGETS <rule>` and `DELETE_RULE <name>` |
+| Delete event bus | List and delete every rule first | `DELETE_BUS <name>` |
+| Delete schedule/pipe | Inspect target and event-flow impact | `DELETE_SCHEDULE <name>` / `DELETE_PIPE <name>` |
+| Delete archive | Show event count/size and irreversible loss | `DELETE_ARCHIVE <name>` |
+| Delete API destination | Verify no rules reference it | `DELETE_API_DEST <name>` |
+| Delete connection | Verify no API destinations reference it | `DELETE_CONNECTION <name>` |
 
-### Create Event Rule
-
-Pre-flight: `aws events describe-event-bus --name "{{user.bus_name}}"`
-```bash
-aws events put-rule \
-  --name "{{user.rule_name}}" \
-  --event-bus-name "{{user.bus_name}}" \
-  --event-pattern '{{"source": ["aws.ec2"], "detail-type": ["EC2 Instance State-change Notification"]}}' \
-  --state ENABLED \
-  --region "{{user.region}}" --output json
-```
-Validate: `aws events describe-rule --name "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}"`
-
-### Add Targets
-
-```bash
-aws events put-targets \
-  --rule "{{user.rule_name}}" \
-  --event-bus-name "{{user.bus_name}}" \
-  --targets '[{"Id":"{{user.target_id}}","Arn":"{{user.target_arn}}","RoleArn":"{{user.target_role_arn}}"}]' \
-  --region "{{user.region}}" --output json
-```
-
-### Delete Rule
-
-**Safety Gate**: `confirm=DELETE_RULE {{user.rule_name}}`. Must remove targets first.
-```bash
-aws events list-targets-by-rule --rule "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --region "{{user.region}}"
-aws events remove-targets --rule "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --ids "{{user.target_id}}" \
-  --region "{{user.region}}" --output json
-aws events delete-rule --name "{{user.rule_name}}" --event-bus-name "{{user.bus_name}}" --region "{{user.region}}" --output json
-```
-
-### Delete Event Bus
-
-**Safety Gate**: `confirm=DELETE_BUS {{user.bus_name}}`. Must delete all rules first (EB2).
-```bash
-aws events list-rules --event-bus-name "{{user.bus_name}}" --region "{{user.region}}"
-# Delete each rule (apply EB1 per rule above)
-aws events delete-event-bus --name "{{user.bus_name}}" --region "{{user.region}}" --output json
-```
-
-### Create Schedule (Scheduler)
-
-```bash
-aws scheduler create-schedule \
-  --name "{{user.schedule_name}}" \
-  --schedule-expression "rate(5 minutes)" \
-  --target '{"Arn":"{{user.target_arn}}","RoleArn":"{{user.target_role_arn}}"}' \
-  --flexible-time-window '{"Mode":"OFF"}' \
-  --region "{{user.region}}" --output json
-```
-
-### Delete Schedule
-
-**Safety Gate**: `confirm=DELETE_SCHEDULE {{user.schedule_name}}`
-```bash
-aws scheduler delete-schedule --name "{{user.schedule_name}}" --region "{{user.region}}" --output json
-```
-
-### Create Pipe
-
-```bash
-aws pipes create-pipe \
-  --name "{{user.pipe_name}}" \
-  --source "{{user.pipe_source}}" \
-  --target "{{user.target_arn}}" \
-  --role-arn "{{user.target_role_arn}}" \
-  --region "{{user.region}}" --output json
-```
-
-### Delete Pipe
-
-**Safety Gate**: `confirm=DELETE_PIPE {{user.pipe_name}}`
-```bash
-aws pipes delete-pipe --name "{{user.pipe_name}}" --region "{{user.region}}" --output json
-```
-
-### Create Archive
-
-```bash
-aws events create-archive \
-  --archive-name "{{user.archive_name}}" \
-  --event-source-arn "{{user.bus_arn}}" \
-  --retention-days 7 \
-  --region "{{user.region}}" --output json
-```
-
-### Delete Archive
-
-**Safety Gate**: `confirm=DELETE_ARCHIVE {{user.archive_name}}`. Irreversible data loss (EB6).
-```bash
-aws events delete-archive --archive-name "{{user.archive_name}}" --region "{{user.region}}" --output json
-```
-
-### Create API Destination + Connection
-
-```bash
-# Step 1: Connection
-aws events create-connection --name "{{user.conn_name}}" --authorization-type API_KEY \
-  --auth-parameters '{"ApiKeyAuthParameters":{"ApiKeyName":"X-API-Key","ApiKeyValue":"{{user.api_key}}"}}' \
-  --region "{{user.region}}" --output json
-# Step 2: API destination
-aws events create-api-destination --name "{{user.api_dest_name}}" --connection-arn "{{output.conn_arn}}" \
-  --invocation-endpoint "{{user.api_dest_endpoint}}" --http-method POST \
-  --region "{{user.region}}" --output json
-```
-
-### Delete API Destination / Connection
-
-**Safety Gates**: `confirm=DELETE_API_DEST {{user.api_dest_name}}` / `confirm=DELETE_CONNECTION {{user.conn_name}}`
-- `delete-connection`: verify no API destinations reference it first (EB3)
-- `delete-api-destination`: verify no rules reference it
-
-## Token Efficiency
-
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded event bus limits/rule quotas — use `list-event-buses` / `describe-rule`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
-
-## Reference Files
-
-- [AWS CLI Usage](references/aws-cli-usage.md)
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-- [Integration Setup](references/integration.md)
+Mask API keys, connection auth parameters, event payload secrets, headers, and personal data in traces.
 
 ## Quality Gate (GCL)
 
-Full spec: [`aws-skill-generator/references/gcl-spec.md`](../../aws-skill-generator/references/gcl-spec.md).
-5-dimension rubric (Safety=0→ABORT) in [`references/rubric.md`](references/rubric.md).
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
 
-| Operation | GCL | Notes |
-|---|---|---|
-| `delete-rule` | required | Must remove targets first; `confirm=DELETE_RULE <name>` |
-| `delete-event-bus` | required | Delete all rules first; `confirm=DELETE_BUS <name>` |
-| `delete-api-destination` | required | `confirm=DELETE_API_DEST <name>` |
-| `delete-connection` | required | May break API destinations using it; `confirm=DELETE_CONNECTION <name>` |
-| `delete-archive` | required | Irrecoverable; events lost; `confirm=DELETE_ARCHIVE <name>` |
-| `remove-targets` | required | `confirm=REMOVE_TARGETS <rule>` |
-| `delete-schedule` | required | `confirm=DELETE_SCHEDULE <name>` |
-| `delete-pipe` | required | Stops event flow; `confirm=DELETE_PIPE <name>` |
-| `put-rule` (modify) | recommended | Can change event routing |
-| `put-event-bus` (policy) | recommended | Broad permission changes |
-| All others | not required | Create, describe, list |
+## Token Efficiency
 
-Prompt templates: [`references/prompt-templates.md`](references/prompt-templates.md)
+TE-1…TE-6 apply; query live quotas/routes, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
+
+## Reference Files
+
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [integration.md](references/integration.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for routing/destructive actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

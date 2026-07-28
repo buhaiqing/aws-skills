@@ -53,248 +53,66 @@ metadata:
 
 ---
 
-# AWS ELB Operations Skill
+# AWS Elastic Load Balancing Operations Skill
 
-AWS Elastic Load Balancing (ELB) distributes incoming traffic across targets. Covers **ALB** (Layer 7), **NLB** (Layer 4), and **CLB** (legacy) with full AIOps closed-loop support.
+Use for ALB, NLB, legacy CLB, listeners, rules, target groups, health checks, traffic anomalies, latency/errors, draining, cost, and AIOps remediation. Prefer ALB/NLB for new workloads; detailed commands remain in references.
+
+## Common JSON Paths
+
+LoadBalancers: .LoadBalancers[].{LoadBalancerArn,LoadBalancerName,DNSName,Type,State,VpcId}
+LoadBalancer: .LoadBalancers[0].{LoadBalancerArn,LoadBalancerName,DNSName,Type,State,VpcId}
+TargetGroups: .TargetGroups[].{TargetGroupArn,TargetGroupName,Protocol,Port,TargetType}
+TargetHealth: .TargetHealthDescriptions[].{Target,TargetHealth}
+Listeners: .Listeners[].{ListenerArn,Port,Protocol,DefaultActions}
+Rules: .Rules[].{RuleArn,Priority,Conditions,Actions,IsDefault}
+Classic: .LoadBalancerDescriptions[].{LoadBalancerName,DNSName,Instances,HealthCheck}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "ELB", "Load Balancer", "ALB", "NLB", or "CLB"
-- CRUD on **Load Balancers** or **Target Groups**
-- Keywords: balance, distribute, health-check, listener, target-group
-- **(AIOps)** "502/503/504 errors", "latency spikes", "health check failures"
-- **(AIOps)** "why are targets unhealthy", "optimize ELB cost", "auto-heal targets"
+ALB/NLB/CLB, listeners, rules, target groups, health checks, 502/503/504, unhealthy targets, latency, draining, or load-balancer cost/capacity.
 
 ### SHOULD NOT Use When
-- EC2 instances → `aws-ec2-ops`
-- VPC/subnets → `aws-vpc-ops`
-- SSL certificates → `aws-acm-ops`
-- Route53 DNS → `aws-route53-ops`
-- CloudWatch alarms → `aws-cloudwatch-ops`
-- CloudTrail analysis → `aws-cloudtrail-ops`
-
-## Load Balancer Types
-
-| Type | Layer | Use Case | CLI Service |
-|------|-------|----------|-------------|
-| ALB | Layer 7 (HTTP/HTTPS) | Web apps, microservices | `elbv2` |
-| NLB | Layer 4 (TCP/UDP) | High performance, gaming, IoT | `elbv2` |
-| CLB | Layer 4/7 (legacy) | Legacy apps (deprecated) | `elb` |
+CloudFront → `aws-cloudfront-ops`; API Gateway → `aws-apigateway-ops`; EC2 lifecycle → `aws-ec2-ops`; DNS → `aws-route53-ops`; VPC/SG → `aws-vpc-ops`.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default if skill allows |
-| `{{user.lb_name}}` | User input | Ask once; reuse |
-| `{{user.lb_type}}` | User input | ALB, NLB, or CLB |
-| `{{user.vpc_id}}` | User input | Ask once; reuse |
-| `{{user.safety_confirm}}` | Explicit confirm | Required for destructive ops |
-| `{{output.load_balancer_arn}}` | API response | Parse `.LoadBalancers[0].LoadBalancerArn` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.lb_name}}`, `{{user.lb_type}}`, `{{user.vpc_id}}` | User input | Load balancer identity/type/network |
+| `{{user.target_group_arn}}`, `{{user.target_ids}}` | User input | Traffic targets |
+| `{{output.*}}` | API response | Reuse LB/listener/rule/TG ARNs |
 
 ## Execution Flow Pattern
 
-Every operation: **Pre-flight → Execute → Validate → Recover**
-AIOps scenarios add: **Data Collection → Detection → RCA → Decision → Action → Feedback**
+Every operation follows **Pre-flight → Execute → Validate → Recover**; AIOps adds Collect → Detect → RCA → Decide → Act → Feedback. Run `aws --version` and `aws sts get-caller-identity --output json`; verify VPC, subnets, SGs, certificates, quotas, listeners, rules, target health, and traffic impact. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll LB state and target health; recover with bounded retries and halt on invalid network, quota, or ambiguous identity. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-## Representative Operation: Create ALB
+## Operations and Safety
 
-### Pre-flight
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Create/modify LB/listener/TG | Verify network, certs, ports, health checks; validate active | Token for production traffic changes |
+| Deregister targets | Count healthy/registered targets and drain impact | `<50%`: `DEREGISTER`; `≥50%`: `DEREGISTER_DRAIN`; `100%`: `DEREGISTER_ALL` |
+| Delete ALB/NLB | Verify no listeners and inspect DNS/targets/protection | `DELETE_LB` |
+| Delete CLB | Warn legacy and registered instances; validate not found | `DELETE_CLB {{user.lb_name}}` |
+| Delete rule | Refuse deletion when `IsDefault=true`; inspect traffic route | Human confirmation |
+| Disable deletion protection | Show subsequent deletion risk | `DISABLE_DELETION_PROTECTION` |
 
-| Check | Method | On Failure |
-|-------|--------|------------|
-| CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity --output json` | HALT; log error |
-| VPC exists | `aws ec2 describe-vpcs --vpc-ids {{user.vpc_id}}` | HALT; verify VPC |
-| Subnets exist | `aws ec2 describe-subnets --subnet-ids {{user.subnet_ids}}` | HALT; verify subnets |
-| Quota check | `aws service-quotas get-service-quota --service-code elasticloadbalancing --quota-code L-53DA43FF` | WARN if < 20% |
-
-### Execute — CLI (Primary)
-```bash
-aws elbv2 create-load-balancer \
-  --name "{{user.lb_name}}" --type application \
-  --subnets "{{user.subnet_ids}}" --security-groups "{{user.security_group_ids}}" \
-  --tags Key=AIOps,Value=true Key=CreatedBy,Value=harness-ai \
-  --output json
-```
-
-### Validate
-```bash
-aws elbv2 describe-load-balancers \
-  --load-balancer-arns "{{output.load_balancer_arn}}" --output json
-```
-Poll until `.State.Code` == "active" (max 5 min).
-
-### Recover
-| Error | Action |
-|-------|--------|
-| InvalidSubnet | HALT; verify subnet IDs |
-| DuplicateLoadBalancerName | Use different name |
-| QuotaExceeded | HALT; request quota increase |
-| Throttling (429) | Backoff, retry 3x |
-
-## Legacy Operations: CLB (Deprecated)
-
-> ⚠️ **Classic Load Balancer** is a legacy service **deprecated by AWS**. Use ALB or NLB for new workloads. CLB commands use the `aws elb` CLI service (not `elbv2`).
-
-### Operation: Create CLB
-
-#### Pre-flight
-CLB shares the same pre-flight checks as ALB (CLI version, credentials, VPC, subnets).
-
-#### Execute — CLI (Primary)
-```bash
-aws elb create-load-balancer \
-  --load-balancer-name "{{user.lb_name}}" \
-  --listeners Protocol=HTTP,LoadBalancerPort=80,InstanceProtocol=HTTP,InstancePort=80 \
-  --subnets "{{user.subnet_ids}}" \
-  --security-groups "{{user.security_group_ids}}" \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-clb_client = boto3.client('elb')
-response = clb_client.create_load_balancer(
-    LoadBalancerName='{{user.lb_name}}',
-    Listeners=[
-        {'Protocol': 'HTTP', 'LoadBalancerPort': 80,
-         'InstanceProtocol': 'HTTP', 'InstancePort': 80}
-    ],
-    Subnets=['{{user.subnet_ids}}'],
-    SecurityGroups=['{{user.security_group_ids}}']
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-```bash
-aws elb describe-load-balancers \
-  --load-balancer-names "{{user.lb_name}}" --output json
-```
-Check `.LoadBalancerDescriptions[0].HealthCheck.Target` is set.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| DuplicateLoadBalancerName | Use different name |
-| CertificateNotFound | Verify SSL cert ARN |
-| InvalidSubnet | HALT; verify subnet IDs |
-| Throttling | Backoff, retry 3x |
-
-### Operation: Configure Health Check
-
-#### Execute — CLI (Primary)
-```bash
-aws elb configure-health-check \
-  --load-balancer-name "{{user.lb_name}}" \
-  --health-check Target=HTTP:80/health,Interval=30,Timeout=5,UnhealthyThreshold=2,HealthyThreshold=10 \
-  --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-clb_client.configure_health_check(
-    LoadBalancerName='{{user.lb_name}}',
-    HealthCheck={
-        'Target': 'HTTP:80/health',
-        'Interval': 30, 'Timeout': 5,
-        'UnhealthyThreshold': 2, 'HealthyThreshold': 10
-    }
-)
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-```bash
-aws elb describe-load-balancers \
-  --load-balancer-names "{{user.lb_name}}" --output json \
-  --query ".LoadBalancerDescriptions[0].HealthCheck"
-```
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| AccessPointNotFound | HALT — verify CLB name exists |
-| InvalidConfigurationRequest | Check health check target format (Protocol:Port/Path) |
-| Throttling | Backoff, retry 3x |
-
-### Operation: Delete CLB
-**Safety Gate**: must obtain explicit `confirm=DELETE_CLB {{user.lb_name}}` before execution.
-
-#### Pre-flight
-```bash
-aws elb describe-load-balancers --load-balancer-names "{{user.lb_name}}" --output json
-```
-Check if instances are registered; warn if any exist.
-
-#### Execute — CLI (Primary)
-```bash
-aws elb delete-load-balancer --load-balancer-name "{{user.lb_name}}" --output json
-```
-
-#### Execute — boto3 (Fallback)
-```python
-clb_client.delete_load_balancer(LoadBalancerName='{{user.lb_name}}')
-```
-See `references/boto3-sdk-usage.md` for full patterns.
-
-#### Validate
-```bash
-aws elb describe-load-balancers --load-balancer-names "{{user.lb_name}}" --output json
-```
-Expect `LoadBalancerNotFound` error — confirmed deleted.
-
-#### Recover
-| Error | Action |
-|-------|--------|
-| AccessPointNotFound | Already deleted — OK |
-| DependencyThrottle | Backoff, retry 3x |
-| OperationNotPermitted | HALT — check if CLB has registered instances |
+Never mutate traffic from health signals alone without decision-tier authorization. Mask auth headers, certificates, tokens, and sensitive request data in traces.
 
 ## Quality Gate (GCL)
 
-| Setting | Value |
-|---|---|
-| Class | `recommended` |
-| `max_iterations` | `3` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
-
-Destructive ops require `{{user.safety_confirm}}`:
-- `deregister-targets` — ratio < 50%: `confirm=DEREGISTER`; ≥ 50%: `confirm=DEREGISTER_DRAIN`; 100%: `confirm=DEREGISTER_ALL`
-- `delete-load-balancer` — ALB/NLB: must have no listeners; `confirm=DELETE_LB`
-- `delete-load-balancer` — CLB: `confirm=DELETE_CLB <name>`
-- `delete-rule` (default rule is **undeletable**)
-- `modify-load-balancer-attributes` disabling deletion protection — `confirm=DISABLE_DELETION_PROTECTION`
-
-See `references/rubric.md` and `references/prompt-templates.md` for full GCL details.
-
-## AIOps Delegate Contract
-
-Orchestrator-aware. Accepts: health-check, rca, self-heal, change-impact. Rules: idempotency (24h TTL), destructive ops require `confirmation_token`, decision tier respect (MANUAL/AI_ASSIST/AUTO_HEAL), trace propagation via User-Agent. Full contract: `aws-aiops-orchestrator/references/delegate-routing.md`
+Recommended GCL, `max_iter=3`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10 and A12 target-drain thresholds; Safety=0 aborts.
 
 ## Token Efficiency
 
-- TE-1: No hardcoded tables — use `describe-*` APIs
-- TE-2: Inline comments only in boto3 (no docstrings)
-- TE-3: Compact error tables
-- TE-4: JSON paths centralized at top of `references/aws-cli-usage.md`
-- TE-5: YAML anchors in `assets/example-config.yaml`
-- TE-6: Complete flows only in SKILL.md
+TE-1…TE-6 apply; query live quotas/state, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Reference Files
 
-- [Core Concepts & AIOps](references/core-concepts.md) — metrics, scenarios, cost, compliance
-- [AWS CLI Usage](references/aws-cli-usage.md) — all commands + JSON paths
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Troubleshooting & Self-Healing](references/troubleshooting.md) — RCA flows, AH actions, errors
-- [Prompt Examples](references/prompt-examples.md)
-- [Integration](references/integration.md)
-- [Example Configs](assets/example-config.yaml)
-- [GCL Rubric](references/rubric.md)
-- [GCL Prompts](references/prompt-templates.md)
+[core-concepts.md](references/core-concepts.md) · [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [troubleshooting.md](references/troubleshooting.md) · [prompt-examples.md](references/prompt-examples.md) · [integration.md](references/integration.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
+
+## AIOps Delegate Contract
+
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for traffic-changing/destructive actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

@@ -46,246 +46,66 @@ metadata:
 
 # AWS API Gateway Operations Skill
 
-## Overview
+Use for API Gateway REST/HTTP APIs, resources, methods, integrations, deployments, stages, usage plans, and lifecycle management. Detailed CLI/SDK commands remain in references.
 
-AWS API Gateway is a fully managed service for creating, publishing, and securing REST and HTTP APIs. This skill covers **API creation, resource/method configuration, deployment to stages, and API lifecycle management** with Lambda proxy integration.
+## Common JSON Paths
+
+CreateApi: .{id,name,endpointConfiguration}
+RootResource: .items[?path==`/`].id
+CreateResource: .{id,parentId,path,pathPart}
+CreateDeployment: .{id,createdDate}
+GetStage: .{deploymentId,stageName,cacheClusterStatus}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "API Gateway", "REST API", "HTTP API", "endpoint", "stage"
-- Task involves CRUD on **API Gateway resources** (REST API, resource, method, deployment, stage)
-- Keywords: apigateway, rest-api, http-api, stage, deployment, usage-plan
+API Gateway, REST/HTTP APIs, endpoints, resources, methods, integrations, deployments, stages, or usage plans.
 
 ### SHOULD NOT Use When
-- Lambda function CRUD → delegate to: `aws-lambda-ops`
-- Lambda integration setup → delegate to: `aws-lambda-ops` (function alias/arn)
-- ELB/ALB as API entry → delegate to: `aws-elb-ops`
-- CloudFront distribution → delegate to: `aws-cloudfront-ops`
-- Route53 custom domain DNS → delegate to: `aws-route53-ops`
+Lambda CRUD → `aws-lambda-ops`; ALB entry → `aws-elb-ops`; CloudFront → `aws-cloudfront-ops`; custom-domain DNS → `aws-route53-ops`.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default; allow override |
-| `{{user.api_name}}` | User input | REST API name |
-| `{{user.api_id}}` | User input or last output | API ID from `get-rest-apis` |
-| `{{user.stage_name}}` | User input | Stage name (e.g., prod, dev) |
-| `{{user.resource_path}}` | User input | Resource path (e.g., /users) |
-| `{{user.lambda_arn}}` | User input | Lambda function ARN for proxy |
-| `{{output.api_id}}` | Last API response | `.id` from created API |
-| `{{output.deployment_id}}` | Last API response | `.id` from `create-deployment` |
-| `{{output.resource_id}}` | Last API response | `.id` from `create-resource` |
-| `{{output.root_resource_id}}` | Last API response | `.items[?path=='/'].id` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.api_id}}`, `{{user.api_name}}`, `{{user.stage_name}}` | User input | API/stage identity |
+| `{{user.resource_path}}`, `{{user.lambda_arn}}` | User input | Resource/integration |
+| `{{output.*}}` | API response | Reuse API, resource, root, deployment IDs |
 
 ## Execution Flow Pattern
 
-**Pre-flight → Execute → Validate → Recover**
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json`; verify API uniqueness/identity, Lambda ARN and permission, resources, methods, stages, and deployment dependencies. Use CLI `--output json`, then boto3 after 3 CLI failures. Validate via get/read-back and endpoint invocation; recover with bounded throttling retries and halt on access, quota, or ambiguous identifiers. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-### Operation: Create REST API
+## Operations and Safety
 
-#### Pre-flight
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Create API | Check similar names and endpoint type; read back ID | — |
+| Create resource/method | Verify parent/root, authorization, request settings | — |
+| Put Lambda integration | Verify Lambda ARN, invoke permission, URI, response mapping | — |
+| Deploy API | Verify methods/integrations; create deployment and validate stage | Production confirmation when replacing live deployment |
+| Delete stage | Inspect deployment, cache, traffic, and custom domains | `DELETE_STAGE {{user.stage_name}}` |
+| Delete API | List stages/resources/deployments and display blast radius | `DELETE_API {{user.api_id}}` |
 
-| Check | Method | On Failure |
-|-------|--------|------------|
-| CLI available | `aws --version` | Install AWS CLI v2 |
-| Credentials | `aws sts get-caller-identity` | HALT; log error |
-| API name unique | `aws apigateway get-rest-apis` | Warn if similar name exists |
-
-#### Execute — CLI
-```bash
-aws apigateway create-rest-api \
-  --name "{{user.api_name}}" \
-  --description "Managed by AIOps" \
-  --endpoint-configuration types=REGIONAL \
-  --output json
-```
-Save `{{output.api_id}}` from `.id`.
-
-#### Execute — boto3
-```python
-client = boto3.client('apigateway', region_name='{{env.AWS_DEFAULT_REGION}}')
-resp = client.create_rest_api(
-    name='{{user.api_name}}',
-    endpointConfiguration={'types': ['REGIONAL']}
-)
-```
-
-#### Validate
-```bash
-aws apigateway get-rest-api --rest-api-id "{{user.api_id}}" \
-  --query "{Name:name,Endpoint:endpointConfiguration.types[0]}"
-```
-
-### Operation: Create Resource + Method (Lambda Proxy)
-
-#### Pre-flight
-- REST API must exist (`{{user.api_id}}`)
-- Lambda function ARN must be provided
-- Get root resource ID
-
-```bash
-aws apigateway get-resources --rest-api-id "{{user.api_id}}" \
-  --query "items[?path=='/'].id" --output text
-```
-
-#### Execute — Create Resource
-```bash
-aws apigateway create-resource \
-  --rest-api-id "{{user.api_id}}" \
-  --parent-id "{{output.root_resource_id}}" \
-  --path-part "{{user.resource_path}}" \
-  --output json
-```
-Save `{{output.resource_id}}` from `.id`.
-
-#### Execute — Create Method (ANY)
-```bash
-aws apigateway put-method \
-  --rest-api-id "{{user.api_id}}" \
-  --resource-id "{{output.resource_id}}" \
-  --http-method ANY \
-  --authorization-type NONE \
-  --output json
-```
-
-#### Execute — Put Integration (Lambda Proxy)
-```bash
-aws apigateway put-integration \
-  --rest-api-id "{{user.api_id}}" \
-  --resource-id "{{output.resource_id}}" \
-  --http-method ANY \
-  --type AWS_PROXY \
-  --integration-http-method POST \
-  --uri "arn:aws:apigateway:{{env.AWS_DEFAULT_REGION}}:lambda:path/2015-03-31/functions/{{user.lambda_arn}}/invocations" \
-  --output json
-```
-
-#### Execute — PUT Method Response + Integration Response
-```bash
-aws apigateway put-method-response \
-  --rest-api-id "{{user.api_id}}" \
-  --resource-id "{{output.resource_id}}" \
-  --http-method ANY \
-  --status-code 200
-
-aws apigateway put-integration-response \
-  --rest-api-id "{{user.api_id}}" \
-  --resource-id "{{output.resource_id}}" \
-  --http-method ANY \
-  --status-code 200 \
-  --selection-pattern ""
-```
-
-#### Validate
-```bash
-aws apigateway get-method --rest-api-id "{{user.api_id}}" \
-  --resource-id "{{output.resource_id}}" \
-  --http-method ANY \
-  --query "{Auth:authorizationType,Integration:methodIntegration.type}"
-```
-
-### Operation: Deploy API
-
-#### Execute — CLI
-```bash
-aws apigateway create-deployment \
-  --rest-api-id "{{user.api_id}}" \
-  --stage-name "{{user.stage_name}}" \
-  --description "Deploy by AIOps" \
-  --output json
-```
-
-#### Validate
-```bash
-aws apigateway get-stage \
-  --rest-api-id "{{user.api_id}}" \
-  --stage-name "{{user.stage_name}}" \
-  --query "{Deploy:deploymentId,Status:cacheClusterStatus,Url:{\"invoke URL\":\"https://{{user.api_id}}.execute-api.{{env.AWS_DEFAULT_REGION}}.amazonaws.com/{{user.stage_name}}\"}}"
-```
-
-### Operation: Delete Stage
-
-**Safety Gate**: Confirm before deleting a stage in production.
-
-```bash
-# Pre-flight: check if stage has active deployments
-aws apigateway get-stage --rest-api-id "{{user.api_id}}" \
-  --stage-name "{{user.stage_name}}" \
-  --query "{Deploy:deploymentId,Cache:cacheClusterEnabled}"
-```
-
-```text
-[WARN] Deleting stage '{{user.stage_name}}' will make the API endpoint unreachable.
-Type 'DELETE_STAGE {{user.stage_name}}' to confirm.
-```
-
-```bash
-aws apigateway delete-stage \
-  --rest-api-id "{{user.api_id}}" \
-  --stage-name "{{user.stage_name}}"
-```
-
-### Operation: Delete REST API
-
-**Safety Gate**: MUST obtain explicit user confirmation. Deleting removes all resources, methods, deployments, and stages.
-
-```bash
-# Pre-flight: check existing stages
-aws apigateway get-stages --rest-api-id "{{user.api_id}}" \
-  --query "item[].stageName"
-```
-
-```text
-[WARN] Deleting REST API '{{user.api_name}}' ({{user.api_id}}) is IRREVERSIBLE.
-All resources, methods, stages, and deployments will be permanently removed.
-Type 'DELETE_API {{user.api_id}}' to confirm.
-```
-
-```bash
-aws apigateway delete-rest-api --rest-api-id "{{user.api_id}}"
-```
+Mask authorization headers, API keys, request bodies, and integration credentials in traces. Deletion is irreversible and must never infer confirmation from intent.
 
 ## Recover
 
-| Error | Action |
-|-------|--------|
-| `ConflictException` | Resource/method already exists; use update instead of create |
-| `NotFoundException` | Verify REST API ID and resource ID exist |
-| `LimitExceededException` | Delete unused APIs or request quota increase |
-| `ThrottlingException` | Backoff and retry |
-| `AccessDeniedException` | Check IAM permissions for apigateway actions |
-
-## Reference Files
-
-- [AWS CLI Usage](references/aws-cli-usage.md)
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-
-## Token Efficiency
-
-All 6 TE rules applied. Key points:
-- TE-1: No hardcoded endpoint types/limits — use `get-rest-apis` / `get-stages`
-- TE-2: Inline comments only in boto3 code
-- TE-3: Compact error tables
-- TE-4: JSON paths declared inline
-- TE-5: YAML anchors in `assets/example-config.yaml`
-- TE-6: Flows only in SKILL.md
+`ConflictException` → update existing resource; `NotFoundException` → re-describe IDs; `LimitExceededException` → halt/request quota; `ThrottlingException` → bounded backoff; `AccessDeniedException` → halt and fix IAM.
 
 ## Quality Gate (GCL)
 
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
 
-Destructive ops requiring `{{user.safety_confirm}}`:
-- `delete-rest-api` — IRREVERSIBLE; confirm `DELETE_API <id>`
-- `delete-stage` — breaks endpoint; confirm `DELETE_STAGE <name>`
+## Token Efficiency
 
-Relevant AWS rules: A7 (region), A8 (API ID echoed from describe), A10 (sts first).
+TE-1…TE-6 apply; query live endpoint types/quotas, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
+
+## Reference Files
+
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
+
+## AIOps Delegate Contract
+
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for destructive or production deployment actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

@@ -42,258 +42,68 @@ metadata:
 
 ---
 
-## Common JSON Paths (Centralized)
+# AWS OpenSearch Operations Skill
 
-```
-# Domain Names:    .DomainNames[].{DomainName,EngineType}
-# Domain Status:   .DomainStatus.{DomainId,DomainName,ARN,Endpoint,EngineVersion}
-# Cluster Config:  .DomainStatus.ClusterConfig.{InstanceType,InstanceCount,DedicatedMasterEnabled}
-# Access Policies: .DomainStatus.AccessPolicies
-# Security:        .DomainStatus.AdvancedSecurityOptions.{Enabled,InternalUserDatabaseEnabled}
-# VPC Options:     .DomainStatus.VPCOptions.{VPCId,SubnetIds,SecurityGroupIds}
-# Snapshots:       .SnapshotList[].{SnapshotName,Status,ClusterName,Progress}
-# VPC Endpoints:   .VpcEndpoints[].{VpcEndpointId,VpcEndpointOwner,DomainArn,Status}
-# Pipelines:       .IngestionPipelineSummaries[].{PipelineName,PipelineArn,Status}
-```
+Use for OpenSearch domains, clusters, snapshots, VPC endpoints, ingestion pipelines, upgrades, health, slow-query diagnosis, capacity, cost, and AIOps remediation. Detailed commands remain in references.
 
-AWS OpenSearch Service operational skill for AI Agent automation.
+## Common JSON Paths
+
+Domain: .DomainStatus.{DomainId,DomainName,ARN,Endpoint,EngineVersion,ClusterConfig,AccessPolicies,AdvancedSecurityOptions}
+Domains: .DomainNames[].{DomainName,EngineType}
+Snapshots: .SnapshotList[].{SnapshotName,Status,ClusterName}
+VpcEndpoints: .VpcEndpoints[].{VpcEndpointId,VpcEndpointOwner,DomainArn}
+Pipelines: .IngestionPipelineSummaries[].{PipelineName,PipelineArn,Status}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "OpenSearch", "OpenSearch Service", "Amazon OpenSearch"
-- User requests domain creation, modification, or deletion
-- User asks to create, restore, or manage domain snapshots
-- User needs VPC endpoint setup or management for OpenSearch
-- User requests data ingestion pipeline (OpenSearch Ingestion) operations
-- User asks about domain access policies or fine-grained access control
-- User needs cluster configuration updates or version upgrades
-- Keywords: opensearch, elasticsearch, search cluster, domain, snapshot, ingestion, pipeline, access policy, fine-grained access control
-- (AIOps) User reports slow queries, cluster yellow/red status, shard issues
-- (AIOps) User asks for cost optimization or capacity forecast
+OpenSearch/Elasticsearch domains, cluster health, shards, slow queries, snapshots, VPC endpoints, ingestion pipelines, upgrades, capacity, or cost diagnosis.
 
 ### SHOULD NOT Use When
-- IAM policies → delegate to: `aws-iam-ops`
-- KMS encryption keys → delegate to: `aws-kms-ops`
-- VPC networking → delegate to: `aws-vpc-ops`
-- CloudWatch monitoring → delegate to: `aws-cloudwatch-ops`
-- S3 for snapshot repository → delegate to: `aws-s3-ops`
-- Kinesis for data streaming → not yet available in repo
+EC2/security groups → `aws-ec2-ops`; IAM access → `aws-iam-ops`; KMS → `aws-kms-ops`; alarms → `aws-cloudwatch-ops`; S3 repositories → `aws-s3-ops`.
 
 ### Delegation
-- IAM roles/policies → `aws-iam-ops` | KMS keys → `aws-kms-ops`
-- CloudWatch alarms → `aws-cloudwatch-ops` | S3 snapshot repo → `aws-s3-ops`
-
-## Scope
-
-| Operation | Safety Gate |
-|-----------|-------------|
-| Create/Modify Domain | Parameter validation |
-| Delete Domain | **Human confirm** |
-| Create/Delete Snapshot | Delete: human confirm |
-| Create/Delete VPC Endpoint | Delete: human confirm |
-| Create/Delete Ingestion Pipeline | Delete: human confirm |
-| Update Domain Config | Parameter validation |
-| Upgrade Domain | Human confirm |
-| Add/Remove Tags | None |
-| **Auto Heal Cluster** (red/yellow status) | AUTO_HEAL — automatic |
-| **Diagnose Slow Query** | AI_ASSIST — recommend index/params |
-| **Capacity Forecast** | AI_ASSIST — recommend scale |
+Networking → `aws-vpc-ops`; metrics → `aws-cloudwatch-ops`; IAM/KMS/S3 operations → their respective skills.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{user.DomainName}}` | User input | Ask once; reuse |
-| `{{user.EngineVersion}}` | User input | OpenSearch_X.Y or Elasticsearch_X.Y |
-| `{{user.InstanceType}}` | User input | e.g., r6g.large.search |
-| `{{output.DomainArn}}` | Last API response | Parse: `.DomainStatus.ARN` |
-| `{{output.Endpoint}}` | Last API response | Parse: `.DomainStatus.Endpoint` |
-| `{{output.DomainId}}` | Last API response | Parse: `.DomainStatus.DomainId` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.DomainName}}`, `{{user.EngineVersion}}`, `{{user.InstanceType}}` | User input | Domain configuration |
+| `{{user.SnapshotName}}`, `{{user.VpcEndpointId}}`, `{{user.PipelineName}}` | User input | Dependent resources |
+| `{{output.*}}` | API response | Reuse domain ARN, endpoint, and ID |
 
 ## Execution Flow
 
-### Pre-flight
-```bash
-aws --version && aws sts get-caller-identity --output json
-```
-Log: `[OK] Region={{env.AWS_DEFAULT_REGION}} Credential verified. Identity: arn:aws:iam::{{env.AWS_ACCOUNT_ID}}:user/xxx`
-On failure: `[FAIL] AWS credential verification failed. Action: Check .env`
-```bash
-# Verify engine version availability
-aws opensearch list-domain-names --region {{env.AWS_DEFAULT_REGION}} --output json
-```
-Log: `[OK] OpenSearch API reachable in {{env.AWS_DEFAULT_REGION}}`
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json`; verify identity, domain status, supported engine/type, dependencies, snapshots, endpoints, and pipelines. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll domain/snapshot/pipeline state; recover with bounded throttling retries and halt on invalid state, quota, or ambiguous identity. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-### Execute (Primary: CLI)
-See [references/aws-cli-usage.md](references/aws-cli-usage.md) for full command reference.
+## Operations and Safety
 
-### Execute (Fallback: boto3)
-After 3 CLI failures, switch to SDK — see [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md).
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Create/modify domain | Validate engine/type, VPC, access policy, encryption; poll active | Token for high-impact topology/access changes |
+| Upgrade domain | Verify supported target and upgrade eligibility | `UPGRADE_DOMAIN <name> to <version>` |
+| Delete domain | Display permanent index/data loss; describe current state | `DELETE_DOMAIN <name>` |
+| Delete snapshot | Verify snapshot and recovery need | `DELETE_SNAPSHOT <snapshot> from <domain>` |
+| Delete VPC endpoint | Describe endpoint/domain users | `DELETE_VPC_ENDPOINT <id>` |
+| Delete ingestion pipeline | Verify pipeline is not active and inspect consumers | `DELETE_INGESTION <name>` |
+| Auto-heal/diagnose | Collect health, shards, metrics; AUTO_HEAL only non-destructive | Tier/token rules below |
 
-### Validate
-```
-1. Poll: aws opensearch describe-domain --domain-name {{user.DomainName}}
-2. Wait for terminal state (Active/Processing/Deleted) — max 30 min create, 15 min delete
-3. Optional: test endpoint via curl / OpenSearch client
-```
-
-### Recover
-| Error Type | Action |
-|------------|--------|
-| AlreadyExists / InvalidState / QuotaExceeded | HALT |
-| InvalidType | Retry with supported instance type |
-| Throttling (429) | Exponential backoff, max 3 retries |
-| 5xx Internal | Retry 3x; HALT |
-
-## Safety Gates
-
-### Domain Deletion
-```
-BEFORE delete-domain:
-1. Display: "Deleting {{user.DomainName}} will permanently remove all data and indices"
-2. Ask: "Type 'DELETE_DOMAIN {{user.DomainName}}' to confirm"
-3. Pre-flight: describe-domain to confirm domain exists and is not in 'Creating' state
-```
-
-### Snapshot Deletion
-```
-BEFORE delete-snapshot:
-1. Confirm with user: "Type 'DELETE_SNAPSHOT {{user.SnapshotName}} from {{user.DomainName}}' to confirm"
-2. Pre-flight: list-snapshots to verify snapshot exists
-```
-
-### VPC Endpoint Deletion
-```
-BEFORE delete-vpc-endpoint:
-1. Confirm with user: "Type 'DELETE_VPC_ENDPOINT {{user.VpcEndpointId}}' to confirm"
-2. Pre-flight: describe-vpc-endpoints to verify endpoint exists
-```
-
-### Ingestion Pipeline Deletion
-```
-BEFORE delete-ingestion:
-1. Confirm with user: "Type 'DELETE_INGESTION {{user.PipelineName}}' to confirm"
-2. Pre-flight: describe-ingestion to verify pipeline exists and is not active
-```
-
-## Output Convention
-All commands use `--output json`. Key JSON paths:
-- `.DomainStatus.{DomainId,DomainName,ARN,Endpoint,EngineVersion,ClusterConfig,AccessPolicies,AdvancedSecurityOptions}`
-- `.DomainNames[].{DomainName,EngineType}`
-- `.SnapshotList[].{SnapshotName,Status,ClusterName}`
-- `.VpcEndpoints[].{VpcEndpointId,VpcEndpointOwner,DomainArn}`
-- `.IngestionPipelineSummaries[].{PipelineName,PipelineArn,Status}`
-
-## Related Skills
-- `aws-ec2-ops` — Security groups | `aws-iam-ops` — IAM roles | `aws-kms-ops` — Encryption
-- `aws-cloudwatch-ops` — Alarms, logs | `aws-s3-ops` — Snapshot repository
-- `aws-vpc-ops` — VPC endpoints, subnets
-
-## Cross-Skill Orchestration
-| Scenario | Chain |
-|----------|-------|
-| OpenSearch Performance RCA | opensearch → cloudwatch → ec2 (查指标 → 查底层 → 查安全组) |
-| OpenSearch Security Audit | opensearch → iam → kms (访问策略 → 权限 → 加密) |
-| OpenSearch Cost Optimization | opensearch → cloudwatch (查闲置 → 建议降配/预留) |
-| OpenSearch Snapshot DR | opensearch → s3 (快照 → 跨区域复制) |
-
-## Token Efficiency
-
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded engine versions/instance types — use `list-versions` / `describe-domain`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
-
-## Reference Files
-- `references/aws-cli-usage.md` — CLI command reference
-- `references/boto3-sdk-usage.md` — Python SDK patterns
-- `references/core-concepts.md` — OpenSearch architecture, concepts
-- `references/troubleshooting.md` — Error codes, recovery procedures
-- `references/rubric.md` — GCL 5-dimension rubric
-- `references/prompt-templates.md` — GCL Generator/Critic/Orchestrator prompts
-- `assets/example-config.yaml` — Configuration examples
+Mask credentials, access-policy secrets, auth headers, query bodies, and sensitive index data in traces.
 
 ## Quality Gate (GCL)
 
-> Phase 1 GCL rollout (2026-06-08, required). Every execution of
-> `aws-opensearch-ops` MUST be wrapped by the Generator-Critic-Loop defined in
-> `aws-skill-generator/references/gcl-spec.md`.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
 
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+## Token Efficiency
 
-Destructive ops requiring `{{user.safety_confirm}}` in trace
-(exact format `confirm=<OPERATION> <resource>`):
+TE-1…TE-6 apply; query live engine/type support, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
-- `delete-domain` — `confirm=DELETE_DOMAIN <domain-name>`
-- `delete-snapshot` — `confirm=DELETE_SNAPSHOT <snapshot-name> from <domain-name>`
-- `delete-vpc-endpoint` — `confirm=DELETE_VPC_ENDPOINT <vpc-endpoint-id>`
-- `delete-ingestion` — `confirm=DELETE_INGESTION <pipeline-name>`
-- `upgrade-domain` — `confirm=UPGRADE_DOMAIN <domain-name> to <target-version>`
+## Reference Files
 
-Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (resource echo-back),
-A9 (no secrets in trace), A10 (sts first command).
-
-See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md) · [example-config.yaml](assets/example-config.yaml)
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for destructive, upgrade, or high-impact topology actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

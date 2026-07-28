@@ -43,168 +43,66 @@ metadata:
 
 # AWS Aurora Operations Skill
 
-## Common JSON Paths (Centralized)
+Use for Aurora MySQL/PostgreSQL clusters, readers, failover, Serverless v2, Global Database, snapshots, parameter groups, Data API, and AIOps diagnosis. Detailed CLI/SDK commands remain in references.
 
-```
-# Cluster:   .DBClusters[0].{Status,Endpoint,ReaderEndpoint,DBClusterMembers,Engine,EngineVersion}
-# Instance:  .DBInstances[0].{DBInstanceStatus,DBInstanceClass,PromotionTier,IsClusterWriter,Endpoint}
-# Snapshots: .DBClusterSnapshots[0].{Status,SnapshotCreateTime,Engine}
-# Global:    .GlobalClusters[0].{GlobalClusterIdentifier,GlobalClusterMembers,Status}
-# Failover:  .DBCluster.{Status,Endpoint}
-```
+## Common JSON Paths
+
+Cluster: .DBClusters[0].{Status,Endpoint,ReaderEndpoint,DBClusterMembers,Engine,EngineVersion}
+Instance: .DBInstances[0].{DBInstanceStatus,DBInstanceClass,PromotionTier,IsClusterWriter,Endpoint}
+Snapshot: .DBClusterSnapshots[0].{Status,SnapshotCreateTime,Engine}
+Global: .GlobalClusters[0].{GlobalClusterIdentifier,GlobalClusterMembers,Status}
+Failover: .DBCluster.{Status,Endpoint}
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "Aurora", "Aurora MySQL", "Aurora PostgreSQL", "Aurora cluster"
-- Task involves **DB clusters** (writer + readers), not standalone RDS instances
-- Keywords: aurora, cluster, reader, writer, failover, global database, serverless v2, backtrack, replica lag
-- Aurora Serverless v2 scaling, custom cluster endpoints, or Data API (HTTP endpoint)
-- Cluster snapshot create/restore/PITR, cluster parameter groups
-- **(AIOps)** Replica lag, connection saturation (incl. RDS Proxy path), slow queries on cluster writer
-- **(AIOps)** Serverless v2 ACU at ceiling, Global DB replication lag, backup compliance scan
-- **(AIOps)** FinOps: idle readers, over-provisioned Serverless MaxCapacity
+Aurora clusters/readers/writers, failover, Global DB, Serverless v2, snapshots, backtrack, Data API, replica lag, connection storms, slow writer queries, capacity, or backup compliance.
 
 ### SHOULD NOT Use When
-- Standalone RDS (MySQL/PostgreSQL/MariaDB/Oracle/SQL Server, non-Aurora) → `aws-rds-ops`
-- DynamoDB → `aws-dynamodb-ops` | ElastiCache → `aws-elasticache-ops`
-- DocumentDB / Neptune → not Aurora (different engines)
+Standalone RDS → `aws-rds-ops`; DynamoDB → `aws-dynamodb-ops`; ElastiCache → `aws-elasticache-ops`; DocumentDB/Neptune are different engines.
 
 ### Delegation
-- Security groups → `aws-ec2-ops` | IAM / IAM DB auth → `aws-iam-ops` | KMS → `aws-kms-ops`
-- CloudWatch alarms / PI → `aws-cloudwatch-ops` | Secrets → `aws-secretsmanager-ops`
-- VPC subnet groups → `aws-vpc-ops` | Full-chain patrol → `aws-aiops-cruise`
+Security groups → `aws-ec2-ops`; IAM → `aws-iam-ops`; KMS → `aws-kms-ops`; metrics → `aws-cloudwatch-ops`; secrets → `aws-secretsmanager-ops`; subnet groups → `aws-vpc-ops`; patrol → `aws-aiops-cruise`.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{user.DBClusterIdentifier}}` | User input | Ask once; reuse |
-| `{{user.DBInstanceIdentifier}}` | User input | Writer or member instance id |
-| `{{user.DBEngine}}` | User input | `aurora-mysql` or `aurora-postgresql` |
-| `{{user.replica_lag_threshold_ms}}` | User input | Default: 1000 |
-| `{{user.serverless_max_cap_ceiling}}` | User input | AUTO_HEAL cap for MaxCapacity (default: 64) |
-| `{{output.ClusterEndpoint}}` | Last API response | `.DBClusters[0].Endpoint` |
-| `{{output.ReaderEndpoint}}` | Last API response | `.DBClusters[0].ReaderEndpoint` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.DBClusterIdentifier}}`, `{{user.DBInstanceIdentifier}}` | User input | Cluster/member IDs |
+| `{{user.DBEngine}}`, `{{user.replica_lag_threshold_ms}}` | User input | Engine and detection threshold |
+| `{{user.serverless_max_cap_ceiling}}` | User input | AUTO_HEAL ceiling |
+| `{{output.*}}` | API response | Reuse cluster and reader endpoints |
 
 ## Execution Flow
 
-**Pre-flight**: `aws --version` + `aws sts get-caller-identity --output json`. Verify engine via `describe-db-engine-versions --engine {{user.DBEngine}}`.
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json` first; verify engine, subnet, SG, and identifiers. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll `describe-db-clusters` until `available` or deleted. Recover with bounded backoff on throttling; halt on invalid state or ambiguous identity. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-**Execute (CLI primary)**: [references/aws-cli-usage.md](references/aws-cli-usage.md)
+## Operations and Safety
 
-**Execute (boto3 fallback)**: After 3 CLI failures — [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md)
-
-**Validate**: Poll `describe-db-clusters` until `Status=available` (max 30 min) or deleted (max 20 min). `aws rds wait db-cluster-available`.
-
-**Recover**:
-| Error | Action |
-|-------|--------|
-| DBClusterAlreadyExists / InvalidDBClusterState | HALT |
-| InvalidDBClusterStateFault (failover) | Wait for `available`; retry once |
-| Throttling (429) | Backoff, max 3 retries |
-| 5xx Internal | Retry 3x; HALT |
-
-## Scope
-
-| Operation / Scenario | Safety Gate | AIOps tier |
-|---------------------|-------------|------------|
-| Create cluster + instances | Engine/subnet/SG validation | — |
-| Add/modify reader or writer | Brief outage possible | AI_ASSIST |
-| Enable Performance Insights (writer) | Reboot may be required | AUTO_HEAL |
-| Raise Serverless v2 MaxCapacity | Cap ≤ `{{user.serverless_max_cap_ceiling}}` | AUTO_HEAL |
-| Replica lag remediation (add reader) | None | AI_ASSIST |
-| Failover cluster | **Human confirm** | MANUAL |
-| Stop/start cluster | Stop: **Human confirm** | MANUAL |
-| Delete cluster | **Human confirm + final snapshot** | MANUAL |
-| Backtrack (MySQL) | **Human confirm** | MANUAL |
-| Global DB detach / delete | **Human confirm** | MANUAL |
-| Backup compliance scan | Read-only | MANUAL report |
-
-## Safety Gates
-
-**Delete cluster** — before `delete-db-cluster`:
-1. Display: "Deleting {{user.DBClusterIdentifier}} removes writer and all readers"
-2. Default: `--final-db-snapshot-identifier`; `--skip-final-snapshot` only with `DELETE_NO_SNAPSHOT {{user.DBClusterIdentifier}}`
-3. Confirm: `DELETE {{user.DBClusterIdentifier}}`
-
-**Failover** — confirm: `FAILOVER {{user.DBClusterIdentifier}}`
-
-**Backtrack** — confirm: `BACKTRACK {{user.DBClusterIdentifier}} to {{user.BacktrackTime}}`
-
-## Cross-Skill Orchestration
-
-| Scenario | Chain |
-|----------|-------|
-| Aurora slow query (writer) | aurora(PI) → cloudwatch → aurora(params) — PI detail: `aws-rds-ops` §SQL Slow Query |
-| Replica lag RCA | aurora(metrics) → aurora(describe members) → aurora(add reader) |
-| Connection storm + Proxy | aurora(proxy+cluster) → secretsmanager → vpc |
-| API latency (suspect DB) | elb → ec2 → aurora |
-| Global DB DR | aurora(global) → route53 → cloudwatch |
-| Full-chain patrol | `aws-aiops-cruise` → delegate aurora for `RDS-PROXY-AURORA-*` |
-
-## AIOps Scenarios
-
-See [references/prompt-examples.md](references/prompt-examples.md) (8 scenarios) and [layered-inspection-template.md](references/layered-inspection-template.md).
-
-AIOps loop: **Collect metrics → Detect (rule ID) → RCA → Decision tier → Action → Feedback**
-
-## Quality Gate (GCL)
-
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
-
-Destructive ops need `confirm=<OPERATION> <resource>` in trace. AWS rules A5/A7/A8/A9/A10 per `aws-skill-generator/references/gcl-spec.md` §8.
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Create cluster/instances | Validate engine, subnet, SG; poll available | — |
+| Add/modify reader | Inspect members and outage impact; validate status | AI_ASSIST token when needed |
+| Failover | Verify available and target writer; validate endpoint | `FAILOVER {{user.DBClusterIdentifier}}` |
+| Stop/start | Check cluster state; validate availability | Human confirmation |
+| Delete cluster | Display blast radius; default final snapshot; validate deletion | `DELETE {{user.DBClusterIdentifier}}`; no-snapshot additionally `DELETE_NO_SNAPSHOT {{user.DBClusterIdentifier}}` |
+| Backtrack | Verify MySQL and target time; validate recovery | `BACKTRACK {{user.DBClusterIdentifier}} to {{user.BacktrackTime}}` |
+| Global detach/delete | Inspect members and DR impact | Human confirmation |
+| AIOps remediation | Collect metrics, detect rule, RCA, choose tier, act, feedback | Tier/token rules below |
 
 ## AIOps Delegate Contract
 
-Orchestrator-aware. When invoked by `aws-aiops-orchestrator`, honor the delegate contract in [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md).
+Parse `aiops_delegate` (`request_id`, `parent_intent`, `action_mode`, `decision_tier`, `scope.resource_ids`, `trace_id`); deduplicate writes by `idempotency_key` for 24h; `MANUAL` is read-only, `AI_ASSIST` writes only with `confirmation_token`, `AUTO_HEAL` permits non-destructive writes; destructive delete/failover/backtrack/global operations always require a token. Propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks RB-023–RB-027 and incident schema: [prompt-examples.md](references/prompt-examples.md), [incident-schema.md](../aws-aiops-cruise/references/incident-schema.md).
 
-**Recognition**: parse `aiops_delegate:` — `request_id`, `parent_intent`, `action_mode`, `decision_tier`, `scope.resource_ids`, `trace_id`.
+## Quality Gate (GCL)
 
-**Rules**:
-1. **Idempotency**: writes accept `idempotency_key`; duplicate within 24h → `deduplicated: true`
-2. **Confirmation**: delete/failover/backtrack/global detach require `confirmation_token`
-3. **Tier**: MANUAL = read-only; AI_ASSIST = recommend (write only with token); AUTO_HEAL = non-destructive writes (Serverless MaxCapacity, enable PI) without token
-4. **Trace**: propagate `trace_id` in User-Agent
-5. **Output**: always append `aiops_context:` JSON block
-
-Runbooks: [aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-
-| Runbook | Trigger | Tier | Goal |
-|---------|---------|------|------|
-| RB-023 | FD-15, AURORA-LAG-01 | AI_ASSIST | Replica lag RCA + add reader |
-| RB-024 | PD-08, AURORA-SLV2-01 | AUTO_HEAL | Raise Serverless MaxCapacity |
-| RB-025 | FD-16, RDS-PROXY-AURORA-01 | MANUAL | Writer failure / controlled failover |
-| RB-026 | PD-09, AURORA-GDB-01 | MANUAL | Global DB lag / DR review |
-| RB-027 | PD-04, RDS-PROXY-AURORA-02 | AI_ASSIST | Proxy + Aurora connection storm |
-
-Incident output MUST conform to [aws-aiops-cruise/references/incident-schema.md](../aws-aiops-cruise/references/incident-schema.md) (`resource_type: Aurora`, `delegate_skill: aws-aurora-ops`).
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A5, A7, A8, A9, A10 from `gcl-spec.md` §8; mask credentials and require confirmation tokens in traces.
 
 ## Token Efficiency
 
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded engine versions/ports — use `describe-db-engine-versions` / `describe-db-clusters`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+TE-1…TE-6 apply; query live engine/cluster data, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Reference Files
 
-- [Prompt Examples (AIOps)](references/prompt-examples.md)
-- [Layered Inspection](references/layered-inspection-template.md)
-- [AWS CLI Usage](references/aws-cli-usage.md) — includes AIOps metric collection
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md) — AIOps Metrics Map
-- [Troubleshooting](references/troubleshooting.md)
-- [Example Config](assets/example-config.yaml)
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [prompt-examples.md](references/prompt-examples.md) · [layered-inspection-template.md](references/layered-inspection-template.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)

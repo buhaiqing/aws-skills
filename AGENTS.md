@@ -292,7 +292,158 @@ residue must be recorded and escalated for human decision — never ignored.
 Record the review conclusion (scope / found / fixed / residue) before
 marking the Phase done.
 
+### Staged Self-Reflection & Knowledge Distillation (mandatory, per TDD step)
+
+The end-of-Phase review (above) and the 3-round Self-Reflection rule (below)
+are **not** sufficient on their own. Self-reflection must happen at every
+TDD step, otherwise the lessons learned in step N are lost by step N+3.
+
+**Per-step checkpoints** (apply to any RED → GREEN → REFACTOR cycle):
+
+| Phase | Checkpoint | Output |
+|---|---|---|
+| **RED** | Capture the test oracle: "what does the failure look like and why?" | One-line note in the plan or commit body; never skip |
+| **GREEN** | Capture the minimal change: "what was the smallest diff that made RED go green?" | If the diff is >50 lines, you batched too much — split |
+| **REFACTOR** | Capture the lesson: "what invariant or anti-pattern did this step expose?" | Append to `docs/superpowers/learnings.md` keyed by date + topic |
+
+**Per-Pilot / Per-Phase promotion** (after the final GREEN of a pilot / phase):
+
+For each lesson in `learnings.md` that meets ALL of the following, **promote
+it to AGENTS.md as a standing rule**:
+
+1. The lesson is **general** (applies to ≥3 future tasks, not a one-off fix).
+2. The lesson is **actionable** (can be phrased as "do X" or "never Y" — not a postmortem narrative).
+3. The lesson is **mechanically verifiable** (a future agent can check compliance with a script, a Charter check, or a single grep).
+
+If a lesson is one-off, keep it in `learnings.md` only. If it is general but
+not yet mechanically verifiable, leave it in `learnings.md` and label it
+`[awaiting-promotion]` until a verification hook is built.
+
+**Anti-pattern** (banned): running 3 rounds of self-reflection at the very
+end, then trying to "remember" all the lessons. Most lessons are lost this
+way — you forget the bug that the test caught, the assumption that turned
+out to be wrong, the off-by-one in the helper. Catch them while they are
+fresh, in the step where you discovered them.
+
+> Source: 2026-07-28 TE Gate C6 Debt Pilot retro. The pilot was 6 atomic
+> TDD steps (frontmatter compress, JSON paths, Trigger & Scope, etc.); each
+> step exposed a lesson that, when captured in-step, made the next step
+> faster. Trying to recall them at the end produced a 6-lesson dump that
+> would have been 2-3 lessons if forced to be remembered later.
+
+### Standing Rules (distilled from past pilots)
+
+These are **promoted** lessons from `docs/superpowers/learnings.md` —
+general, actionable, mechanically verifiable. Each rule states a
+recurring pattern that future agents must follow without re-deriving it.
+
+When a new pilot/phase exposes a lesson that meets the promotion
+criteria (general + actionable + verifiable), append a new rule here
+and move the corresponding entry out of `learnings.md` to keep the
+candidates list short.
+
+#### SR-1 — TDD step size: one section per commit (≥50-line rewrite ⇒ split)
+
+When a SKILL.md refactor or large file rewrite is required, **do not** write
+a single replacement script that touches ≥50 lines at once. Instead, break
+the work into atomic steps where each step:
+
+- Touches ≤50 lines of a single file (or a small set of related lines).
+- Is followed by a hard-verification call (`te_gate.py`, `pytest`, `ruff`).
+- Can be reverted in isolation if it regresses.
+
+**Why**: a single 169-line replacement script failed on a whitespace
+mismatch in step 1; recovery cost was 10× the time of having split into
+6 atomic steps (which the 2026-07-28 TE Gate pilot did, finishing in
+~20 min).
+
+**Mechanically verifiable**: PR review should flag any commit where the
+net `git diff` is ≥50 lines and not split into multiple commits. Use
+`git diff --stat` before staging.
+
+> Promoted 2026-07-28 from `learnings.md` Lesson 6 (TE Gate C6 Debt Pilot).
+
+#### SR-2 — Charter C2 literal sub-headers: never strip `### SHOULD Use When`
+
+When compressing a SKILL.md `## Trigger & Scope` section to fit the G1
+line cap, **always keep** the literal sub-headers:
+
+```markdown
+## Trigger & Scope
+
+### SHOULD Use When
+<compressed content>
+
+### SHOULD NOT Use When
+<compressed content>
+```
+
+A single paragraph with bold (`**SHOULD**: ... **SHOULD NOT**: ...`) violates
+Charter C2 even if the semantic content is preserved — the Charter check
+looks for the literal sub-heading text.
+
+**Why**: Charter C2 (per `governance-review.md`) requires both
+`### SHOULD Use When` and `### SHOULD NOT Use When` headings; compressing
+the content between them is fine, deleting the headings is not.
+
+**Mechanically verifiable**: any skill-updating agent or
+`scripts/te_gate.py` augmentation can grep for the literal sub-headers.
+A missing header is a Charter violation, not a style preference.
+
+> Promoted 2026-07-28 from `learnings.md` Lesson 4 (TE Gate C6 Debt Pilot).
+
+#### SR-3 — Frontmatter inline arrays: `[a, b, c]` is valid YAML, saves 4-5 lines
+
+When a SKILL.md frontmatter block has multi-line YAML lists
+(`environment:`, `cross_skill_deps:`, etc.), prefer the **inline array
+form** unless readability demands otherwise:
+
+```yaml
+environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]
+cross_skill_deps: [aws-iam-ops, aws-vpc-ops, aws-ec2-ops]
+```
+
+This is valid YAML, parses identically to the multi-line form, and saves
+4-5 lines per block. For 37 skills × 2 blocks, that's ~150 lines
+recoverable across the repo without any Charter impact.
+
+**Exception**: when the list has more than ~5 items AND each item has a
+trailing comment, the multi-line form is more readable. Inline the rest.
+
+**Mechanically verifiable**: lint can flag `environment:` followed by a
+list of >3 single-key items on separate lines and suggest the inline form.
+
+> Promoted 2026-07-28 from `learnings.md` Lesson 3 (TE Gate C6 Debt Pilot).
+
+#### SR-4 — Cross-file anchor links: anchor must exist in target
+
+When adding a markdown link of the form
+`[text](references/<file>.md#<anchor>)` to a SKILL.md, **the anchor
+must exist as a heading in the target file**. The current link-integrity
+check only verifies that the **file** exists, not the **anchor**.
+
+**Mandatory check** before merging any SKILL.md change:
+
+1. List every `[...](<file>.md#<anchor>)` link in the modified SKILL.md.
+2. For each anchor, parse the headings of the target file with
+   GitHub-style slug rules (lowercase, spaces → `-`, strip `:.,&()?!/`).
+3. Reject the change if any anchor is not found.
+
+**Why**: the 2026-07-28 pilot added
+`[references/operations.md#config-placeholders](...)` to
+`aws-ram-ops/SKILL.md` while the actual section was in the SKILL.md, not
+in operations.md — silent broken link.
+
+**Mechanically verifiable**: a 30-line `scripts/links_lint.py` can
+implement the above. Until that script exists, manual review of every
+new cross-file link is mandatory; mark them with a `<!-- link-check:manual -->`
+HTML comment so a future automated scan can find them.
+
+> Promoted 2026-07-28 from `learnings.md` Lesson 5 (TE Gate C6 Debt Pilot).
+
 ### Composite / Copilot Skills (L2)
+
+
 
 Base skills (`aws-<svc>-ops`, L1) are single-service runbooks. Composite
 skills (L2, `metadata.type: composite`) **orchestrate only** — they declare
@@ -318,6 +469,14 @@ aws-aiops-cruise + aws-aiops-orchestrator).
 > Full spec (check tables, verification scripts, dedup procedures,
 > implementation notes) at
 > [`docs/post-update-self-review.md`](docs/post-update-self-review.md)
+
+> **Per-step note**: The 3 rounds below run at the **end** of a skill update.
+> Per-TDD-step reflection (RED / GREEN / REFACTOR) is required in addition —
+> see **"Staged Self-Reflection & Knowledge Distillation"** in
+> §Operational Guidelines above for the per-step discipline that feeds into
+> this end-of-update review. The two are complementary, not substitutes:
+> per-step captures lessons while fresh; end-of-update consolidates them
+> into the skill's `post-update-self-review.md`.
 
 | Round | Scope | Key Checks |
 |-------|-------|------------|
@@ -448,7 +607,7 @@ skill may override `max_iter` under its own `SKILL.md`'s
 ### 11.6 Trace & audit (mandatory)
 
 Every GCL run persists a JSON trace to
-`./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` per the schema in spec §6.
+`./audit-results/gcl-trace-YYYYMMDD-HHMMSS-<run-id>.json` per the schema in spec §6.
 `audit-results/` is git-ignored; traces retained 30 days; old traces pruned
 by the Phase 2 Orchestrator runner.
 
@@ -893,10 +1052,10 @@ tool call against the historical failure library
 | `is_destructive` | `safety_confirm` | Pattern match (count ≥ 3) | Pattern match (count < 3) | No match | Decision |
 |---|---|---|---|---|---|
 | `false` | any | — | — | — | **ALLOW** |
-| `true`  | empty | — | — | — | **WARN** |
-| `true`  | non-empty | — | — | yes | **ALLOW** |
+| `true`  | empty | — | — | — | **BLOCK** |
+| `true`  | non-empty | — | — | yes | **ALLOW only with exact plan token** |
 | `true`  | any | yes | — | — | **BLOCK** |
-| `true`  | non-empty | — | yes | — | **WARN** |
+| `true`  | non-empty | — | yes | — | **BLOCK** |
 
 `count >= 3` is the empirically chosen threshold (L4 maturity model's
 gap #3 fix). Lower it cautiously — every lower threshold
@@ -917,11 +1076,24 @@ echo '{"tool_name":"aws ec2 terminate-instances","args":{"instance_ids":["i-xxx"
 | Claude Code | `PreToolUse` matcher in `settings.json` → call `runtime_safety.py` |
 | Custom agent | invoke via subprocess; respect exit code (0/1/2) |
 
-`is_destructive` is **statically determined** by the calling agent
-(keyword scan on the tool name) — the runtime hook does not inspect
-arguments. False negatives (a destructive op that isn't flagged) cause
-silent skip; false positives (a non-destructive op flagged) cause WARN
-at worst.
+`is_destructive` is derived inside `runtime_safety.py` from the operation name;
+the caller-provided legacy field is ignored for the decision. Destructive
+operations require the exact token generated by
+`build_confirmation_token(ToolCall(...))`, which binds the normalized
+operation and arguments. A random non-empty confirmation is not sufficient.
+
+For executable tool calls, prefer the single proxy boundary:
+
+```bash
+echo '{"command":["aws","ec2","terminate-instances","--instance-ids","i-xxx"],"args":{"instance_ids":["i-xxx"]},"safety_confirm":"<exact-token>"}' \
+  | python3 scripts/safe_tool_proxy.py --patterns docs/failure-patterns.md
+```
+
+The proxy executes only `ALLOW`; it never executes `WARN` or `BLOCK`. It
+accepts only the trusted `aws` executable resolved from `PATH`, derives the
+confirmation plan from the actual argv, and passes a reduced environment to
+the child process (AWS credential variables are retained only for the AWS
+CLI child; arbitrary caller executables are rejected).
 
 ### Library API
 

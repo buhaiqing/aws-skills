@@ -97,8 +97,9 @@
 |---|---|---|
 | **Charter C1–C6**（6 条治理契约） | ✅ | `aws-skill-generator/references/governance-review.md` |
 | **TE-1…TE-6**（Token Efficiency 6 规则） | ✅ | `aws-skill-generator/SKILL.md`; `docs/te-hard-gate.md` |
-| **TE Hard Gate**（C6 MUST-PASS, G1–G6 机器可校验） | ✅ | `scripts/te_gate.py` (165 行); 6 个机器可校验（G1/G3/G4） |
+| **TE Hard Gate**（C6 MUST-PASS, G1–G6 机器可校验） | ✅ | `scripts/te_gate.py` (170 行); G1/G3/G4 机器可校验; **37/37 skills pass `--strict`** (2026-07-28); P0-B backlog closed |
 | **Pre-existing Lint Baseline**（区分历史/新增错误） | ✅ | `AGENTS.md` Operational Guidelines |
+| **Cross-file anchor link lint**（SR-4 enforcement） | ✅ | `scripts/links_lint.py` (100 行, 12 测试); 37/37 skills 0 断链 (2026-07-28); pre-commit 已接入 |
 | **Frontmatter 单 `---` 块校验**（避免 split 错误） | ✅ | `aws-ec2-ops` 已修复 (2026-07-12 verified) |
 
 ### 5.2 复合 / Copilot Skill（L2 on L1）
@@ -239,7 +240,7 @@
 L1 ██████████████████████ 100% 🟢 Foundational (short-path closed: 3 skills 补 ### SHOULD subsections; 40/40 严格合规)
 L2 █████████████████████ 100% 🟢 Operational (P0 closed: composite_lint 自动验证, CI 强制 install hooks)
 L3 ██████████████████████ 100%  ✅  Orchestration (P0 closure 2026-07-25: pre-commit sync + 3 composite frontmatter validated)
-L4 ████████████████████  99% 🟢 Adaptive (short-path: cross-runtime 37/37 score 1.00; CodeGraph 重建; Makefile 加 setup; F-007 文档化)
+L4 ████████████████████  99% 🟢 Adaptive (TE Gate: 4/37 ⚠️ → P0-B in flight) (short-path: cross-runtime 37/37 score 1.00; CodeGraph 重建; Makefile 加 setup; F-007 文档化)
 
 总体成熟度: L3 完成 ✅, L4 实质完成 88% (scripts/ 100% 实现, 强制/e2e 待补); 见 maturity-2026-07-26.md
 ```
@@ -310,7 +311,15 @@ L4 ████████████████████  99% 🟢 Adapti
 | 2026-07-26 (v12) | **10-patch consolidation**: 生成 `l4-98-consolidated.patch` (401 KB / 63 files); F-006 recorded (overlapping diffs); 仓库进入 "L4 完整闭环 + 自审协议化" 状态 | 主 Agent |
 | 2026-07-26 (v13) | **Short path closed** (G1-G5): F-004 status fixed, cross-runtime 0.94→1.00 (lint 范围 narrow), CodeGraph 重建, Makefile 加 setup/test/lint/ci, Charter C2 3 skills 修; L1 95→**100%**, L4 98→**99%**; F-007 发现并文档化 (gcl_runner._yaml_lite pre-existing bug) | 主 Agent |
 | 2026-07-26 (v14) | **F-007 fixed**: 删除 `gcl_runner._yaml_lite` fallback parser; `_load_yaml_frontmatter` 改用纯 PyYAML `safe_load`; 暴露并修 G2 遗留 YAML 语法问题; 测试套件 **106/106 passed** | 主 Agent |
-| TBD | P1 三件合入后, 进度条 20%→45% | - |
+| 2026-07-28 (v16) | **P0-B Pilot E**: `aws-sns-ops` 231→103; compressed frontmatter/trigger/variables/GCL/AIOps while retaining safety and trace contracts; **5/37 skills pass `--strict`**, 32/37 backlog. Lesson 7 recorded in `docs/superpowers/learnings.md`. | 主 Agent |
+| 2026-07-28 (v17) | **P0-B Pilots F–H**: `aws-sqs-ops` 214→116, `aws-ebs-ops` 270→120, `aws-cloudfront-ops` 220→116; repaired machine-readable JSON path blocks and retained destructive-operation safety gates; **8/37 skills pass `--strict`**, 29/37 backlog. Lessons 9–10 recorded. | 主 Agent |
+| 2026-07-28 (v18) | **P0-B Pilots I–K**: `aws-secretsmanager-ops` 220→120, `aws-stepfunctions-ops` 220→117, `aws-aurora-ops` 210→108; retained secret masking, workflow termination, Aurora safety and AIOps tier contracts; **11/37 skills pass `--strict`**, 26/37 backlog. Lessons 11–12 recorded. Batch validation: 161 tests, 37/37 links, 11/11 target gates. | 主 Agent |
+| 2026-07-28 (v19) | **Risk-ordered batch**: `aws-eks-ops` 245→97 and `aws-autoscaling-ops` 265→110; removed static version debt while retaining EKS dependency deletion order and Auto Scaling A16 scale-to-zero guard; **13/37 skills pass `--strict`**, 24/37 backlog. | 主 Agent |
+| 2026-07-28 (v20) | **Risk-ordered batch 2**: `aws-ssm-ops` 253→101, `aws-elasticache-ops` 271→107, `aws-apigateway-ops` 291→111; retained remote-command confirmation/output masking, final snapshots/failover confirmation, and API production/deletion controls; **16/37 skills pass `--strict`**, 21/37 backlog. | 主 Agent |
+| 2026-07-28 (v21) | **Risk-ordered batch 3**: `aws-lambda-ops` 294→110, `aws-opensearch-ops` 299→109, `aws-elb-ops` 300→118; retained trigger-aware Lambda deletion, OpenSearch resource-bound tokens/AUTO_HEAL boundary, and ELB proportional drain confirmations; **19/37 skills pass `--strict`**, 18/37 backlog. | 主 Agent |
+| 2026-07-28 (v22) | **Risk-ordered batch 4**: `aws-securityhub-ops` 311→112, `aws-eventbridge-ops` 318→114, `aws-s3-ops` 326→109; retained Security Hub disable boundaries, EventBridge dependency-order deletion, and S3 A2/A6/A9/A15 plus recursive scope confirmation; **22/37 skills pass `--strict`**, 15/37 backlog. | 主 Agent |
+| 2026-07-28 (v23) | **Risk-ordered batch 5**: `aws-efs-ops` 328→100, `aws-route53-ops` 343→110, `aws-ecr-ops` 349→103; retained EFS dependency cleanup, Route53 multi-signal failover/record diff, and ECR explicit image-set/public-policy controls; **25/37 skills pass `--strict`**, 12/37 backlog. | 主 Agent |
+| 2026-07-28 (v24) | **P0-B closure**: final 12 skills (`rds`, `vpc`, `waf`, `guardduty`, `ecs`, `athena`, `application-autoscaling`, `kms`, `acm`, `dynamodb`, `cloudtrail`, `ec2`) compressed with service-specific safety gates retained; **37/37 skills pass `te_gate --all --strict`**, backlog closed. | 主 Agent |
 
 ---
 

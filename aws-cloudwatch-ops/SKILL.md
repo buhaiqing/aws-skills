@@ -92,44 +92,27 @@ metadata:
 
 ## Operations Index
 
-All operation details (CLI + boto3 + validate + recover tables):
-
-| Category | Reference |
-|----------|-----------|
-| Alarms: create/describe/delete, composite, anomaly detection | [aws-cli-usage.md](references/aws-cli-usage.md) |
-| Metrics: list, get-statistics, get-data, put-custom | [aws-cli-usage.md](references/aws-cli-usage.md) |
-| Logs: Insights query, Contributor Insights, dashboards, retention | [aws-cli-usage.md](references/aws-cli-usage.md) |
-| Synthetics: canary create/delete/diagnose | [aws-cli-usage.md](references/aws-cli-usage.md) |
-| **Predictive: capacity-forecast, FORECAST trend** | [predictive-operations.md](references/predictive-operations.md) |
-| **AIOps: cost RCA, cert expiry, three-layer inspection, auto-heal, ELB templates** | [aiops-scenarios.md](references/aiops-scenarios.md) |
-
-Full routing table: [operation-index.md](references/operation-index.md)
+See [operation-index.md](references/operation-index.md) for the full routing table.
+Per-category: [aws-cli-usage.md](references/aws-cli-usage.md) (alarms/metrics/logs/synthetics) ·
+[predictive-operations.md](references/predictive-operations.md) (capacity-forecast) ·
+[aiops-scenarios.md](references/aiops-scenarios.md) (RCA / cert expiry / auto-heal).
 
 ## Cross-Skill References
 
-`aws-aiops-cruise` → calls `get-capacity-forecast` | `aws-aiops-orchestrator` → delegates capacity-forecast | `aws-ec2-ops` / `aws-rds-ops` → metric source
+`aws-aiops-cruise` · `aws-aiops-orchestrator` (capacity-forecast) · `aws-ec2-ops` / `aws-rds-ops` (metric source) · `aws-elb-ops` (ELB metrics) · `aws-acm-ops` (certs) · `aws-vpc-ops` (flow logs) · `aws-cloudtrail-ops` (audit).
 
 ## Token Efficiency (TE-1…TE-6)
 
-TE-1: API commands > hardcoded tables. TE-2: No docstrings in boto3. TE-3: Compact error tables. TE-4: JSON paths declared once at top. TE-5: YAML anchors in `assets/example-config.yaml`. TE-6: All operation detail in reference files — no cross-file duplicate flows.
+TE-1 API > hardcoded tables · TE-2 no boto3 docstrings · TE-3 compact error tables · TE-4 JSON paths in header · TE-5 YAML anchors · TE-6 detail in references/.
 
 ## Safety Gates
 
-| Operation | Gate |
-|-----------|------|
-| `delete-alarms` / `delete-dashboards` / `delete-insight-rules` | Human confirm with name + impact |
-| `put-retention-policy` / `delete-canary` | Human confirm — permanent/irreversible |
+`delete-alarms` · `delete-dashboards` · `delete-insight-rules` · `delete-canary` · `put-retention-policy` — all require explicit human confirmation with name + impact (destructive / irreversible).
 
 ## Reference Files
 
 [Prompt Examples](references/prompt-examples.md) · [Operation Index](references/operation-index.md) · [AWS CLI](references/aws-cli-usage.md) · [boto3](references/boto3-sdk-usage.md) · [Core Concepts](references/core-concepts.md) · [Troubleshooting](references/troubleshooting.md) · [ELB Templates](references/elb-monitoring-templates.md) · [AIOps Scenarios](references/aiops-scenarios.md) · [Layered Inspection](references/layered-inspection-template.md) · [GCL Rubric](references/rubric.md) · [GCL Prompts](references/prompt-templates.md)
 
-## Quality Gate (GCL)
+## Quality Gate (GCL) & AIOps Delegate
 
-`recommended` · `max_iterations=3` · rubric: `references/rubric.md` · prompts: `references/prompt-templates.md` · trace: `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json`. Destructive ops: `delete-alarms`, `delete-insight-rules`, `delete-dashboards`, `delete-canary`, `put-retention-policy`. Rules A7–A10: `aws-skill-generator/references/gcl-spec.md` §8.
-
-## AIOps Delegate Contract
-
-Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md). Parse `aiops_delegate:` (`request_id`, `parent_intent`, `action_mode`, `decision_tier`, `scope`, `trace_id`). Writes: idempotency_key (24h dedup); destructive ops need `confirmation_token`; propagate `trace_id` in User-Agent; always emit `aiops_context:` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).
-
-> After completing a task, review and distill reusable assets per the root AGENTS.md "Compound-Asset Distillation Loop (CADL)".
+GCL `recommended` max_iter=3 · rubric/prompts in references/ · trace `audit-results/gcl-trace-*.json` · destructive: `delete-alarms|insight-rules|dashboards|canary`, `put-retention-policy` (Rules A7–A10). Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate` block, 24h idempotency_key, destructive requires `confirmation_token`, propagate `trace_id` in User-Agent, emit `aiops_context` JSON. See [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md) for runbooks. CADL per root AGENTS.md.

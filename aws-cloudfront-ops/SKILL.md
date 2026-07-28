@@ -13,18 +13,8 @@ metadata:
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
-  environment:
-  - AWS_ACCESS_KEY_ID
-  - AWS_SECRET_ACCESS_KEY
-  - AWS_DEFAULT_REGION
-  gcl:
-    enabled: true
-    class: required
-    max_iter: 2
-    rubric_version: v1
-    rubric_ref: references/rubric.md
-    prompts_ref: references/prompt-templates.md
-    pilot: false
+  environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]
+  gcl: {enabled: true, class: required, max_iter: 2, rubric_version: v1, rubric_ref: references/rubric.md, prompts_ref: references/prompt-templates.md, pilot: false}
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:
@@ -39,35 +29,24 @@ metadata:
 ## Common JSON Paths (Centralized)
 
 ```
-# Create Dist:       .Distribution.{Id,DomainName,Status}
-# Get Dist:          .Distribution.{Id,DomainName,Status}
-# List Dists:        .DistributionList.Items[].{Id,DomainName,Status}
-# Create Inval:      .Invalidation.{Id,Status}
-# Get Inval:         .Invalidation.Status
-# Create OAI:        .CloudFrontOriginAccessIdentity.{Id,S3CanonicalUserId}
+CreateDistribution: .Distribution.{Id,DomainName,Status}
+GetDistribution: .Distribution.{Id,DomainName,Status}
+ListDistributions: .DistributionList.Items[].{Id,DomainName,Status}
+CreateInvalidation: .Invalidation.{Id,Status}
+GetInvalidation: .Invalidation.Status
+CreateOAI: .CloudFrontOriginAccessIdentity.{Id,S3CanonicalUserId}
 ```
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User requests distribution creation or deletion
-- User needs to manage cache behaviors
-- User asks about CloudFront
-- User mentions "CDN", "distribution", "origin", "cache"
-- User needs to invalidate cached content
-- User asks about SSL/TLS certificates for CloudFront
-- User needs to configure custom domains
+Use for CloudFront distributions, CDN origins/cache, invalidations, custom domains, or TLS.
 
 ### SHOULD NOT Use When
-- S3 bucket operations only → delegate to: `aws-s3-ops`
-- ELB operations → delegate to: `aws-elb-ops`
-- Route53 operations → delegate to: `aws-route53-ops`
+S3-only → `aws-s3-ops`; ELB → `aws-elb-ops`; DNS → `aws-route53-ops`.
 
 ### Delegation
-- S3 → `aws-s3-ops` (origin bucket)
-- Route53 → `aws-route53-ops` (DNS/alias records)
-- ACM → `aws-acm-ops` (SSL/TLS certificates)
-- Lambda → `aws-lambda-ops` (Lambda@Edge)
+S3 → `aws-s3-ops`; Route53 → `aws-route53-ops`; ACM → `aws-acm-ops`; Lambda@Edge → `aws-lambda-ops`.
 
 ## Variable Convention
 
@@ -120,13 +99,7 @@ metadata:
 
 ## Token Efficiency
 
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded distribution limits/price classes — use `list-distributions` / `get-distribution`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+TE-1…TE-6 apply; query live distribution data, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Reference Files
 
@@ -136,85 +109,8 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Re
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
 ## Quality Gate (GCL)
-
-> Phase 1 GCL rollout (2026-06-04, required). Every execution of
-> `aws-cloudfront-ops` MUST be wrapped by the Generator-Critic-Loop
-> defined in `aws-skill-generator/references/gcl-spec.md`.
-
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
-
-Destructive ops requiring `{{user.safety_confirm}}` in trace:
-
-- `delete-distribution` — **MUST disable first** (`update-distribution
-  --enabled false`, poll `Status=Deployed`); `confirm=DELETE_DISTRIBUTION <id>`
-- `delete-distribution` on prod-tagged —
-  `confirm=DELETE_PROD_DISTRIBUTION <id>`
-- `delete-streaming-distribution`
-- `delete-key-group` — pre-flight: list distributions referencing it
-- `delete-origin-access-control` — pre-flight: list distributions using it
-- `delete-realtime-log-config`
-- `delete-function` (CloudFront Functions / Lambda@Edge) — pre-flight:
-  list associations
-
-Relevant AWS rules from `gcl-spec.md` §8: A7 (region; canonical
-`us-east-1` since CloudFront is global), A8 (resource echo-back),
-A9 (no env-var / secret values in `Comment` field; rule A10 (sts
-first command).
-
-See `references/rubric.md` for the 5-dimension rubric and `references/prompt-templates.md` for G/C/O skeletons.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. For deletion: disable first, poll `Status=Deployed`, then confirm `DELETE_DISTRIBUTION <id>` (prod uses `DELETE_PROD_DISTRIBUTION <id>`); apply A7–A10 from `gcl-spec.md` §8.
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for destructive ops; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

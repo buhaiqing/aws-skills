@@ -40,214 +40,62 @@ metadata:
 
 # AWS Systems Manager (SSM) Operations Skill
 
-## Common JSON Paths (Centralized)
+Use for SSM Run Command, Session Manager, managed instances, command status, and SSM documents without SSH. Detailed CLI/SDK patterns remain in references.
 
-```
-# Send Command:              .Command.CommandId
-# Get Invocation:            .{Status,ResponseCode,StandardOutputContent,StandardErrorContent}
-# List Invocations:          .CommandInvocations[].{InstanceId,Status}
-# Describe Instances:        .InstanceInformationList[].{InstanceId,PingStatus,PlatformType}
-# Start Session:             .SessionId
-# Cancel Command:            Empty (success)
-```
+## Common JSON Paths
 
-## Overview
-
-AWS Systems Manager (SSM) provides **remote command execution** and **session management** for EC2 instances without SSH access. This skill covers Run Command (batch execution), Session Manager (interactive shell), and Document management.
+SendCommand: .Command.CommandId
+GetInvocation: .{Status,ResponseCode,StandardOutputContent,StandardErrorContent}
+ListInvocations: .CommandInvocations[].{InstanceId,Status}
+ManagedInstances: .InstanceInformationList[].{InstanceId,PingStatus,PlatformType}
+StartSession: .SessionId
 
 ## Trigger & Scope
 
 ### SHOULD Use When
-- User mentions "AWS SSM", "Systems Manager", "Run Command", "Session Manager"
-- Task involves remote execution on EC2 instances without SSH
-- Keywords: `send-command`, `run shell script`, `remote execute`, `interactive session`
-- Managing SSM Documents (AWS-RunShellScript, AWS-RunPowerShellScript)
-- Checking command execution status or invocation results
+SSM, Systems Manager, Run Command, Session Manager, remote EC2 execution, managed instances, or SSM documents.
 
 ### SHOULD NOT Use When
-- Billing/cost analysis → out of scope; use AWS Cost Explorer directly
-- IAM role creation for SSM → delegate to: `aws-iam-ops`
-- EC2 instance lifecycle (start/stop/terminate) → delegate to: `aws-ec2-ops`
-- VPC endpoint creation → delegate to: `aws-vpc-ops`
+IAM roles → `aws-iam-ops`; EC2 lifecycle → `aws-ec2-ops`; VPC endpoints → `aws-vpc-ops`; billing → Cost Explorer.
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
-| `{{user.instance_ids}}` | User input | Ask once; comma-separated list |
-| `{{user.commands}}` | User input | Ask once; array of shell commands |
-| `{{user.document_name}}` | User input | Default: `AWS-RunShellScript` |
-| `{{output.command_id}}` | Last API response | Parse `.Command.CommandId` |
+| Placeholder | Source | Use |
+|---|---|---|
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
+| `{{user.instance_ids}}`, `{{user.instance_id}}` | User input | Targets |
+| `{{user.commands}}`, `{{user.document_name}}` | User input | Command payload/document |
+| `{{output.command_id}}` | API response | Reuse `.Command.CommandId` |
 
 ## Execution Flow Pattern
 
-Every operation follows **Pre-flight → Execute → Validate → Recover**:
+Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version` and `aws sts get-caller-identity --output json`; verify target IDs with `describe-instance-information`, agent reachability, document existence, and session plugin when needed. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll invocation status to a terminal state; recover with bounded throttling retries and halt on invalid instances/documents. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-1. **Pre-flight**: `aws --version` + `aws sts get-caller-identity --region {{user.region}} --output json`
-2. **Execute**: CLI primary (`--output json`); boto3 fallback after 3 CLI failures
-3. **Validate**: `list-command-invocations` / `describe-instance-information` to confirm
-4. **Recover**: See Common Recovery table below
+## Operations and Safety
 
-## Shared Patterns
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Send command | Echo targets, inspect command/document, poll each invocation | `SEND_COMMAND <instance-ids>` |
+| Get/list invocation | Verify command and instance IDs; read-only | — |
+| List managed instances | Read-only; validate PingStatus | — |
+| Start session | Verify target and plugin; interactive shell access | Human confirmation |
+| Cancel command | Verify command is running; validate cancelled state | Human confirmation |
+| Delete parameter/document | Inspect dependencies and versions | `DELETE_PARAMETER <name>` or operation-specific token |
 
-**boto3 fallback**: See [references/boto3-sdk-usage.md](references/boto3-sdk-usage.md) → matching section.
-
-**Output**: All commands use `--region {{user.region}} --output json` (omitted in some snippets).
-
-**Common Recovery**:
-| Error | Action |
-|-------|--------|
-| InvalidInstanceId | Verify instance ID; check SSM Agent status |
-| DocumentNotFound | Use valid document name; list with `aws ssm list-documents` |
-| ThrottlingException | Backoff 10s; retry 3x |
-| InternalServerError | Retry 3x; then HALT |
-| AgentNotInstalled | WARN; install SSM Agent manually |
-
-## Operations
-
-### OP: Send Command
-```bash
-aws ssm send-command \
-  --instance-ids "{{user.instance_ids}}" \
-  --document-name "{{user.document_name}}" \
-  --parameters commands="{{user.commands}}"
-```
-
-Validate: Poll `list-command-invocations --command-id {{output.command_id}} --details` every 5s, max 300s. Terminal states: `Success`, `Failed`, `Cancelled`, `TimedOut`.
-
-### OP: Get Invocation Result
-```bash
-aws ssm get-command-invocation \
-  --command-id "{{output.command_id}}" \
-  --instance-id "{{user.instance_id}}"
-```
-
-### OP: List Managed Instances
-```bash
-aws ssm describe-instance-information \
-  --filters key=InstanceIds,value="{{user.instance_ids}}"
-```
-
-### OP: Start Session
-**Safety Gate**: Confirm with user before interactive session.
-```bash
-aws ssm start-session --target "{{user.instance_id}}"
-```
-Note: Requires `session-manager-plugin` installed locally for interactive terminal.
-
-### OP: Cancel Command
-**Safety Gate**: Confirm cancellation with user.
-```bash
-aws ssm cancel-command --command-id "{{output.command_id}}"
-```
-
-## SSM Documents Reference
-
-| Document Name | Platform | Purpose |
-|--------------|----------|---------|
-| `AWS-RunShellScript` | Linux | Execute shell commands |
-| `AWS-RunPowerShellScript` | Windows | Execute PowerShell |
-| `AWS-UpdateSSMAgent` | All | Update SSM Agent |
-| `AWS-InstallApplication` | All | Install packages |
-| `AWS-ConfigurePackage` | All | Configure packages |
-
-## Token Efficiency
-
-All 6 TE rules applied (see `aws-skill-generator` SKILL.md §Token Efficiency Requirements). Key points:
-- TE-1: No hardcoded document names/parameters — use `list-documents` / `describe-parameters`
-- TE-2: Inline comments only in boto3 code (no docstrings)
-- TE-3: Compact error tables throughout
-- TE-4: JSON paths centralized in `## Common JSON Paths` block above
-- TE-5: YAML anchors in `assets/example-config.yaml` where applicable
-- TE-6: Flows only in SKILL.md (no duplicate in references/)
+Mask secrets from command parameters, stdout, stderr, and traces. Never log credentials or session material.
 
 ## Quality Gate (GCL)
 
-> Phase 1 GCL rollout (2026-06-04, required). Every execution of
-> `aws-ssm-ops` MUST be wrapped by the Generator-Critic-Loop defined in
-> `aws-skill-generator/references/gcl-spec.md`.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7 (region), A8 (instance echoed from describe), A9 (output secret masking), and A10 (STS first command).
 
-| Setting | Value |
-|---|---|
-| Class | `required` |
-| `max_iterations` | `2` |
-| Rubric | `references/rubric.md` (v1) |
-| Prompts | `references/prompt-templates.md` (v1) |
-| Trace path | `./audit-results/gcl-trace-YYYYMMDD-HHMMSS.json` |
+## Token Efficiency
 
-Destructive ops requiring `{{user.safety_confirm}}` in trace:
-
-- `send-command` — remote execution on EC2 instances; high blast radius; confirm `SEND_COMMAND <instance-ids>`
-- `delete-parameter` — parameter stored data permanently lost; confirm `DELETE_PARAMETER <name>`
-- `cancel-command` — terminates a running command; confirm with user
-- `start-session` — interactive shell access; confirm with user
-
-Relevant AWS rules from `gcl-spec.md` §8: A7 (region), A8 (InstanceId echoed from `describe-instance-information`), A9 (command output secrets masked), A10 (sts first command).
-
-### See also
-
-- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
-- `references/rubric.md` — this skill's 5-dimension rubric
-- `references/prompt-templates.md` — G/C/O skeletons
-- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
+TE-1…TE-6 apply; discover documents/parameters live, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Reference Files
 
-- [AWS CLI Usage](references/aws-cli-usage.md)
-- [boto3 SDK Usage](references/boto3-sdk-usage.md)
-- [Core Concepts](references/core-concepts.md)
-- [Troubleshooting](references/troubleshooting.md)
-- [Integration Setup](references/integration.md)
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [integration.md](references/integration.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## AIOps Delegate Contract
 
-This skill is orchestrator-aware. When invoked by
-`aws-aiops-orchestrator`, it MUST honor the delegate contract.
-
-### Recognition
-
-If the incoming prompt contains an `aiops_delegate:` block (see
-[aws-aiops-orchestrator/references/delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md)),
-parse and validate:
-
-- `request_id` — non-empty string
-- `parent_intent` — one of: health-check | rca | self-heal
-  | cost-forecast | capacity-forecast | change-impact
-  | compliance-scan | forensic
-- `action_mode` — observe | recommend | auto-heal | manual
-- `decision_tier` — AUTO_HEAL | AI_ASSIST | MANUAL
-- `scope.resource_ids` — array (may be empty for discovery)
-
-### Behavior rules
-
-1. **Idempotency**: every write operation MUST accept an
-   `idempotency_key` parameter. If the same key was executed within
-   the last 24h, return the cached result with
-   `aiops_context.status: "ok"` and
-   `aiops_context.facts[*].deduplicated: true`.
-2. **Confirmation gate**: any destructive operation (delete, terminate,
-   deregister, detach, disable, rotate) MUST require a
-   `confirmation_token`. If absent, refuse and return
-   `aiops_context.status: "failed"` with summary
-   `"confirmation_token required for destructive op"`.
-3. **Decision tier respect**:
-   - `decision_tier: MANUAL` — never execute writes; recommendations only.
-   - `decision_tier: AI_ASSIST` — recommendations; execute only if
-     `confirmation_token` is present.
-   - `decision_tier: AUTO_HEAL` — execute non-destructive writes
-     directly; destructive ones still require `confirmation_token`.
-4. **Trace propagation**: every AWS CLI / boto3 call MUST include the
-   `trace_id` from the delegate block in the User-Agent header
-   (`User-Agent: aiops-orchestrator/<trace_id>`).
-5. **Output format**: always include a final `aiops_context:` JSON
-   block in the response, even on failure.
-
-### Cross-reference
-
-This skill participates in the orchestrator's runbook library. See
-[aws-aiops-orchestrator/references/runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md)
-for which runbooks invoke this skill.
-
+Orchestrator-aware per [delegate-routing.md](../aws-aiops-orchestrator/references/delegate-routing.md): parse `aiops_delegate`; deduplicate writes by `idempotency_key` for 24h; require `confirmation_token` for remote/destructive actions; `MANUAL` never writes, `AI_ASSIST` writes only with token, `AUTO_HEAL` permits non-destructive writes; propagate `trace_id` as `User-Agent: aiops-orchestrator/<trace_id>` and always emit `aiops_context` JSON. Runbooks: [runbook-recipes.md](../aws-aiops-orchestrator/references/runbook-recipes.md).

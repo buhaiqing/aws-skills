@@ -57,13 +57,6 @@ Recorder: `.ConfigurationRecorders[0].{name,roleARN,recordingGroup}` | Channel: 
 
 ## Trigger & Scope
 
-AWS Config records resource configurations and evaluates compliance against rules.
-Pattern: **Pre-flight → Execute (CLI, boto3 fallback after 3 failures) → Validate → Recover**. All CLI uses `--output json`.
-
-**Use for**: Configuration Recorders, Delivery Channels, Config rules (managed/custom), Conformance Packs, Aggregators, Organization Config Rules, compliance evaluation.
-**Delegate**: IAM→`aws-iam-ops` | Lambda→`aws-lambda-ops` | S3 delivery→`aws-s3-ops` | SNS→`aws-sns-ops` | CloudTrail→`aws-cloudtrail-ops`
-
-
 ### SHOULD Use When
 
 - User mentions "AWS Config", "config rule", "compliance", "configuration recorder", "conformance pack", "resource compliance", or "config aggregation"
@@ -85,27 +78,14 @@ Pattern: **Pre-flight → Execute (CLI, boto3 fallback after 3 failures) → Val
 
 ## Variable Convention
 
-| Placeholder | Source | Agent Action |
-|-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default `us-east-1` if unset |
-| `{{env.AWS_PROFILE}}` | Runtime env | Use named profile over explicit keys |
-| `{{user.region}}` | User input | Ask once; reuse |
-| `{{user.recorder_name}}` | User input | Configuration recorder name (default: `default`) |
-| `{{user.channel_name}}` | User input | Delivery channel name (default: `default`) |
-| `{{user.s3_bucket}}` | User input | S3 bucket for delivery |
-| `{{user.s3_prefix}}` | User input | S3 key prefix for config snapshots |
-| `{{user.sns_topic_arn}}` | User input | SNS topic ARN for notifications |
-| `{{user.delivery_frequency}}` | User input | OneHour \| ThreeHours \| SixHours \| TwelveHours \| TwentyFourHours |
-| `{{user.rule_name}}` | User input | Config rule name |
-| `{{user.rule_identifier}}` | User input | Managed rule identifier (e.g., `S3_BUCKET_PUBLIC_READ_PROHIBITED`) |
-| `{{user.pack_name}}` | User input | Conformance pack name |
-| `{{user.pack_template_uri}}` | User input | Template S3 URI or body |
-| `{{user.aggregator_name}}` | User input | Aggregator name |
-| `{{user.aggregator_source}}` | User input | Account IDs or organization |
-| `{{output.rule_arn}}` | API response | Parse: `.ConfigRuleArn` |
-| `{{output.aggregator_arn}}` | API response | Parse: `.ConfigurationAggregatorArn` |
+| Placeholder | Source | Action |
+|-------------|--------|--------|
+| `{{env.AWS_*}}` | Runtime env | NEVER ask user; fail if unset |
+| `{{user.region}}` / `{{user.recorder_name}}` / `{{user.channel_name}}` | User input | Ask once; reuse (defaults: `us-east-1` / `default`) |
+| `{{user.s3_bucket}}` / `{{user.s3_prefix}}` / `{{user.sns_topic_arn}}` / `{{user.delivery_frequency}}` (OneHour \| ThreeHours \| SixHours \| TwelveHours \| TwentyFourHours) | User input | Required for delivery channel setup |
+| `{{user.rule_name}}` / `{{user.rule_identifier}}` (e.g., `S3_BUCKET_PUBLIC_READ_PROHIBITED`) | User input | For `put-config-rule` |
+| `{{user.pack_name}}` / `{{user.pack_template_uri}}` / `{{user.aggregator_name}}` / `{{user.aggregator_source}}` | User input | For conformance pack / aggregator setup |
+| `{{output.rule_arn}}` / `{{output.aggregator_arn}}` | API response | Parse `.ConfigRuleArn` / `.ConfigurationAggregatorArn` |
 
 ## Execution Flow Pattern
 
