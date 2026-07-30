@@ -20,8 +20,8 @@
 
 | Rule | Check | Result |
 |------|-------|--------|
-| TE-1 | No hardcoded instance-type/AMI tables; uses `describe-instance-types` | ✅ |
-| TE-2 | No docstrings in boto3 SDK code; inline comments only | ✅ |
+| TE-1 | No hardcoded instance-type/AMI tables; uses `describe-instance-types` | ✅ (2026-07-30: core-concepts table removed) |
+| TE-2 | No docstrings in boto3 SDK code; inline comments only | ✅ (2026-07-30: boto3-sdk-usage cleaned) |
 | TE-3 | Compact error tables (≤3 cols) | ✅ (17 error tables) |
 | TE-4 | JSON paths centralized at file top | ✅ |
 | TE-5 | YAML anchors in example-config.yaml | ✅ (pre-existing, not modified) |
@@ -38,18 +38,31 @@
 
 | Check | Result | Evidence |
 |-------|--------|----------|
-| Link integrity | ✅ PASS | All 8 referenced files verified: aws-cli-usage.md, boto3-sdk-usage.md, core-concepts.md, troubleshooting.md, rubric.md, prompt-templates.md, integration.md, example-config.yaml |
+| Link integrity | ✅ PASS (2026-06-26) | 7 files: aws-cli-usage.md, boto3-sdk-usage.md, core-concepts.md, troubleshooting.md, rubric.md, prompt-templates.md, example-config.yaml — ~~integration.md~~ (never existed for aws-ec2-ops) |
 | Delegation skills exist | ✅ PASS | aws-elb-ops, aws-cloudwatch-ops, aws-cloudtrail-ops, aws-ssm-ops verified |
 | Safety gates completeness | ✅ PASS | All destructive ops (terminate, delete-key-pair, deregister-image, detach-volume, stop) have gates |
 | All ops: CLI + boto3 + Validate + Recover | ✅ PASS | 16/16 ops: each has CLI primary + boto3 fallback + Validate + Recover |
 | Dedup (no duplicate flows) | ✅ PASS | No "Complete Workflow" or duplicate full-flow content in references/ |
 | Version sync (README.md + README_cn.md) | ✅ PASS | README.md: `✅ Complete v1.4.0` (line 491); README_cn.md: `✅ 完成 v1.4.0` (line 491); Changelog table (line 723): v1.3.0→v1.4.0 |
 | Operations unchanged | ✅ PASS | 16 operations (same as original v1.3.0) |
-| AIOps tail preserved | ✅ PASS | AIOps diagnostics, AH-EC2-01~04, Quality Gate (GCL), AIOps Delegate Contract preserved identically |
-| Assets/ rubric/ prompts untouched | ✅ PASS | No modifications to assets/, references/rubric.md, references/prompt-templates.md |
+| AIOps tail preserved | ✅ PASS (2026-06-26) | Superseded 2026-07-30: AIOps SDK removed from boto3; canonical flows in troubleshooting.md only |
+| Assets/ rubric/ prompts untouched | ✅ PASS (2026-06-26) | Superseded 2026-07-30: rubric, prompt-templates, golden-scenarios updated for confirm= unification |
 
 ## Version History
 
 | From | To | Date | Description |
 |------|----|------|-------------|
 | v1.3.0 | v1.4.0 | 2026-06-26 | 模板对齐重构: AWS_SESSION_TOKEN, Config File Placeholders, 拆分 Pre-flight + ASCII 图, 补齐 boto3/Validate/Recover (16/16), TE Guidelines 章节 |
+| v1.4.0 | — | 2026-07-30 | CLI fidelity pass (see below); full R1/R2/R3 not re-run |
+
+## CLI Fidelity Pass (2026-07-30)
+
+**Fixed:** get-metric-data misuse; InstanceCount fiction → describe-instances / Cost Explorer; boto3 fence + AIOps dedupe (link troubleshooting.md); TE-1 instance-type table removed from core-concepts; `confirm=<OP> <id>` unified (SKILL / rubric / prompt-templates / golden); AL2023 AMI filter + CreationDate sort; golden idempotency scenario; cost-tracking linked from SKILL.
+
+**Lessons:** GCL confirmation strings must use `confirm=<OP> <id>` everywhere — never ad-hoc tokens. Never invent CloudWatch metrics. AIOps flows single-source in troubleshooting.md; other refs link, don't duplicate.
+
+**TE-1/TE-2:** core-concepts.md and boto3-sdk-usage.md now compliant (hardcoded table removed; docstrings/fence fixed).
+
+**Stale claim corrected:** ~~integration.md~~ — aws-ec2-ops has no integration.md; prior link-integrity count was wrong.
+
+**Not re-run this pass:** full charter R1/R2/R3, golden_eval baseline diff, README version sync.

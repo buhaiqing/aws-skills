@@ -16,7 +16,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.3.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-30"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -86,11 +86,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Ver
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/update table/capacity | Validate schema/index/capacity and live traffic | Token for production billing/index changes |
-| Delete table | Describe ACTIVE; inspect GSIs/LSIs, backups, streams and Lambda mappings | `DELETE_TABLE <table>`; with mappings use `DELETE_TABLE_WITH_TRIGGERS <table>` |
-| Delete GSI | Show index consumers and irreversibility | `DELETE_GSI <table>:<index>` |
-| Enable TTL | Preview items where attr≤now; backup/PITR required | `ENABLE_TTL <table>:<attr>` |
-| Delete backup/replica | Show recovery/region impact | `DELETE_BACKUP <arn>` / `DELETE_REPLICA <table>:<region>` |
-| Delete item/transaction | Echo exact table/key/count; no wildcard or ambiguous keys | `DELETE_ITEM` / `DELETE_TRANSACT <table>:<pk>` |
+| Delete table | Describe ACTIVE; inspect GSIs/LSIs, backups, streams and Lambda mappings | `confirm=DELETE_TABLE <table>`; with mappings use `confirm=DELETE_TABLE_WITH_TRIGGERS <table>` |
+| Delete GSI | Show index consumers and irreversibility | `confirm=DELETE_GSI <table>:<index>` |
+| Enable TTL | Preview items where attr≤now; backup/PITR required | `confirm=ENABLE_TTL <table>:<attr>` |
+| Delete backup/replica | Show recovery/region impact | `confirm=DELETE_BACKUP <arn>` / `confirm=DELETE_REPLICA <table>:<region>` |
 
 Mask all item values in traces (`***<len>`); secret/password/token/api_key literals cause Safety=0.
 
@@ -104,7 +103,7 @@ TE-1…TE-6 apply; query live table/index state, keep SDK examples comment-only,
 
 ## Reference Files
 
-[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md) · [prompt-examples.md](references/prompt-examples.md)
 
 ## AIOps Delegate Contract
 

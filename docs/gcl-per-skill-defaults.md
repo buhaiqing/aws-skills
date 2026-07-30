@@ -7,7 +7,7 @@
 | `aws-ec2-ops` | **required (pilot)** | 2 | `terminate-instances`, `delete-key-pair`, `deregister-image`, `detach-volume` |
 | `aws-autoscaling-ops` | **required** | 2 | `delete-auto-scaling-group` (`--force-delete` guard + rule A16), `delete-launch-configuration`, `detach-instances` (decrement guard), `set-desired-capacity` → 0 — shipped v1.0.0 |
 | `aws-config-ops` | **recommended** | 3 | `delete-config-rule`, `delete-configuration-recorder`, `stop-configuration-recorder` — shipped v1.0.0 |
-| `aws-eventbridge-ops` | **recommended** | 3 | `delete-rule` (target cleanup guard), `delete-event-bus`, `delete-schedule`, `delete-pipe` — shipped v1.0.0 |
+| `aws-eventbridge-ops` | **recommended** | 3 | `delete-rule` (target cleanup guard), `delete-event-bus`, `delete-schedule`, `delete-pipe` — shipped v1.1.1 |
 | `aws-iam-ops` | **required (pilot)** | 2 | `delete-user`, `detach-user-policy`, `delete-access-key`; `*:*` policy guard |
 | `aws-kms-ops` | **required (pilot)** | 2 | `schedule-key-deletion` is irreversible; `--pending-window-in-days ≥ 7` |
 | `aws-s3-ops` | **required (pilot)** | 2 | `delete-bucket` (Versioned guard), `delete-objects` (empty array refusal), `put-bucket-policy` widening (rule A15) |

@@ -12,8 +12,8 @@ compatibility: >-
   to EventBridge endpoints.
 metadata:
   author: aws
-  version: "1.1.0"
-  last_updated: "2026-06-27"
+  version: "1.1.1"
+  last_updated: "2026-07-30"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -25,18 +25,8 @@ metadata:
     prompts_ref: references/prompt-templates.md
     pilot: false
   destructive_ops_require_confirm: true
-  environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
-    - AWS_PROFILE
-  cross_skill_deps:
-    - aws-ec2-ops              # EC2 event targets (RunCommand, etc.)
-    - aws-lambda-ops           # Lambda function targets
-    - aws-sqs-ops              # SQS queue targets
-    - aws-sns-ops              # SNS topic targets
-    - aws-stepfunctions-ops    # Step Functions targets
-    - aws-iam-ops              # Execution role for targets
+  environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, AWS_PROFILE]
+  cross_skill_deps: [aws-ec2-ops, aws-lambda-ops, aws-sqs-ops, aws-sns-ops, aws-stepfunctions-ops, aws-iam-ops]
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:
@@ -87,19 +77,19 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Modify rule/targets | Diff routing and downstream impact; validate target invocation | Token for production route changes |
-| Remove targets/delete rule | List targets; remove explicitly; then delete rule | `REMOVE_TARGETS <rule>` and `DELETE_RULE <name>` |
-| Delete event bus | List and delete every rule first | `DELETE_BUS <name>` |
-| Delete schedule/pipe | Inspect target and event-flow impact | `DELETE_SCHEDULE <name>` / `DELETE_PIPE <name>` |
-| Delete archive | Show event count/size and irreversible loss | `DELETE_ARCHIVE <name>` |
-| Delete API destination | Verify no rules reference it | `DELETE_API_DEST <name>` |
-| Delete connection | Verify no API destinations reference it | `DELETE_CONNECTION <name>` |
+| Modify rule/targets | Diff routing; validate target | `confirm=MODIFY_RULE <name>` |
+| Remove targets / delete rule | list-targets; remove; then delete | `confirm=REMOVE_TARGETS <rule>` / `confirm=DELETE_RULE <name>` |
+| Delete event bus | list-rules; delete all rules first | `confirm=DELETE_BUS <name>` |
+| Delete schedule | Inspect target; active invocs → ACTIVE token | `confirm=DELETE_SCHEDULE <name>` or `confirm=DELETE_SCHEDULE_ACTIVE <name>` |
+| Delete pipe / update source·target | Inspect event-flow impact | `confirm=DELETE_PIPE <name>` / `confirm=UPDATE_PIPE <name>` |
+| Delete archive / API dest / connection | Count/size or dependency check | `confirm=DELETE_ARCHIVE <name>` / `confirm=DELETE_API_DEST <name>` / `confirm=DELETE_CONNECTION <name>` |
+| Put permission Principal `*` | Broad principal guard | `confirm=BUS_PERMISSION_PUBLIC <bus>` |
 
 Mask API keys, connection auth parameters, event payload secrets, headers, and personal data in traces.
 
 ## Quality Gate (GCL)
 
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
+Recommended GCL, `max_iter=3`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10 + EB1–EB8; Safety=0 aborts.
 
 ## Token Efficiency
 

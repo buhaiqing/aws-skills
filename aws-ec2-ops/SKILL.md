@@ -15,7 +15,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.4.0"
-  last_updated: "2026-06-26"
+  last_updated: "2026-07-30"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -53,8 +53,8 @@ Use for EC2 instances, start/stop/terminate, AMIs, key pairs, EBS attachment, sn
 
 ## Common JSON Paths
 
-Instance: .Reservations[0].Instances[0].{InstanceId,State,InstanceType,Placement,PrivateIpAddress,PublicIpAddress,Tags}
-Instances: .Reservations[].Instances[].{InstanceId,State,InstanceType,PrivateIpAddress,Tags}
+Instance: .Reservations[0].Instances[0].{InstanceId,State.Name,InstanceType,Placement,PrivateIpAddress,PublicIpAddress,Tags}
+Instances: .Reservations[].Instances[].{InstanceId,State.Name,InstanceType,PrivateIpAddress,Tags}
 Volumes: .Volumes[].{VolumeId,State,Size,VolumeType,Attachments,Encrypted}
 Snapshots: .Snapshots[].{SnapshotId,State,VolumeId,StartTime}
 Images: .Images[].{ImageId,Name,State,CreationDate,BlockDeviceMappings}
@@ -85,11 +85,11 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Fir
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Launch/start instance | Validate AMI, type, IAM, network, key, quotas | — |
-| Stop instance | Echo ID/state/workload and interruption impact | Exact instance confirmation |
-| Terminate instance | Describe ID/tags; inspect protection, ASG/ELB, volumes, snapshots | `--no-dry-run` plus `TERMINATE <instance-id>` |
-| Delete key pair | Show consumers and loss of access | `DELETE_KEY_PAIR <name>` |
-| Attach/detach volume | Verify AZ, mapping, mount/unmount and consumers | `DETACH <volume-id>` |
-| Deregister AMI | Inspect launch templates/ASGs and snapshots | `DEREGISTER_IMAGE <ami-id>` |
+| Stop instance | Echo ID/state/workload and interruption impact | `confirm=STOP <instance-id>` |
+| Terminate instance | Describe ID/tags; inspect protection, ASG/ELB, volumes, snapshots | `--no-dry-run` plus `confirm=TERMINATE <instance-id>` |
+| Delete key pair | Show consumers and loss of access | `confirm=DELETE_KEY_PAIR <name>` |
+| Attach/detach volume | Verify AZ, mapping, mount/unmount and consumers | `confirm=DETACH <volume-id>` |
+| Deregister AMI | Inspect launch templates/ASGs and snapshots | `confirm=DEREGISTER_IMAGE <ami-id>` |
 | Modify attributes | Diff current/requested and restart/security impact | Human confirmation |
 | Forensic snapshot | Prefer read-only snapshot before destructive remediation | — |
 
@@ -105,7 +105,7 @@ TE-1…TE-6 apply; query live instance/storage state, keep SDK examples comment-
 
 ## Reference Files
 
-[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
+[aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [prompt-examples.md](references/prompt-examples.md) · [cost-tracking.md](references/cost-tracking.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## AIOps Delegate Contract
 

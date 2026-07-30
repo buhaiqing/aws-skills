@@ -1,6 +1,6 @@
 # AWS CLI Usage - DynamoDB
 
-AWS CLI commands for DynamoDB operations. All commands use `--region {{r.region}} --output json`.
+AWS CLI commands for DynamoDB operations. All commands use `--region {{user.region}} --output json`.
 
 ## Common JSON Paths (Centralized)
 
@@ -120,6 +120,13 @@ aws dynamodb list-backups --table-name {{user.TableName}}
 aws dynamodb restore-table-from-backup --target-table-name {{user.NewTableName}} --backup-arn {{user.BackupArn}}
 aws dynamodb restore-table-to-point-in-time --source-table-name {{user.SourceTable}} \
   --target-table-name {{user.NewTableName}} --restore-date-time "2024-01-15T12:00:00Z"
+
+# Delete backup (irreversible; require confirm=DELETE_BACKUP <arn> in trace)
+aws dynamodb delete-backup --backup-arn {{user.BackupArn}}
+
+# Remove Global Table replica (require confirm=DELETE_REPLICA <table>:<region>)
+aws dynamodb delete-replication-group-member --global-table-name {{user.TableName}} \
+  --member-region {{user.ReplicaRegion}}
 ```
 
 ## TTL & Streams

@@ -10,7 +10,7 @@
 | InvalidKeyPair.Duplicate (400) | Use different name |
 | InvalidSecurityGroupID.NotFound (400) | Check SG ID and VPC |
 | InvalidInstanceID.NotFound (400) | Verify instance ID |
-| InstanceLimitExceeded (400) | Request quota increase via Service Quotas |
+| InstanceLimitExceeded (400) | HALT; request quota increase via Service Quotas |
 | InsufficientInstanceCapacity (500) | Try different instance type or AZ |
 | UnauthorizedOperation (403) | Add `ec2:*` or specific permissions |
 | ThrottlingException (429) | Backoff and retry (max 3x) |
@@ -52,11 +52,11 @@
 ### AMI Not Found
 
 ```bash
-# Get latest Amazon Linux 2 AMI
+# Get latest Amazon Linux 2023 AMI (AL2 is EOL; see aws-cli-usage.md for canonical pattern)
 aws ec2 describe-images \
   --owners amazon \
-  --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" \
-  --query "Images[-1].ImageId" \
+  --filters "Name=name,Values=al2023-ami-kernel-*-x86_64" "Name=state,Values=available" \
+  --query 'sort_by(Images,&CreationDate)[-1].ImageId' \
   --output text
 ```
 
@@ -77,10 +77,14 @@ Key metrics for EC2:
 - `StatusCheckFailed`
 
 ```bash
-aws cloudwatch get-metric-data \
+aws cloudwatch get-metric-statistics \
   --namespace AWS/EC2 \
   --metric-name CPUUtilization \
   --dimensions Name=InstanceId,Value=i-xxx \
+  --start-time "$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --period 300 \
+  --statistics Average \
   --output json
 ```
 
@@ -151,16 +155,9 @@ aws cloudwatch get-metric-data \
 # Run full diagnostic via SSM
 aws ssm send-command \
   --document-name "AWS-RunShellScript" \
-  --targets Key=instanceids,Values="{{instance_id}}" \
-  --parameters '{"commands":[
-    "echo '=== Disk ===", "df -h",
-    "echo '=== Memory ===", "free -m",
-    "echo '=== Listeners ===", "ss -tlnp",
-    "echo '=== Processes ===", "ps aux --sort=-%cpu | head -10",
-    "echo '=== Service Status ===",
-    "systemctl list-units --type=service --state=running | head -20",
-    "echo '=== Health Check ===", "curl -s -o /dev/null -w '%{http_code}' http://localhost:80/health"
-  ]}'
+  --instance-ids "{{instance_id}}" \
+  --parameters '{"commands":["df -h","free -m","ss -tlnp","ps aux --sort=-%cpu | head -10"]}' \
+  --output json
 ```
 
 ### Capacity Pre-Warning Report

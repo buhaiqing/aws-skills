@@ -9,8 +9,9 @@ would otherwise get wrong.
 
 A flat collection of AI-Agent runbooks for AWS services. Every top-level
 `aws-<service>-ops/` directory is a *skill*, not source code. There is no
-build, no lint, no test runner, no CI. "Editing the codebase" means editing
-Markdown skill files and the YAML/JSON assets they ship.
+conventional application build; repository governance scripts and unit tests
+live under `scripts/` and `scripts/tests/`. "Editing the codebase" includes
+Markdown skill files, YAML/JSON assets, and their governance tooling.
 
 There is exactly one meta-skill, `aws-skill-generator/`, that scaffolds and
 governs all `aws-<service>-ops/` skills. Treat it as the source of truth for
@@ -897,16 +898,22 @@ codegraph install -t all      # project codegraph MCP into all installed agents'
 
 The rules above are **enforced**, not advisory. `scripts/hooks/pre-commit` runs
 automatically on `git commit` (after one-time `bash scripts/install-hooks.sh`).
-Four triggers, all blocking:
+Five triggers, all blocking:
 
 1. `aws-*-ops/*/SKILL.md` staged → for each changed skill, verify every name in
    `metadata.cross_skill_deps` / `metadata.delegate` keys points to an existing
    directory in this repo (`test -d`); fail commit if any miss.
 2. `scripts/gcl_runner.py` or `scripts/te_gate.py` staged → run their
    `--self-test` / `--all --strict` modes respectively; fail commit on regression.
-3. Code files (`.py`/`.ts`/`.go`/`.rs`/`.js`/`.java`) staged → `codegraph sync .`
+3. **Every commit** → run the complete repository unit-test suite
+   `pytest -p no:rerunfailures scripts/tests/ -q`; every collected test MUST
+   pass before `git commit` may proceed. A failed, errored, timed-out, skipped
+   due to missing dependencies, or unexecuted required test blocks the commit;
+   fix the regression or restore the required test environment first. Do not
+   weaken, delete, mark `xfail`, or skip a test merely to make the gate pass.
+4. Code files (`.py`/`.ts`/`.go`/`.rs`/`.js`/`.java`) staged → `codegraph sync .`
    runs as part of the hook (mandatory pre-flight per §12 above).
-4. `REPO_ROOT` env var overrides auto-detection (testability only).
+5. `REPO_ROOT` env var overrides auto-detection (testability only).
 
 **Bypass**: only for emergency hotfixes, with `git commit --no-verify`; the
 bypass event MUST be logged in the commit body.

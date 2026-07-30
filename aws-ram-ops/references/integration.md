@@ -82,7 +82,8 @@ aws ram accept-resource-share-invitation \
 
 # 3. Verify shared resources are visible
 aws ec2 describe-vpcs --region {{user.region}} --output json | jq '.Vpcs[].VpcId'
-aws ram list-resources --resource-owner SELF --region {{user.region}} --output json
+# Consumer uses OTHER-ACCOUNTS; owner listing own shares uses SELF
+aws ram list-resources --resource-owner OTHER-ACCOUNTS --region {{user.region}} --output json
 ```
 
 ### Reject / Accept Trade-offs

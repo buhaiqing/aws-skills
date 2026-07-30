@@ -6,11 +6,13 @@
 
 | Goal | CLI Command |
 |------|-------------|
-| Put event bus | `aws events create-event-bus` / `put-event-bus` |
+| Create event bus | `aws events create-event-bus` |
 | Describe event bus | `aws events describe-event-bus` |
+| List event buses | `aws events list-event-buses` |
 | Delete event bus | `aws events delete-event-bus` |
 | Put rule | `aws events put-rule` |
 | Describe rule | `aws events describe-rule` |
+| List rules | `aws events list-rules` |
 | Delete rule | `aws events delete-rule` |
 | Put targets | `aws events put-targets` |
 | Remove targets | `aws events remove-targets` |
@@ -31,6 +33,12 @@
 | List pipes | `aws pipes list-pipes` |
 
 ## Common Patterns
+
+### Create event bus
+```bash
+aws events create-event-bus --name "custom-app-bus" --region us-east-1 --output json
+aws events list-rules --event-bus-name "custom-app-bus" --region us-east-1 --output json
+```
 
 ### Event Rule with Lambda Target
 ```bash
@@ -80,6 +88,7 @@ aws events start-replay \
 
 ### Delete Rule (with targets cleanup)
 ```bash
+# require confirm=REMOVE_TARGETS my-rule then confirm=DELETE_RULE my-rule
 # Step 1: List targets
 aws events list-targets-by-rule --rule "my-rule" --region us-east-1 --output json
 
@@ -92,6 +101,24 @@ aws events remove-targets \
 
 # Step 3: Delete rule
 aws events delete-rule --name "my-rule" --region us-east-1 --output json
+```
+
+### List rules / Delete event bus
+```bash
+# EB2 pre-flight: empty the bus
+aws events list-rules --event-bus-name "custom-app-bus" --region us-east-1 --output json
+# … delete each rule (see Delete Rule pattern) …
+# require confirm=DELETE_BUS custom-app-bus
+aws events delete-event-bus --name "custom-app-bus" --region us-east-1 --output json
+```
+
+### Delete schedule / pipe
+```bash
+# require confirm=DELETE_SCHEDULE my-schedule (or DELETE_SCHEDULE_ACTIVE if invoked last hour)
+aws scheduler delete-schedule --name "my-schedule" --region us-east-1 --output json
+
+# require confirm=DELETE_PIPE my-pipe
+aws pipes delete-pipe --name "my-pipe" --region us-east-1 --output json
 ```
 
 ### Event Pipe
@@ -107,6 +134,7 @@ aws pipes create-pipe \
 
 ### Cross-account Event Bus Permission
 ```bash
+# if Principal is *, require confirm=BUS_PERMISSION_PUBLIC <bus>
 aws events put-permission \
   --event-bus-name "default" \
   --action "events:PutEvents" \

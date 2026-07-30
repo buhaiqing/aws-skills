@@ -28,15 +28,11 @@
 | shutting-down | Terminating | None (wait) |
 | terminated | Deleted | N/A |
 
-## Instance Types (Common)
+## Instance Types
 
-| Type | Use Case | vCPU | Memory |
-|------|----------|------|--------|
-| t3.micro | General purpose | 2 | 1GB |
-| t3.small | General purpose | 2 | 2GB |
-| m5.large | Balanced | 2 | 8GB |
-| c5.large | Compute optimized | 2 | 4GB |
-| r5.large | Memory optimized | 2 | 16GB |
+Do not hardcode vCPU/memory tables. Query live:
+`aws ec2 describe-instance-types --instance-types {{user.instance_type}} --output json`
+Or list families: `aws ec2 describe-instance-types --filters Name=instance-type,Values=t3.* --query 'InstanceTypes[].{Type:InstanceType,VCpu:VCpuInfo.DefaultVCpus,MemMiB:MemoryInfo.SizeInMiB}'`
 
 ## Quotas (Service Limits)
 
@@ -58,13 +54,7 @@
 
 ## Regions
 
-EC2 available in all AWS regions.
-
-Common regions:
-- `us-east-1` (N. Virginia)
-- `us-west-2` (Oregon)
-- `eu-west-1` (Ireland)
-- `ap-northeast-1` (Tokyo)
+EC2 is regional — list available regions live: `aws ec2 describe-regions --output json`
 
 ## Pricing Model
 

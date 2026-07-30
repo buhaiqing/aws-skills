@@ -130,6 +130,16 @@
 
 ---
 
+## 2026-07-30 — CLI fidelity + TE (doc fix, version stays 1.3.0)
+
+| Round | Result |
+|-------|--------|
+| R1 Structural | SKILL.md untouched; TE G1 N/A for references |
+| R2 Content | `replace-permission-associations` no share ARN; `list-resources`/`list_resources` require owner; permission names via `list-permissions` / `AWSRAMDefaultPermissionSubnet`; `golden-scenarios.yaml` ≥5 |
+| R3 CADL | Lesson below |
+
+**Lesson:** Never hardcode AWS managed permission display names (`AmazonVPC*`, `AmazonEC2SubnetShare`, `AmazonRDSDBCluster*`) in examples — default subnet is `AWSRAMDefaultPermissionSubnet`; everything else comes from `list-permissions`. `replace-permission-associations` is account-wide (no `--resource-share-arn`); per-share changes use `associate-resource-share-permission --replace`.
+
 ## Version History
 
 | From | To | Date | Description |
@@ -137,3 +147,4 @@
 | 1.0.0 | 1.1.0 | 2026-06-10 | Initial GCL rollout (required, max_iter=2) |
 | 1.1.0 | 1.2.0 | 2026-06-13 | Added prompt-examples.md (multi-account patterns, Chinese), GCL rubric alignment |
 | 1.2.0 | 1.3.0 | 2026-06-27 | Description enhanced (trigger keywords), cross_skill_deps expanded, Config File Placeholders added, Execution Flow Pattern diagram added, GCL table reformatted, Safety Gates section reformatted, GCL header updated with max_iter=2, README sync to v1.3.0, integration.md added, post-update-self-review.md created |
+| 1.3.0 | 1.3.0 | 2026-07-30 | CLI fidelity: list-resources resource-owner, replace-permission API, permission discovery; prompt-examples TE compress; golden-scenarios.yaml added |)

@@ -35,6 +35,19 @@
   `{{output.requested_region}}` or `{{env.AWS_DEFAULT_REGION}}` (rule A7).
 ```
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `terminate-instances` | `confirm=TERMINATE <instance-id>` |
+| `stop-instances` | `confirm=STOP <instance-id>` |
+| `delete-key-pair` | `confirm=DELETE_KEY_PAIR <name>` |
+| `detach-volume` | `confirm=DETACH <volume-id>` |
+| `deregister-image` | `confirm=DEREGISTER_IMAGE <ami-id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -59,6 +72,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-ec2-ops` GCL pilot |
+| 1.0.1 | 2026-07-30 | Added Confirmation Strings table; aligned `confirm=` literals with GCL Critic |
 
 ---
 

@@ -34,12 +34,14 @@ resource_shares:
       - "{{user.ou_arn}}"  # e.g. arn:aws:organizations::111111111111:ou/o-xxx/ou-workloads
 
 permission_associations:
-  subnet_readonly:
+  subnet_default:
     share_ref: shared_subnet
-    permission_arn: "arn:aws:ram::aws:permission/AmazonVPCSubnetReadOnlyAccess"
+    permission_arn: "arn:aws:ram::aws:permission/AWSRAMDefaultPermissionSubnet"
+    # For read-only alternatives: aws ram list-permissions --resource-type ec2:Subnet
   aurora_readonly:
     share_ref: shared_subnet  # replace with aurora share name when used
-    permission_arn: "arn:aws:ram::aws:permission/AmazonRDSDBClusterReadOnlyAccess"
+    # Discover: aws ram list-permissions --resource-type rds:Cluster
+    permission_arn: "{{output.rds_cluster_permission_arn}}"
 
 cross_account_share:
   <<: *share_defaults
@@ -51,9 +53,9 @@ cross_account_share:
     - "444444444444"
 
 permissions:
-  vpc_readonly:
-    name: "AmazonVPCReadOnlyAccess"
+  subnet_default:
+    name: "AWSRAMDefaultPermissionSubnet"
     resource_type: "ec2:Subnet"
-  rds_cluster:
-    name: "AmazonRDSDBClusterReadOnlyAccess"
-    resource_type: "rds:DBCluster"
+  rds_cluster_ro:
+    name: "DISCOVER_VIA_LIST_PERMISSIONS"  # aws ram list-permissions --resource-type rds:Cluster
+    resource_type: "rds:Cluster"

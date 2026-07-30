@@ -6,6 +6,7 @@ _Latest update: 2026-05-28_
 
 ```python
 import boto3
+import json
 import os
 
 client = boto3.client(
@@ -73,7 +74,7 @@ response = client.describe_alarms(StateValue='ALARM')
 
 ### Delete Alarms
 
-```bash
+```python
 response = client.delete_alarms(AlarmNames=['HighCPU'])
 ```
 
@@ -147,8 +148,8 @@ response = client.get_metric_data(
             'Id': 'mem',
             'MetricStat': {
                 'Metric': {
-                    'Namespace': 'AWS/EC2',
-                    'MetricName': 'MemoryUtilization'
+                    'Namespace': 'CWAgent',
+                    'MetricName': 'mem_used_percent'
                 },
                 'Stat': 'Average',
                 'Period': 300

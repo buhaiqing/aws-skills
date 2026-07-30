@@ -45,7 +45,7 @@ Account B (Consumer)
 |---------|---------------|----------|----------------|
 | Shared VPC subnets | Network / shared-services | App-team accounts | `create-resource-share` + subnet ARNs |
 | Standard security groups | Platform / security | App-team accounts | Share SG ARNs; consumer uses `aws-ec2-ops` |
-| Aurora read-only for BI | Database / data platform | Analytics app account | Share cluster + `AmazonRDSDBClusterReadOnlyAccess` |
+| Aurora read-only for BI | Database / data platform | Analytics app account | Share cluster + `list-permissions --resource-type rds:Cluster` (pick RO) |
 | Org-wide landing zone | Management account | All workloads OU | `enable-sharing-with-aws-organization` + OU principal |
 | Partner dedicated subnet | Service provider | External partner account | `--allow-external-principals` + invitation accept |
 

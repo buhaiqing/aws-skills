@@ -495,7 +495,7 @@ aws sts get-caller-identity --output json
 | aws-application-autoscaling-ops | Application Auto Scaling（跨服务 scaler） | ✅ **完成 v1.2.0** — ECS / Lambda / DynamoDB / Spot Fleet / EMR / SageMaker / Comprehend / Keyspace（8 个 ServiceNamespace，12 个 ScalableDimension；按 namespace 专属指标的 target tracking / step scaling）；4 条 cruise inference rule（`PD/CO/FD-AUTOSCALING-01`） + RB-AUTOSCALING-01；委托给 aws-finops-core 并接入 AIOps 自愈 |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ 完成 v1.1.0 |
 | aws-config-ops | Config (合规) | ✅ 完成 v1.0.0 |
-| aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.1.0 |
+| aws-eventbridge-ops | EventBridge (事件总线) | ✅ 完成 v1.1.1 |
 | aws-s3-ops | S3 (对象存储) | ✅ 完成 v1.1.0 |
 | aws-cloudwatch-ops | CloudWatch (监控) | ✅ 完成 v2.5.0 |
 | aws-iam-ops | IAM (身份管理) | ✅ 完成 v1.1.0 |
@@ -648,7 +648,7 @@ aws-aiops-orchestrator/
 | `aws-waf-ops` | — | **v1.0.0（新增）** | WAF AIOps：流量异常、速率限制、托管规则、规则审计；**已适配编排器（P0）** |
 | `aws-autoscaling-ops` | — | **v1.0.0（新增）** | ASG 管理、扩缩策略、实例刷新、生命周期钩子、容量治理；**GCL** + **已适配编排器（P1）** |
 | `aws-config-ops` | — | **v1.0.0（新增）** | 配置记录器、投递通道、托管/自定义规则、合规包、聚合器、合规评估；**GCL** + **已适配编排器（P1）** |
-| `aws-eventbridge-ops` | — | **v1.0.0（新增）** | 事件总线、规则/目标、API 目标、连接、归档/重放、调度器、管道；**GCL** + **已适配编排器（P2 待办）** |
+| `aws-eventbridge-ops` | — | **v1.1.1** | 事件总线、规则/目标、API 目标、连接、归档/重放、调度器、管道；**GCL 保真** + **golden**；已适配编排器（P2 待办） |
 | `aws-cloudtrail-ops` | v1.0.0 | **v1.1.0+** | API 事件关联、变更时间线；**已适配编排器（P1）** |
 | `aws-s3-ops` | v1.0.0 | **v1.1.0** | 生命周期缺口检测、公开访问审计、成本优化；**GCL 试点** + **已适配编排器（P1）** |
 | `aws-iam-ops` | v1.0.0 | **v1.1.0** | 凭据泄露响应、IAM 附加追踪；**GCL 试点** + **已适配编排器（P1）** |

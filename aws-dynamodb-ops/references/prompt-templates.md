@@ -46,6 +46,19 @@
   `describe-table` / `list-tables` lookup (rule A8).
 ```
 
+## Confirmation Strings (mandatory for every destructive op)
+
+> Substituted into the Generator template's `{skill.confirmation_strings}` slot.
+
+| Operation | Confirmation token | Safety consequence if absent |
+|---|---|---|
+| `delete-table` | `confirm=DELETE_TABLE <table-name>` | Safety = 0 → ABORT |
+| `delete-table` (with Lambda stream consumers) | `confirm=DELETE_TABLE_WITH_TRIGGERS <table>` | Correctness = 0 → ABORT |
+| `update-table` (`GlobalSecondaryIndexUpdates: REMOVE`) | `confirm=DELETE_GSI <table>:<index>` | Safety = 0 → ABORT |
+| `update-time-to-live` (enable) | `confirm=ENABLE_TTL <table>:<attr>` | Safety = 0 → ABORT |
+| `delete-backup` | `confirm=DELETE_BACKUP <arn>` | Safety = 0 → ABORT |
+| `delete-replication-group-member` | `confirm=DELETE_REPLICA <table>:<region>` | Safety = 0 → ABORT |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -70,6 +83,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-dynamodb-ops` (Phase 1, required, not pilot) |
+| 1.1.0 | 2026-07-30 | Added `## Confirmation Strings` table aligned with `rubric.md` confirm= literals |
 
 ---
 

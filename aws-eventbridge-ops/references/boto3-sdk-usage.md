@@ -85,10 +85,11 @@ events.start_replay(
 conn = events.create_connection(
     Name='my-conn',
     AuthorizationType='API_KEY',
+    # AuthParameters: never put plaintext keys in GCL traces — mask to ***<len> (A9)
     AuthParameters={
         'ApiKeyAuthParameters': {
             'ApiKeyName': 'X-API-Key',
-            'ApiKeyValue': 'my-api-key'
+            'ApiKeyValue': os.environ['EVENTBRIDGE_API_KEY']  # never log; mask in traces (A9)
         }
     }
 )
@@ -111,6 +112,9 @@ pipes.create_pipe(
     Target='arn:aws:lambda:us-east-1:123456789012:function:my-handler',
     RoleArn='arn:aws:iam::123456789012:role/pipe-role'
 )
+# Destructive stubs — require confirm tokens before call
+# pipes.delete_pipe(Name='my-pipe')           # confirm=DELETE <pipe-name>
+# scheduler.delete_schedule(Name='my-schedule')  # confirm=DELETE <schedule-name>
 ```
 
 ## Error Handling

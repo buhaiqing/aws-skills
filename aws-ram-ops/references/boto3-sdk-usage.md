@@ -48,14 +48,22 @@ print(invitations['resourceShareInvitations'][0]['status'])
 
 ### List Shared Resources
 ```python
-# All resources in account
+# resourceOwner is REQUIRED: 'SELF' (owner) or 'OTHER-ACCOUNTS' (consumer)
+
+# Owner: resources this account shares out
 paginator = client.get_paginator('list_resources')
-for page in paginator.paginate():
+for page in paginator.paginate(resourceOwner='SELF'):
     for resource in page['resources']:
         print(resource['arn'], resource['type'], resource['status'])
 
-# Resources in a specific share
+# Consumer: resources shared into this account from others
+for page in paginator.paginate(resourceOwner='OTHER-ACCOUNTS'):
+    for resource in page['resources']:
+        print(resource['arn'], resource['type'], resource['status'])
+
+# Resources in a specific share (owner-side filter)
 resources = client.list_resources(
+    resourceOwner='SELF',
     resourceArns=['arn:aws:ec2:us-east-1:123456789012:subnet/subnet-abc123']
 )
 ```

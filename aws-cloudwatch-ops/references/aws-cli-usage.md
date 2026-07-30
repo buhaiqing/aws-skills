@@ -83,6 +83,9 @@ aws cloudwatch describe-alarms --state-value ALARM --region us-east-1 --output j
 ```
 
 ### Delete Alarm
+
+**Safety Gate**: require `confirm=DELETE_ALARMS <names>` before execution.
+
 ```bash
 aws cloudwatch delete-alarms --alarm-names HighCPU --region us-east-1 --output json
 ```
@@ -156,7 +159,7 @@ aws cloudwatch put-metric-data \
 aws cloudwatch get-metric-data \
   --metric-data-queries '[
     {"Id":"cpu","MetricStat":{"Metric":{"Namespace":"AWS/EC2","MetricName":"CPUUtilization"},"Stat":"Average","Period":300}},
-    {"Id":"mem","MetricStat":{"Metric":{"Namespace":"AWS/EC2","MetricName":"MemoryUtilization"},"Stat":"Average","Period":300}}
+    {"Id":"mem","MetricStat":{"Metric":{"Namespace":"CWAgent","MetricName":"mem_used_percent"},"Stat":"Average","Period":300}}
   ]' \
   --start-time 2026-05-10T00:00:00Z \
   --end-time 2026-05-10T12:00:00Z \
@@ -304,13 +307,16 @@ aws cloudwatch list-insight-rules --region us-east-1 --output json
 ```
 
 ### Delete Insight Rules
+
+**Safety Gate**: require `confirm=DELETE_INSIGHT_RULE <name>` before execution.
+
 ```bash
 aws cloudwatch delete-insight-rules --rule-names TopErrorUsers --region us-east-1 --output json
 ```
 
 ## Delete Dashboard (Destructive)
 
-**Safety Gate**: confirm `DELETE_DASHBOARD <name>` before execution.
+**Safety Gate**: require `confirm=DELETE_DASHBOARD <name>` before execution.
 
 ```bash
 # Pre-flight: verify dashboard exists
@@ -359,7 +365,7 @@ aws synthetics create-canary \
   --region {{user.region}} --output json
 ```
 
-Validate: `describe-canaries` → `Status.State=RUNNING`. Delete: `delete-canary --name` (destructive, confirm required).
+Validate: `describe-canaries` → `Status.State=RUNNING`. Delete: `delete-canary --name` (destructive; require `confirm=DELETE_CANARY <name>`).
 
 ## CLI vs API Coverage Gap
 

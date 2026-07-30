@@ -11,7 +11,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "2.5.0"
-  last_updated: "2026-07-19"
+  last_updated: "2026-07-30"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -107,7 +107,8 @@ TE-1 API > hardcoded tables · TE-2 no boto3 docstrings · TE-3 compact error ta
 
 ## Safety Gates
 
-`delete-alarms` · `delete-dashboards` · `delete-insight-rules` · `delete-canary` · `put-retention-policy` — all require explicit human confirmation with name + impact (destructive / irreversible).
+Destructive ops require explicit human confirmation with `confirm=` prefix + resource name:
+`confirm=DELETE_ALARMS <names>` · `confirm=DELETE_DASHBOARD <name>` · `confirm=DELETE_INSIGHT_RULE <name>` · `confirm=DELETE_CANARY <name>` · `confirm=RETENTION_NEVER_EXPIRE <group>` (or acknowledge data loss for finite retention).
 
 ## Reference Files
 

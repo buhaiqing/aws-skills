@@ -14,17 +14,17 @@ Full operation map for `aws-cloudwatch-ops`. SKILL.md `## Scope` is the safety-g
 | Composite Alarm | `put-composite-alarm` | — | health-check | [aws-cli-usage.md](aws-cli-usage.md) |
 | Anomaly Detection | `put-metric-alarm` + band | ≥14d data pre-flight | rca | [aws-cli-usage.md](aws-cli-usage.md) |
 | Metric Math Alarm | `put-metric-alarm` + `--metrics` | Warn if no actions | rca | [aws-cli-usage.md §Metric Math](aws-cli-usage.md#metric-math-alarm-aiops-error-rate-) |
-| Delete Alarm | `delete-alarms` | **confirm** `DELETE_ALARMS <names>` | — | [aws-cli-usage.md](aws-cli-usage.md) |
+| Delete Alarm | `delete-alarms` | **confirm** `confirm=DELETE_ALARMS <names>` | — | [aws-cli-usage.md](aws-cli-usage.md) |
 | List Metrics / Alarms | `list-metrics`, `describe-alarms` | — | health-check | [aws-cli-usage.md](aws-cli-usage.md) |
 | Get Metric Data | `get-metric-data` | — | rca | [aws-cli-usage.md](aws-cli-usage.md) |
 | FORECAST | `get-metric-data` + `FORECAST()` | — | capacity-forecast | [aiops-scenarios.md](aiops-scenarios.md) |
 | Logs Insights | `logs start-query` + poll | — | rca | [aws-cli-usage.md](aws-cli-usage.md) |
 | Contributor Insights | `put-insight-rule` | — | rca | [aws-cli-usage.md](aws-cli-usage.md) |
-| Delete Insight Rule | `delete-insight-rules` | **confirm** | — | [aws-cli-usage.md](aws-cli-usage.md) |
+| Delete Insight Rule | `delete-insight-rules` | **confirm** `confirm=DELETE_INSIGHT_RULE <name>` | — | [aws-cli-usage.md](aws-cli-usage.md) |
 | Create Dashboard | `put-dashboard` | — | health-check | [aws-cli-usage.md](aws-cli-usage.md) |
-| Delete Dashboard | `delete-dashboards` | **confirm** `DELETE_DASHBOARD <name>` | — | [aws-cli-usage.md](aws-cli-usage.md) |
-| Set Log Retention | `put-retention-policy` | **confirm** (data loss) | — | [aws-cli-usage.md](aws-cli-usage.md) |
-| Synthetics Canary | `synthetics create-canary` | delete: **confirm** | health-check | [aws-cli-usage.md](aws-cli-usage.md) |
+| Delete Dashboard | `delete-dashboards` | **confirm** `confirm=DELETE_DASHBOARD <name>` | — | [aws-cli-usage.md](aws-cli-usage.md) |
+| Set Log Retention | `put-retention-policy` | **confirm** `confirm=RETENTION_NEVER_EXPIRE <group>` or data-loss ack | — | [aws-cli-usage.md](aws-cli-usage.md) |
+| Synthetics Canary | `synthetics create-canary` | delete: **confirm** `confirm=DELETE_CANARY <name>` | health-check | [aws-cli-usage.md](aws-cli-usage.md) |
 | Diagnose Alarm | `describe-alarms` + history | — | rca | [troubleshooting.md](troubleshooting.md) |
 | ELB Alarm Templates | templates | delegate ELB ARNs first | rca, capacity-forecast | [elb-monitoring-templates.md](elb-monitoring-templates.md) |
 | ELB AIOps Dashboard | `put-dashboard` + asset | — | health-check | [../assets/elb-aiops-dashboard.json](../assets/elb-aiops-dashboard.json) |

@@ -496,7 +496,7 @@ aws sts get-caller-identity --output json
 | aws-application-autoscaling-ops | Application Auto Scaling (cross-service scaler) | ✅ **Complete v1.2.0** — ECS / Lambda / DynamoDB / Spot Fleet / EMR / SageMaker / Comprehend / Keyspace (8 ServiceNamespace × 12 ScalableDimension; target tracking / step scaling on namespace-specific metrics); 4 cruise inference rules (`PD/CO/FD-AUTOSCALING-01`) + RB-AUTOSCALING-01; FinOps delegate + AIOps self-heal |
 | aws-autoscaling-ops | Auto Scaling (ASG) | ✅ Complete v1.1.0 |
 | aws-config-ops | Config (Compliance) | ✅ Complete v1.0.0 |
-| aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.1.0 |
+| aws-eventbridge-ops | EventBridge (Event Bus) | ✅ Complete v1.1.1 |
 | aws-s3-ops | S3 (Object Storage) | ✅ Complete v1.1.0 |
 | aws-cloudwatch-ops | CloudWatch (Monitoring) | ✅ Complete v2.5.0 |
 | aws-iam-ops | IAM (Identity Management) | ✅ Complete v1.1.0 |
@@ -750,7 +750,7 @@ expanded coverage:
 | `aws-waf-ops` | — | **v1.0.0 (new)** | WAF AIOps: traffic anomaly, rate limiting, Managed Rules, rule audit; **orchestrator-aware (P0 patched)** |
 | `aws-autoscaling-ops` | — | **v1.0.0 (new)** | ASG management, scaling policies, instance refresh, lifecycle hooks, capacity governance; **GCL** + **orchestrator-aware (P1 patched)** |
 | `aws-config-ops` | — | **v1.0.0 (new)** | Configuration recorder, delivery channel, managed/custom rules, conformance packs, aggregator, compliance evaluation; **GCL** + **orchestrator-aware (P1 patched)** |
-| `aws-eventbridge-ops` | — | **v1.0.0 (new)** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL** + **orchestrator-aware (P2 pending)** |
+| `aws-eventbridge-ops` | — | **v1.1.1** | Event buses, rules/targets, API destinations, connections, archives/replay, scheduler, pipes; **GCL fidelity** + **golden**; orchestrator-aware (P2 pending) |
 | `aws-cloudtrail-ops` | v1.0.0 | **v1.1.0+** | API event correlation, change timeline; **orchestrator-aware (P1 patched)** |
 | `aws-s3-ops` | v1.0.0 | **v1.1.0** | Lifecycle gap detection, public-access audit, cost optimization; **GCL pilot** + **orchestrator-aware (P1 patched)** |
 | `aws-iam-ops` | v1.0.0 | **v1.1.0** | Credential leak response, IAM attach tracking; **GCL pilot** + **orchestrator-aware (P1 patched)** |

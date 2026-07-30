@@ -101,37 +101,48 @@ aws ce get-savings-plans-coverage \
   --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon EC2"]}}'
 ```
 
-**JSON path**: `SavingsPlansCoverages[].Coverage[].CoveragePercentage`
+**JSON path**: `SavingsPlansCoverages[].Coverage.CoveragePercentage`
 
 ### Savings Plans Utilization
 
 ```bash
-aws ce get-savings-plans-coverage \
+aws ce get-savings-plans-utilization \
   --output json \
   --time-period Start=2026-07-01,End=2026-07-19 \
+  --granularity DAILY \
   --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon EC2"]}}'
 ```
+
+**JSON path**: `SavingsPlansUtilizationsByTime[].Utilization.UtilizationPercentage`; aggregate → `Total.Utilization.UtilizationPercentage`
 
 ---
 
 ## 4. Anomaly Detection
 
-### Detect Sudden Spike in Instance Hours (> 50% Increase)
+### Detect Sudden Spike in Running Instances or Instance Hours (> 50% Increase)
+
+`InstanceCount` is **not** a CloudWatch EC2 metric. Compare day-over-day running count or CE `UsageQuantity`.
 
 ```bash
-# Get daily instance-hours baseline
-aws cloudwatch get-metric-statistics \
-  --output json \
-  --namespace AWS/EC2 \
-  --metric-name InstanceCount \
-  --dimensions Name=InstanceState,Values=running \
-  --start-time 2026-06-01T00:00:00Z \
-  --end-time 2026-07-19T00:00:00Z \
-  --period 86400 \
-  --statistics Average
+# Count running instances (not a CloudWatch EC2 metric)
+aws ec2 describe-instances \
+  --filters Name=instance-state-name,Values=running \
+  --query 'length(Reservations[].Instances[])' \
+  --output json
+
+# Optional: CE usage for EC2 instance hours
+aws ce get-cost-and-usage \
+  --time-period Start=2026-06-01,End=2026-07-19 \
+  --granularity DAILY \
+  --metrics UsageQuantity \
+  --filter '{"Dimensions":{"Key":"SERVICE","Values":["Amazon Elastic Compute Cloud - Compute"]}}' \
+  --group-by '[{"Type":"DIMENSION","Key":"USAGE_TYPE"}]' \
+  --output json
 ```
 
-**JSON path**: `Datapoints[].Average`
+**JSON path**: `describe-instances` → scalar count; CE → `ResultsByTime[].Groups[].Metrics.UsageQuantity.Amount`
+
+Alert when prior-day baseline vs current day exceeds 50% (running count snapshot or summed CE instance-hour usage).
 
 ### Anomaly Alert Output
 
@@ -139,8 +150,8 @@ aws cloudwatch get-metric-statistics \
 {
   "alert_type": "instance_hours_spike",
   "threshold_percent": 50,
-  "baseline_avg": 45,
-  "current_value": 78,
+  "baseline_running_count": 45,
+  "current_running_count": 78,
   "increase_percent": 73.3,
   "status": "ALERT"
 }

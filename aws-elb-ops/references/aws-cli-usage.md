@@ -234,7 +234,7 @@ ELB state transitions require polling:
 
 | Operation | Wait Command | Terminal State |
 |-----------|--------------|----------------|
-| Create ALB | Poll describe | `available` |
+| Create ALB | Poll describe | `active` |
 | Create NLB | Poll describe | `active` |
 | Delete LB | Poll describe | Not found |
 | Register targets | Poll target health | `healthy` |
@@ -272,6 +272,8 @@ aws sts get-caller-identity --output json
 
 ### CloudWatch Metrics Collection
 
+> **Dimension values**: `LoadBalancer` and `TargetGroup` dimensions use ARN **suffixes** only (`app/<name>/<id>`, `targetgroup/<name>/<id>`), not full ARNs.
+
 #### ALB Latency & Error Analysis
 ```bash
 # Get TargetResponseTime p50/p90/p99 over last hour (for latency anomaly)
@@ -301,7 +303,7 @@ aws cloudwatch get-metric-data \
 # Compare Minimum vs Average HealthyHostCount — divergence indicates flapping
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
   --metric-name HealthyHostCount \
-  --dimensions Name=TargetGroup,Value={{tg_arn}} \
+  --dimensions Name=TargetGroup,Value=targetgroup/my-tg/abc123def456 \
   --statistics Minimum --period 60 \
   --start-time "$(date -d '-30 minutes' -u +%Y-%m-%dT%H:%M:%SZ)" \
   --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -313,7 +315,7 @@ aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
 # Get ActiveConnectionCount and RejectedConnectionCount
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
   --metric-name ActiveConnectionCount \
-  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --dimensions Name=LoadBalancer,Value=app/my-alb/abc123def456 \
   --statistics Maximum --period 60 \
   --start-time "$(date -d '-1 hour' -u +%Y-%m-%dT%H:%M:%SZ)" \
   --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -405,7 +407,7 @@ aws elbv2 describe-load-balancers --query "length(LoadBalancers[?Type=='applicat
 # Check LCU consumption for cost optimization
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
   --metric-name ConsumedLCUs \
-  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --dimensions Name=LoadBalancer,Value=app/my-alb/abc123def456 \
   --statistics Average --period 86400 \
   --start-time "$(date -d '-30 days' -u +%Y-%m-%dT00:00:00Z)" \
   --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -413,7 +415,7 @@ aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
 # Identify idle LBs (0 connections for 24h)
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
   --metric-name ActiveConnectionCount \
-  --dimensions Name=LoadBalancer,Value={{lb_arn}} \
+  --dimensions Name=LoadBalancer,Value=app/my-alb/abc123def456 \
   --statistics Sum --period 86400 \
   --start-time "$(date -d '-7 days' -u +%Y-%m-%dT00:00:00Z)" \
   --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

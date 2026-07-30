@@ -17,7 +17,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, netw
   AIOps scenarios.
 metadata:
   author: aws
-  last_updated: '2026-06-26'
+  last_updated: '2026-07-30'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   aiops_level: full-chain
@@ -92,12 +92,13 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**; AIO
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Create/modify LB/listener/TG | Verify network, certs, ports, health checks; validate active | Token for production traffic changes |
-| Deregister targets | Count healthy/registered targets and drain impact | `<50%`: `DEREGISTER`; `≥50%`: `DEREGISTER_DRAIN`; `100%`: `DEREGISTER_ALL` |
-| Delete ALB/NLB | Verify no listeners and inspect DNS/targets/protection | `DELETE_LB` |
-| Delete CLB | Warn legacy and registered instances; validate not found | `DELETE_CLB {{user.lb_name}}` |
-| Delete rule | Refuse deletion when `IsDefault=true`; inspect traffic route | Human confirmation |
-| Disable deletion protection | Show subsequent deletion risk | `DISABLE_DELETION_PROTECTION` |
+| Create/modify LB/listener/TG | Verify network, certs, ports, health checks; validate `active` | Human confirm for production traffic changes |
+| Deregister targets | Count healthy/registered; compute drain ratio (A12) | `≥50%`: `confirm=DEREGISTER_DRAIN {{user.target_group_arn}} count=<n>/<total>`; `100%`: `confirm=DEREGISTER_ALL {{user.target_group_arn}}` |
+| Delete ALB/NLB | List listeners first; inspect DNS/targets/protection | `confirm=DELETE_LB {{output.lb_arn}}` |
+| Delete listener | List rules first; refuse if non-empty | `confirm=DELETE_LISTENER {{output.listener_arn}}` |
+| Delete rule (non-default) | Refuse when `IsDefault=true` | `confirm=DELETE_RULE {{output.rule_arn}}` |
+| Delete CLB | Warn legacy; validate instances deregistered | `confirm=DELETE_CLB {{user.lb_name}}` |
+| Disable deletion protection | Show subsequent deletion risk | `confirm=DISABLE_DELETION_PROTECTION {{output.lb_arn}}` |
 
 Never mutate traffic from health signals alone without decision-tier authorization. Mask auth headers, certificates, tokens, and sensitive request data in traces.
 

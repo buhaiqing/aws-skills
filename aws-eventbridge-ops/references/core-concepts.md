@@ -53,50 +53,32 @@ Source → Pipe → (Enrichment) → Target
 {"source": ["aws.health"], "detail-type": ["AWS Health Event"]}
 ```
 
-## Support Targets (Use API for current limits)
+## Quotas and Targets (query live — TE-1)
+
+Never hardcode limits. Resolve via Service Quotas before create/scale:
 
 ```bash
-# Default target limit per rule is 5 (adjustable up to 100)
-# Check current quotas:
+# All EventBridge (events) quotas
+aws service-quotas list-service-quotas \
+  --service-code events --region "{{user.region}}" --output json
+
+# Targets per rule (quota code may vary by account — prefer list + filter)
 aws service-quotas get-service-quota \
-  --service-code events \
-  --quota-code L-8179BFB3 \
+  --service-code events --quota-code L-8179BFB3 \
   --region "{{user.region}}" --output json
+
+# Scheduler / Pipes quotas (separate service codes)
+aws service-quotas list-service-quotas \
+  --service-code scheduler --region "{{user.region}}" --output json
+aws service-quotas list-service-quotas \
+  --service-code pipes --region "{{user.region}}" --output json
 ```
 
-| Target Type | Default per rule |
-|-------------|-----------------|
-| Lambda, SQS, SNS, Step Functions, Event Bus, Kinesis, Logs | 5 each |
-| API Destination | 1 |
-
-## Quotas (Use API for current values)
-
-```bash
-# List all EventBridge quotas:
-aws service-quotas list-service-quotas --service-code events --region "{{user.region}}" --output json
-
-# Key quotas (defaults, check API for current):
-# Rules per bus: 300 | Targets per rule: 5 (up to 100)
-# Event buses per account: 100 | Schedules per account: 1,000
-# Pipes per account: 100 | Archive retention: 7–1200 days
-```
-
-## Pricing
-
-See [AWS EventBridge Pricing](https://aws.amazon.com/eventbridge/pricing/) for current rates. Key components:
-- Custom event ingestion: per million events
-- Cross-account/region events: per million events
-- API destinations: per million invocations
-- Archives: per GB/month
-- Scheduler: per million invocations
-- Pipes: free (pay for downstream resources)
+Pricing: [AWS EventBridge Pricing](https://aws.amazon.com/eventbridge/pricing/).
 
 ## Best Practices
 
-- Use `default` bus for AWS service events; create custom buses for application events
-- Always specify `event-pattern` precisely to avoid unintended invocations
-- Set DLQ (Dead Letter Queue) on critical event targets
-- Use `InputPath` or `InputTransformer` to filter event data before sending to targets
-- Enable archive for mission-critical event buses for replay capability
-- Use Scheduler for simple time-based triggers; use EventBridge rules for event-driven patterns
-- Tag rules and buses for cost allocation and management
+- `default` bus for AWS service events; custom buses for app events
+- Precise `event-pattern`; DLQ on critical targets; `InputPath` / `InputTransformer` to shrink payloads
+- Archive mission-critical buses; prefer Scheduler for pure cron, rules for event-driven
+- Tag rules/buses for cost allocation

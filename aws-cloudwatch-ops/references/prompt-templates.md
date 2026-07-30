@@ -32,6 +32,19 @@
   `describe-alarms` / `describe-log-groups` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-alarms` | `confirm=DELETE_ALARMS <alarm-names>` |
+| `delete-dashboards` | `confirm=DELETE_DASHBOARD <dashboard-name>` |
+| `delete-insight-rules` | `confirm=DELETE_INSIGHT_RULE <rule-name>` |
+| `delete-canary` | `confirm=DELETE_CANARY <canary-name>` |
+| `put-retention-policy` (never expire) | `confirm=RETENTION_NEVER_EXPIRE <log-group>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -58,6 +71,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-cloudwatch-ops` |
+| 1.0.1 | 2026-07-30 | Added Confirmation Strings table; aligned `confirm=` literals with rubric |
 
 ---
 

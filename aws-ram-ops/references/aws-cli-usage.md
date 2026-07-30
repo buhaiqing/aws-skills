@@ -35,7 +35,7 @@
 | Get permission | `aws ram get-permission` |
 | Associate permission | `aws ram associate-resource-share-permission` |
 | Disassociate permission | `aws ram disassociate-resource-share-permission` |
-| Replace permissions | `aws ram replace-permission-associations` |
+| Replace permissions (account-wide) | `aws ram replace-permission-associations` |
 | Delete permission | `aws ram delete-permission` |
 | Delete permission version | `aws ram delete-permission-version` |
 | Enable org sharing | `aws ram enable-sharing-with-aws-organization` |
@@ -66,17 +66,31 @@ aws ram accept-resource-share-invitation \
   --region us-east-1 \
   --output json
 
-# Verify association
+# Verify association (owner or after accept)
 aws ram get-resource-share-associations \
-  --association-type RESOURCE_SHARE \
+  --association-type PRINCIPAL \
   --resource-share-arns "arn:aws:ram:us-east-1:123456789012:resource-share/xyz-789" \
+  --region us-east-1 \
+  --output json
+
+# Consumer: confirm shared resources are visible
+aws ram list-resources \
+  --resource-owner OTHER-ACCOUNTS \
   --region us-east-1 \
   --output json
 ```
 
 ### List All Shared Resources in Account
 ```bash
+# Owner: resources this account shares out
 aws ram list-resources \
+  --resource-owner SELF \
+  --region us-east-1 \
+  --output json
+
+# Consumer: resources shared with this account from others
+aws ram list-resources \
+  --resource-owner OTHER-ACCOUNTS \
   --region us-east-1 \
   --output json
 ```
@@ -100,19 +114,34 @@ aws ram create-resource-share \
 
 ### Associate Read-Only Permission (authorization)
 ```bash
+aws ram list-permissions --resource-type ec2:Subnet --region us-east-1 --output json
+# Then associate chosen ARN; default share permission is AWSRAMDefaultPermissionSubnet
 aws ram associate-resource-share-permission \
   --resource-share-arn "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
-  --permission-arn "arn:aws:ram::aws:permission/AmazonVPCSubnetReadOnlyAccess" \
+  --permission-arn "arn:aws:ram::aws:permission/AWSRAMDefaultPermissionSubnet" \
+  --region us-east-1 \
+  --output json
+```
+For true read-only, pick an AWS RO managed permission from `list-permissions` output or `create-permission` with Describe-only actions — do not invent permission ARNs.
+
+### Replace Permission (upgrade/downgrade)
+
+#### Per-share upgrade/downgrade (preferred for single share)
+```bash
+aws ram associate-resource-share-permission \
+  --resource-share-arn "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
+  --permission-arn "arn:aws:ram::aws:permission/AWSRAMDefaultPermissionSubnet" \
+  --replace \
   --region us-east-1 \
   --output json
 ```
 
-### Replace Permission (upgrade/downgrade)
+#### Account-wide replace (all shares using from-permission)
+> **Warning:** updates ALL resource shares in the account that use `--from-permission-arn`; do not pass `--resource-share-arn`.
 ```bash
 aws ram replace-permission-associations \
-  --resource-share-arn "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \
-  --from-permission-arn "arn:aws:ram::aws:permission/AmazonRDSDBClusterReadOnlyAccess" \
-  --to-permission-arn "arn:aws:ram::aws:permission/AmazonRDSDBClusterShare" \
+  --from-permission-arn "arn:aws:ram::aws:permission/FROM_PERMISSION" \
+  --to-permission-arn "arn:aws:ram::aws:permission/TO_PERMISSION" \
   --region us-east-1 \
   --output json
 ```
@@ -120,7 +149,19 @@ aws ram replace-permission-associations \
 ### Audit Principals and Resources
 ```bash
 aws ram list-principals --region us-east-1 --output json
-aws ram list-resources --region us-east-1 --output json
+
+# Owner audit: resources this account shares out
+aws ram list-resources \
+  --resource-owner SELF \
+  --region us-east-1 \
+  --output json
+
+# Consumer audit: resources shared with this account from others
+aws ram list-resources \
+  --resource-owner OTHER-ACCOUNTS \
+  --region us-east-1 \
+  --output json
+
 aws ram get-resource-share-associations \
   --association-type PRINCIPAL \
   --resource-share-arns "arn:aws:ram:us-east-1:111111111111:resource-share/abc" \

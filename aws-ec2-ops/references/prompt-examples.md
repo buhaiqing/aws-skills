@@ -1,78 +1,61 @@
 # EC2 Skill — AIOps Prompt Examples
 
-_Lastest update: 2026-05-31_
+_Latest update: 2026-07-30_
 
-This document provides concrete user prompts for EC2-LB integration diagnostics and auto-healing.
+EC2-LB 集成诊断、容量预测与 SSM 应用健康检查的典型 Prompt。
 
----
+> **链接**：[troubleshooting.md](troubleshooting.md) · [aws-cli-usage.md](aws-cli-usage.md)
 
-## Scenario 1: EC2 instance behind LB is unhealthy
+## 场景 1：LB 后端 EC2 不健康
 
-### User Prompt
-```
-I have an EC2 instance i-xxx that my ALB keeps marking as unhealthy. Can you check and fix it?
-```
+### Prompt
+`ALB 持续将实例 i-xxx 标记为 unhealthy，请检查并修复。`
 
-### Agent Execution Flow
-| Step | Action | Decision |
-|------|--------|----------|
-| 1. Check instance status | `aws ec2 describe-instance-status --instance-ids i-xxx` | |
-| 2. Check CPU trend (30 min) | `aws cloudwatch get-metric-statistics CPUUtilization` | |
-| 3. Check CloudTrail for changes | `aws cloudtrail lookup-events` | |
-| 4. CPU > 90% or StatusCheck failed | | `[AUTO_HEAL]` reboot |
-| 5. Verify recovery | Poll StatusCheck until ok | |
+### 流程
+| 步骤 | 操作 | 决策 |
+|------|------|------|
+| 1 | `describe-instance-status` — 实例与状态检查 | |
+| 2 | CloudWatch CPUUtilization + StatusCheckFailed（30 min） | |
+| 3 | CloudTrail `lookup-events` 查近期变更 | |
+| 4 | 症状 → 根因对照决策矩阵 | 见链接 |
+| 5 | 轮询 StatusCheck 直至 ok | |
 
-```bash
-aws ec2 reboot-instances --instance-ids i-xxx
-```
+→ [EC2-LB 诊断流](troubleshooting.md#aiops-ec2-lb-cross-module-diagnostic-flow) · [自愈决策矩阵](troubleshooting.md#auto-healing-decision-matrix-for-lb-targets) · InstanceCheck 失败 → `[AUTO_HEAL]` reboot
 
----
+## 场景 2：CPU 容量预测（FORECAST）
 
-## Scenario 2: CPU capacity forecast
+### Prompt
+`EC2 CPU 持续上升，会很快到 100% 吗？`
 
-### User Prompt
-```
-My EC2 instance CPU is rising. Will it hit 100% soon?
-```
+### 流程
+| 步骤 | 操作 |
+|------|------|
+| 1 | `get-metric-data` — FORECAST 表达式预测 CPUUtilization |
+| 2 | 对比 7d/14d 预测与阈值（如 80%） | |
+| 3 | 建议 resize 或 scale-out | `[AI_ASSIST]` |
 
-### Agent Execution
-```bash
-aws cloudwatch get-metric-data --metric-data-queries '[
-  {"Id":"m1","MetricStat":{"Metric":{"Namespace":"AWS/EC2","MetricName":"CPUUtilization"},"Period":3600,"Stat":"Average"}},
-  {"Id":"fc","Expression":"FORECAST(m1, \"linear\", 168)","Label":"7-Day"}
-]'
-```
+**注意**：MetricStat **必须**含 `Dimensions Name=InstanceId` — 缺 InstanceId 维度 FORECAST 无效。
 
-Output:
-```
-Current: 72% | 7d forecast: 88% | 14d forecast: 95%
-Action: [AI_ASSIST] Resize t3.medium -> t3.large recommended
-```
+→ [Predictive capacity FORECAST](troubleshooting.md#predictive-capacity-check-forecast)
 
----
+## 场景 3：LB 健康检查失败 — SSM 诊断
 
-## Scenario 3: Application not responding on LB
+### Prompt
+`LB 健康检查失败，对目标实例跑 SSM 诊断找出原因。`
 
-### User Prompt
-```
-My LB health check is failing. Can you run SSM diagnostics on the target instance to find out why?
-```
+### 流程
+| 步骤 | 操作 |
+|------|------|
+| 1 | `ssm send-command` — AWS-RunShellScript（端口、systemd、磁盘、内存） |
+| 2 | 解析输出 — 端口未监听 / 磁盘满 / OOM |
+| 3 | 重启服务或升级处理 | `[AI_ASSIST]` |
 
-### Agent Execution
-```bash
-aws ssm send-command --instance-ids {{instance_id}} \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["ss -tlnp", "systemctl status nginx", "df -h", "free -m"]}'
-```
-
-Output: Port 80 not listening → `[AI_ASSIST] restart application`
-
----
+→ [SSM 诊断命令](troubleshooting.md#ssm-diagnostic-commands-for-application-health)
 
 ## Quick Reference
 
-| User says | Scenario | Decision | Modules |
-|-----------|----------|----------|---------|
-| "Instance keeps going unhealthy in LB" | EC2 diagnostics + reboot | `[AUTO_HEAL]` | ec2 + elb |
-| "CPU is rising, will it hit 100%" | Capacity FORECAST | `[AI_ASSIST]` | ec2 + cw |
-| "Health check fails, run SSM check" | SSM diagnostics | `[AI_ASSIST]` | ec2 + ssm |
+| 用户说 | 场景 | 决策 | 模块 |
+|--------|------|------|------|
+| "Instance keeps going unhealthy in LB" | 1 | `[AUTO_HEAL]` | ec2 + elb |
+| "CPU is rising, will it hit 100%" | 2 | `[AI_ASSIST]` | ec2 + cw |
+| "Health check fails, run SSM check" | 3 | `[AI_ASSIST]` | ec2 + ssm |

@@ -87,7 +87,7 @@ Delete the table my-data-table.
 | Step | Action | Decision |
 |------|--------|----------|
 | 1. Describe table | `aws dynamodb describe-table` | TableStatus must be ACTIVE |
-| 2. Check event source mappings | `aws lambda list-event-source-mappings --query "EventSourceMappings[?contains(DynamodbTableArn,'my-data-table')]"` | |
+| 2. Check event source mappings | `aws lambda list-event-source-mappings --query "EventSourceMappings[?contains(EventSourceArn,'my-data-table')]"` | |
 | 3. If Lambda consumers exist | HALT — require `confirm=DELETE_TABLE_WITH_TRIGGERS <table>` | |
 | 4. Check backups | `aws dynamodb list-backups --table-name my-data-table` | |
 | 5. Safety gate | Require `confirm=DELETE_TABLE <table-name>` | |

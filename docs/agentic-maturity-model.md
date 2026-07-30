@@ -9,6 +9,7 @@
 - **适用范围**: `aws-skills` 仓库（34 个 `aws-*-ops` L1 skill + 4 个 L2 composite + 2 个 meta）
 - **对齐基线**: `AGENTS.md` §10-§14（Charter / GCL / CodeGraph / CADL / TE Hard Gate）
 - **关联设计**:
+  - `docs/adr/0001-l4-production-evidence-loop.md`（稳定 L4 的权威架构决策与交付门）
   - `docs/superpowers/specs/2026-07-25-l4-quickwins-design.md`（P1 三件 quick win）
   - `docs/superpowers/specs/2026-07-19-skill-as-infrastructure-design.md`（L1/L2 分层）
   - `docs/level3-progress.md`（Level 3 关联覆盖已闭环）

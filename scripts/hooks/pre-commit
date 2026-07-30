@@ -6,8 +6,9 @@
 #   2. scripts/gcl_runner.py → --self-test
 #   3. scripts/te_gate.py → --all --strict
 #   4. scripts/links_lint.py → --all --strict
-#   5. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
-#   5. All .py files staged for commit → ruff check "$REPO" (full repo, fail-closed)
+#   5. Every commit → complete unit-test suite (fail-closed)
+#   6. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
+#   7. All .py files staged for commit → ruff check "$REPO" (full repo, fail-closed)
 #
 # REPO_ROOT env var overrides auto-detection (for testability).
 
@@ -66,6 +67,16 @@ if command -v ruff >/dev/null 2>&1; then
 else
     FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
     FAIL=1
+fi
+
+# Unit-test gate: every commit must prove the complete repository test suite
+# passes. Do not condition this on changed file types; governance changes can
+# affect any runtime path and a green partial suite is insufficient evidence.
+if [ -d "$REPO/scripts/tests" ]; then
+    if ! pytest -p no:rerunfailures "$REPO/scripts/tests/" -q; then
+        FAIL_REASONS+=("pytest -p no:rerunfailures scripts/tests/ -q failed — fix tests before committing")
+        FAIL=1
+    fi
 fi
 
 for f in $CHANGED; do

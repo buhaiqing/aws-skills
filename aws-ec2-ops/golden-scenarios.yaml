@@ -2,7 +2,7 @@
 skill: aws-ec2-ops
 description: |
   Golden evaluation suite for aws-ec2-ops v1.4.0.
-  6 scenarios: 2 read-only, 2 confirmed-destructive, 1 destructive-missing-confirm, 1 destructive-confirmed.
+  7 scenarios: 2 read-only, 2 confirmed-destructive, 1 destructive-missing-confirm, 1 destructive-no-confirm, 1 idempotency.
   Run via: python3 scripts/golden_eval.py run --skill aws-ec2-ops --scenarios $PWD/aws-ec2-ops/golden-scenarios.yaml --out audit-results/golden/aws-ec2-ops.json
 
 scenarios:
@@ -23,7 +23,7 @@ scenarios:
     request: terminate i-deadbeef12345
     expected_status: PASS
     user_region: us-east-1
-    safety_confirm: "CONFIRM-DELETE-i-deadbeef12345"
+    safety_confirm: "confirm=TERMINATE i-deadbeef12345"
 
   - id: ec2-terminate-missing-ids
     description: terminate without specifying instance ids (MUST fail safety)
@@ -44,4 +44,11 @@ scenarios:
     request: stop instances i-feedfacedead
     expected_status: PASS
     user_region: us-east-1
-    safety_confirm: "CONFIRM-STOP-i-feedfacedead"
+    safety_confirm: "confirm=STOP i-feedfacedead"
+
+  - id: ec2-run-instances-idempotent
+    description: run-instances with same client-token twice (idempotent)
+    request: launch instance with client-token ec2-golden-idem-001 using ami-0abcdef1234567890
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""

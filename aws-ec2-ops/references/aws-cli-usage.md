@@ -2,6 +2,8 @@
 
 ## Common JSON Paths (Centralized)
 
+> SKILL.md Common JSON Paths is canonical for Instance fields; prefer `.State.Name` for state string.
+
 ```
 # Run:         .Instances[0].InstanceId
 # Describe:    .Reservations[0].Instances[0].{InstanceId,State.Name,InstanceType,PrivateIpAddress,LaunchTime,VpcId}
@@ -50,6 +52,7 @@ aws ec2 run-instances \
   --key-name my-keypair \
   --security-group-ids sg-12345678 \
   --subnet-id subnet-12345678 \
+  --client-token "{{user.client_token}}" \
   --region us-east-1 \
   --tag-specifications '[{"ResourceType":"instance","Tags":[{"Key":"Name","Value":"my-instance"}]}]' \
   --output json
@@ -80,12 +83,12 @@ aws ec2 describe-instances \
   --output json
 ```
 
-### Get Latest Amazon Linux AMI
+### Get Latest Amazon Linux 2023 AMI
 ```bash
 aws ec2 describe-images \
   --owners amazon \
-  --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" "Name=state,Values=available" \
-  --query "Images[-1].ImageId" \
+  --filters "Name=name,Values=al2023-ami-kernel-*-x86_64" "Name=state,Values=available" \
+  --query 'sort_by(Images,&CreationDate)[-1].ImageId' \
   --region us-east-1 \
   --output text
 ```
