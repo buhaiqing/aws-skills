@@ -173,7 +173,7 @@
 ## 6. L4 — Adaptive（自进化 + 多 Agent + 持续度量 / 沉淀 / 校准）
 
 > **目标**: "agent 在 L3 编排能力之上, 能自我度量、自我反思、自我校准"
-> **判定**: **L4 协议/scripts + ADR-0001 M1/M2 工程 Implemented**; 满窗 telemetry 基线 ⚠️；下一主动路径 **M3 Transactional**。
+> **判定**: **L4 协议/scripts + ADR-0001 M1–M4 工程 Implemented**; 满窗 telemetry 基线 ⚠️；下一主动路径 = hygiene / 满窗关单（不扩 AUTO_HEAL）。
 
 ### 6.1 ✅ 已落地（早期 L4）
 
@@ -207,8 +207,9 @@
 | **ADR-0001 M1 Evidence Foundation（工程交付）** | ✅ | `evals/scenarios/` + 五高风险 58 场景 + `--all-high-risk` + mutation CI + `BLOCKED`/`COMPENSATED` schema（commit `d338b9b`） |
 | **ADR-0001 M1 30 天 dashboard 满窗基线** | ⚠️ | snapshot 已生成（`docs/telemetry/dashboard-2026-07-31.md`）；满窗前不扩大 AUTO_HEAL |
 | **ADR-0001 M2 Shadow Execution（工程交付）** | ✅ | `execution_plan` / `shadow_exec` / plan-bound token / proxy hard gate / `shadow_coverage` 27/27 + CI |
-| **ADR-0001 M3–M4**（Transactional / Governed Learning） | 📋 | `docs/adr/0001-l4-production-evidence-loop.md` — **下一主动路径 = M3** |
-| **自动 skill 生成**（generator 自动跑, 人工仅审批） | 📋 | `aws-skill-generator/` 当前需人工 invoke; 升级待 spec |
+| **ADR-0001 M3 Transactional Orchestration（工程交付）** | ✅ | `execution_dag` / `compensation_runner` / `chain_fixtures` 3×3；恢复率 100%；non_compensable → MANUAL |
+| **ADR-0001 M4 Governed Learning** | ✅ | `governed_learning.py` harvest/evaluate/approve；dup 8%；auto_promo=0%；CI 已接入 |
+| **自动 skill 生成**（generator 自动跑, 人工仅审批） | ✅ Partial | `skill_scaffold.py` + `skill_gen_gate.py`（MVP scaffold+gate；**LLM fill 仍为 agent**）；auto merge rate 0%；spec/plan D0–D3 DONE |
 
 ### 6.4 剩余缺口（2026-07-31 对齐实现后）
 
@@ -218,9 +219,10 @@
 | **Eval Harness 深度（ADR-0001 M1 工程）** | ✅ closed | 五高风险各 ≥10（合计 58）; schema; mutation CI; outcome 五态 |
 | **M1 满窗 telemetry 基线** | ⚠️ | warm-up 进行中 |
 | **Shadow Execution（ADR-0001 M2）** | ✅ closed | 五高风险 destructive 27/27 + proxy hard gate |
-| **生产证据闭环 M3–M4** | 📋 | 下一跃迁 Transactional Orchestration |
-| **自动 Skill 生成闭环** | 📋 | generator 仍人工 invoke; 见 §6.3 |
-| **Failure pattern 100% 自动化** | ⚠️ | `_reflexion.py` 已落地; 长期资产仍部分手工维护 |
+| **Transactional Orchestration（ADR-0001 M3）** | ✅ closed | DAG + compensation gates + 3×3 chain fixtures |
+| **Governed Learning（ADR-0001 M4）** | ✅ closed | 候选 → offline eval → 人工批准；自动晋升率 0% |
+| **自动 Skill 生成闭环** | ⚠️ Partial | scaffold+gate DONE；LLM 填充 / PR 合入仍人工；见 §6.3 |
+| **Failure pattern 100% 自动化** | ⚠️ | `_reflexion` 热路径 + M4 候选队列已落地；**长期资产仅人工 approve**（auto_promo=0%） |
 
 ---
 
@@ -242,10 +244,10 @@
 L1 ██████████████████████ 100% ✅ Foundational
 L2 ██████████████████████ 100% ✅ Operational
 L3 ██████████████████████ 100% ✅ Orchestration
-L4 ████████████████████░  ~99% ✅ Adaptive — protocol + M1/M2 工程闭环
-     TE 37/37; golden 45/45; high-risk 58/58; shadow 27/27 destructive; next = ADR M3（M1 满窗基线仍 warm-up）
+L4 █████████████████████  ~99% ✅ Adaptive — protocol + M1–M4 工程闭环
+     TE 37/37; golden 45/45; high-risk 58/58; shadow 27/27; chains 9/9; governed-learning dup&lt;10%; next = M1 满窗（不扩 AUTO_HEAL）
 
-总体成熟度: L3 完成 ✅; L4 协议层 + M1/M2 工程交付完成; 下一跃迁 ADR-0001 M3（非更多 SKILL 扩张）
+总体成熟度: L3 完成 ✅; L4 协议层 + M1–M4 工程交付完成; 剩余 = 满窗 telemetry / ASG LLM 填充闭环（非更多 SKILL 扩张）
      （注: 2026-07-26 诚实重审曾报 L4 88%「scripts vs 强制生效分离」— 见 changelog v9）
 ```
 
@@ -264,7 +266,7 @@ L4 ████████████████████░  ~99% ✅ Ada
 > **2026-07-25 里程碑**: P0 + P1 同时完成 → L3 = 100% ✅, L4 = 45%。
 > - L3 闭环: pre-commit sync 自动化 + 3 个 L2 composite frontmatter 升级 v0.2.0 + status=validated
 > - L4 启动: gcl_metrics 报表 + reflexion 自动 append + pre-commit 硬门禁
-> **当前里程碑 (2026-07-31)**: TE 37/37 + golden 45/45 + **M1**（58 high-risk / mutation CI）+ **M2 Shadow**（plan_hash + shadow evidence 27/27 + proxy hard gate）。**下一跃迁** = **M3 Transactional**；满窗 telemetry 仍阻塞 AUTO_HEAL 扩大。
+> **当前里程碑 (2026-07-31)**: TE 37/37 + golden 45/45 + **M1–M4**（含 Governed Learning：dup 8%、auto_promo=0%）。**下一关单** = M1 满窗 telemetry；满窗前仍阻塞 AUTO_HEAL 扩大。
 
 ---
 
@@ -327,6 +329,9 @@ L4 ████████████████████░  ~99% ✅ Ada
 | 2026-07-31 (v25) | Align maturity inventory: TE 37/37; golden 45 files/274 scenarios; CS tables canonical; CodeGraph pre-commit soft-hook; ADR-0001 as next L4 path | 主 Agent |
 | 2026-07-31 (v26) | **ADR-0001 M1 工程闭环文档对齐**: high-risk 58/58; mutation CI; outcome 五态; M1 满窗基线仍 ⚠️；下一主动路径 M2 Shadow | 主 Agent |
 | 2026-07-31 (v27) | **ADR-0001 M2 Shadow 工程闭环**: plan_hash + shadow 27/27; proxy hard gate; next = M3 Transactional | 主 Agent |
+| 2026-07-31 (v28) | **ADR-0001 M3 Transactional 工程闭环**: DAG + compensation + 3×3 chains; next = M4 Governed Learning | 主 Agent |
+| 2026-07-31 (v29) | **ADR-0001 M4 Governed Learning 工程闭环**: harvest/eval/approve; dup 8%; auto_promo=0%; next = M1 满窗 | 主 Agent |
+| 2026-08-01 (v30) | **O10 Auto Skill Generation MVP (D1–D3)**: `skill_scaffold.py` + `skill_gen_gate.py` + pytest；scaffold+gate DONE；LLM fill 仍为 agent；auto merge rate 0% | 主 Agent |
 
 ---
 

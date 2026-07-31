@@ -1,7 +1,7 @@
 # ADR-0001 M3 — Transactional Orchestration Design
 
 - **Date**: 2026-07-31
-- **Status**: 定稿草案（Wave C0 — **编码前仍须用户确认本 spec**）
+- **Status**: ✅ C0–C4 DONE — M3 engineering closed; next = M4
 - **ADR**: [`docs/adr/0001-l4-production-evidence-loop.md`](../../adr/0001-l4-production-evidence-loop.md) §Milestone 3
 - **Depends on**: M2 Shadow（`execution_plan` / `shadow_exec` / plan-bound proxy）
 - **Plan**: [`../plans/2026-07-31-adr-m3-transactional-orchestration.md`](../plans/2026-07-31-adr-m3-transactional-orchestration.md)

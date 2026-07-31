@@ -17,4 +17,4 @@ ADR 记录影响仓库长期方向、跨模块边界或不可轻易逆转的工�
 
 | ADR | Status | Decision |
 |---|---|---|
-| [ADR-0001](0001-l4-production-evidence-loop.md) | Accepted | 用生产证据闭环推动 L3+ → 稳定 L4 |
+| [ADR-0001](0001-l4-production-evidence-loop.md) | Accepted | 用生产证据闭环推动 L3+ → 稳定 L4；**M1–M4 工程 DONE**（满窗 telemetry 仍 ⚠️） |

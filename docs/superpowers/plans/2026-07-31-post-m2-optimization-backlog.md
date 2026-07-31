@@ -1,8 +1,8 @@
 # Plan: Post-M2 Optimization Backlog
 
 **Date**: 2026-07-31  
-**Status**: ✅ APPROVED — Wave A→B→C0 依次开发中（`2026-07-31` 用户批准「plan 写好后依次排期」）  
-**Context**: ADR-0001 **M1/M2 工程已完成**（commit `18e35ae`）；下一官方主动路径 = **M3 Transactional**  
+**Status**: ✅ Waves A–C + **M4 DONE**（`2026-07-31`）  
+**Context**: ADR-0001 **M1–M4 工程已完成**；下一官方关单 = **M1 满窗 telemetry**（不扩 AUTO_HEAL）
 **SoT**: [`docs/adr/0001-l4-production-evidence-loop.md`](../../adr/0001-l4-production-evidence-loop.md) · [`docs/agentic-maturity-model.md`](../../agentic-maturity-model.md)
 
 ## 1. Verdict（先读这节）
@@ -50,7 +50,8 @@
 ### Wave B — 证据与 telemetry（与 A/C 并行）
 
 - [x] **B1** O3：约定 `telemetry_dashboard.py dashboard` 刷新节奏（CI artifact 或 cron 说明写进 ADR §M1 STILL OPEN）
-- [ ] **B2** O3：满窗 checklist（日期、信号源、pass_rate 无告警）→ 关 M1 满窗 checkbox
+- [x] **B2** O3：满窗 checklist + 日历锚点（[`docs/telemetry/m1-warmup-calendar.md`](../../telemetry/m1-warmup-calendar.md) + `telemetry_warmup.py`）；**关 checkbox 仍须 ≥2026-08-30**
+- [x] **B1b** CI wire：`golden-high-risk.yml` → dashboard + alert + artifact 35d
 - [x] **B3** O2（可选）：五高风险 `risk: write` 场景接入 `shadow_coverage`（simulate 即可）
 
 **Acceptance B**: 满窗关闭有书面证据；write shadow 覆盖率数字写入 ADR/maturity。
@@ -58,18 +59,18 @@
 ### Wave C — 主路径 M3（需单独 spec+plan，本文件只排期）
 
 - [x] **C0** 落盘 `docs/superpowers/specs/2026-07-31-adr-m3-transactional-design.md` + plan（**批准后再编码**）
-- [ ] **C1** `ExecutionDAG` / 节点 `precondition|postcondition|compensation|non_compensable`
-- [ ] **C2** 补偿路径强制 `safe_tool_proxy` + shadow（复用 M2）
-- [ ] **C3** 三条链 fixture + 成功 / 节点失败 / 补偿失败测试
-- [ ] **C4** ADR §M3 Progress + maturity next=M4
+- [x] **C1** `ExecutionDAG` / 节点 `precondition|postcondition|compensation|non_compensable`
+- [x] **C2** 补偿路径强制 `safe_tool_proxy` + shadow（复用 M2）
+- [x] **C3** 三条链 fixture + 成功 / 节点失败 / 补偿失败测试
+- [x] **C4** ADR §M3 Progress + maturity next=M4
 
 **Acceptance C**: 对齐 ADR M3 exit criteria（三条链 × 三态；不可补偿 100% MANUAL）。
 
-### Wave D — 学习与生成（M3 后或穿插低优）
+### Wave D — 学习与生成（M3 后）
 
-- [ ] **D1** O8 候选 pattern 去重预览 CLI（晋升率保持 0%）
-- [ ] **D2** O9 M4 spec+plan
-- [ ] **D3** O10 自动 skill 生成 spec（与证据主线解耦）
+- [x] **D1** O8 候选 pattern 去重预览 CLI（晋升率保持 0% — 并入 M4 harvest/report）
+- [x] **D2** O9 M4 spec+plan + `governed_learning.py` 工程交付
+- [x] **D3** O10 自动 skill 生成（[`2026-08-01-auto-skill-generation-design.md`](../specs/2026-08-01-auto-skill-generation-design.md)）；**MVP scaffold+gate DONE**（D1–D3 2026-08-01；LLM fill 仍为 agent；auto merge rate 0%）
 
 ---
 

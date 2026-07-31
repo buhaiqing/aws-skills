@@ -24,7 +24,7 @@ Before editing skills, also consult these architecture docs:
 - [`docs/agentic-maturity-model.md`](docs/agentic-maturity-model.md) — **L1–L4 capability inventory**
   (implemented vs partial vs in-progress vs planned vs gap). Single source of truth
   for "what maturity level does this repo achieve today" and the path to L4.
-- [`docs/adr/0001-l4-production-evidence-loop.md`](docs/adr/0001-l4-production-evidence-loop.md) — stable L4 delivery gate; **M1/M2 engineering done** (shadow plan_hash + proxy hard gate); next = M3; progress in ADR §M1/§M2.
+- [`docs/adr/0001-l4-production-evidence-loop.md`](docs/adr/0001-l4-production-evidence-loop.md) — stable L4 delivery gate; **M1–M4 engineering done**; M1 满窗 warm-up（[`docs/telemetry/m1-warmup-calendar.md`](docs/telemetry/m1-warmup-calendar.md)，目标 2026-08-30）；ASG D0 design ready（实现待批）。
 - [`docs/level3-progress.md`](docs/level3-progress.md) — Level 3 cross-skill routing
   coverage (8 skills closed-loop).
 - [`docs/gcl-per-skill-defaults.md`](docs/gcl-per-skill-defaults.md) — GCL 37-line

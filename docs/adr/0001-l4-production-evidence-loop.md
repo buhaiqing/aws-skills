@@ -81,15 +81,18 @@ Request
 
 **STILL OPEN (M1 满窗)**
 
-- 30 天 dashboard baseline 满窗完成（warm-up 进行中，首份 snapshot 已生成）。
+- 30 天 dashboard baseline 满窗完成（warm-up 进行中；**起算 2026-07-31 → 目标 2026-08-30**）。
+- 日历与关单清单：[`docs/telemetry/m1-warmup-calendar.md`](../telemetry/m1-warmup-calendar.md)；时钟：`python3 scripts/telemetry_warmup.py status`（未满 30 天 `closeout-check` 必失败）。
+- CI：`golden-high-risk.yml` 已跑 `telemetry_dashboard` dashboard+alert，并 upload `audit-results` artifact（retention 35d）。跨 run gcl-trace 累积仍为已知缺口；满窗叙述须诚实标注信号源。
 
 **Telemetry 刷新节奏（Wave B1）**
 
 | 动作 | 频率 | 命令 / 产物 |
 |---|---|---|
-| Dashboard 快照 | 每次合并到 `main` 的 high-risk CI，或本地日更 | `python3 scripts/telemetry_dashboard.py dashboard --audit-dir audit-results/ --window-days 30 --out docs/telemetry/dashboard-YYYY-MM-DD.md` |
+| Dashboard 快照 | 每次 high-risk CI（artifact）+ 本地日更可写入 `docs/telemetry/` | CI → `audit-results/telemetry/dashboard.md`；本地 → `docs/telemetry/dashboard-YYYY-MM-DD.md` |
 | 回归告警 | CI（blocking） | `python3 scripts/telemetry_dashboard.py alert --audit-dir audit-results/ --drop-threshold 0.05` |
-| 满窗关单 | warm-up 起算满 30 天后 | 核对：信号源齐全、`alert` exit 0、ADR 本段 checkbox 勾选；**仍不自动扩大 AUTO_HEAL**（仅解锁评审） |
+| Warm-up 时钟 | anytime | `python3 scripts/telemetry_warmup.py status` |
+| 满窗关单 | ≥2026-08-30 且 checklist 全过 | 见 `m1-warmup-calendar.md`；**仍不自动扩大 AUTO_HEAL** |
 
 **Exit criteria**（工程项 ✅ / 满窗项 ⚠️）:
 
@@ -117,7 +120,7 @@ Request
 **STILL OPEN**
 
 - 全仓非五高风险 skill 的 shadow 覆盖（刻意非目标）
-- M3 补偿 / AUTO_HEAL 扩大（仍受 M1 满窗基线约束）
+- AUTO_HEAL 扩大（仍受 M1 满窗基线约束；M3 工程已具备补偿门禁）
 
 **Exit criteria**:
 
@@ -129,6 +132,22 @@ Request
 
 **Target**: 跨服务执行具备确定的停止和补偿行为。
 
+#### Progress (2026-07-31)
+
+**DONE (engineering C0–C4)**
+
+- Spec/Plan: `docs/superpowers/specs/2026-07-31-adr-m3-transactional-design.md` + `plans/2026-07-31-adr-m3-transactional-orchestration.md`
+- `scripts/execution_dag.py` — nodes / edges / `dag_hash` / fail policy（`non_compensable` → MANUAL）
+- `scripts/compensation_runner.py` — 补偿强制 `run_shadow` + `safe_tool_proxy`（无门禁绕过）
+- `scripts/chain_fixtures.py` — 三链 ×（success / node_fail / comp_fail）= **9** runs；CI 已接入 `golden-high-risk.yml`
+- Fixture 度量：可补偿恢复率 **100%**（≥90%）；DNS cutover `non_compensable` → **100% MANUAL**
+
+**STILL OPEN**
+
+- 生产 live 三链（fixtures 为模拟；无 live AWS）
+- AUTO_HEAL 扩大（仍受 M1 满窗基线 + 本里程碑生产证据约束）
+- 恢复手册富文本落盘（MANUAL 路径已停在执行前；handbook stub 可后续补）
+
 - 将跨 skill runbook 表示为 DAG；每个节点声明 `precondition`, `postcondition`, `compensation`, `non_compensable`。
 - 补偿动作也必须经过 runtime safety 和 GCL，不允许绕过门禁。
 - 不可补偿节点默认 `MANUAL`，执行前生成恢复手册和证据快照。
@@ -136,13 +155,28 @@ Request
 
 **Exit criteria**:
 
-- 三条链均有成功、节点失败、补偿失败测试。
-- 可补偿失败的自动恢复率 ≥90%。
-- 不可补偿动作 100% 在执行前停留于人工确认。
+- [x] 三条链均有成功、节点失败、补偿失败测试（9/9 fixture）。
+- [x] 可补偿失败的自动恢复率 ≥90%（fixture = 100%）。
+- [x] 不可补偿动作 100% 在执行前停留于人工确认（RDS DNS cutover）。
 
 ### Milestone 4 — Governed Learning
 
 **Target**: 失败经验自动产生、离线验证、人工批准后生效。
+
+#### Progress (2026-07-31)
+
+**DONE (engineering W0–W3)**
+
+- Spec/Plan: `docs/superpowers/specs/2026-07-31-adr-m4-governed-learning-design.md` + `plans/2026-07-31-adr-m4-governed-learning.md`
+- `scripts/governed_learning.py` — harvest / dedupe / evaluate / approve / reject / report
+- 候选源：`SAFETY_FAIL` | `MAX_ITER` | `BLOCKED` | `COMPENSATION_FAIL`；长期写入 **仅** `approve --approver`
+- Fixture harvest：raw=12 unique=11 **dup_rate=8%**；`auto_promotion_rate=0%`
+- CI：`test_governed_learning.py` + harvest/evaluate/report 接入 `golden-high-risk.yml`
+
+**STILL OPEN**
+
+- 生产审计目录持续 harvest（CI 使用 `--fixtures`；live `gcl-trace-*` 可选 `--audit-dir`）
+- AUTO_HEAL 扩大（仍受 M1 满窗基线约束；本里程碑不解锁）
 
 - 从 `SAFETY_FAIL`, `MAX_ITER`, `BLOCKED`, compensation failure 生成候选 failure pattern。
 - 自动去重、最小化并关联资源类型和场景证据。
@@ -151,9 +185,9 @@ Request
 
 **Exit criteria**:
 
-- 候选规则重复率 <10%。
-- 规则提升必须有 before/after eval 证据。
-- 自动晋升率保持 0%；所有长期规则均可追溯到批准记录。
+- [x] 候选规则重复率 <10%（fixture = 8%）。
+- [x] 规则提升必须有 before/after eval 证据（无 evidence → approve 拒绝）。
+- [x] 自动晋升率保持 0%；所有长期规则均可追溯到批准记录（`approvals.jsonl`）。
 
 ## Metrics and SLOs
 

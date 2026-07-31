@@ -8,6 +8,24 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install pyyaml pytest
       - run: pytest -p no:rerunfailures scripts/tests/test_golden_eval.py scripts/tests/test_mutation_safety_gate.py -q
-      - run: pytest -p no:rerunfailures scripts/tests/test_execution_plan.py scripts/tests/test_shadow_exec.py scripts/tests/test_safe_tool_proxy.py scripts/tests/test_shadow_coverage.py -q
+      - run: pytest -p no:rerunfailures scripts/tests/test_execution_plan.py scripts/tests/test_shadow_exec.py scripts/tests/test_safe_tool_proxy.py scripts/tests/test_shadow_coverage.py scripts/tests/test_execution_dag.py scripts/tests/test_compensation_runner.py scripts/tests/test_m3_chain_fixtures.py scripts/tests/test_governed_learning.py scripts/tests/test_telemetry_warmup.py scripts/tests/test_skill_scaffold.py scripts/tests/test_skill_gen_gate.py -q
+      - run: python3 scripts/chain_fixtures.py run --all --shadow-root /tmp/m3-chains --out audit-results/chains/report.json
+      - run: python3 scripts/governed_learning.py harvest --fixtures --out audit-results/governed-learning/queue.json
+      - run: python3 scripts/governed_learning.py evaluate --queue audit-results/governed-learning/queue.json --out audit-results/governed-learning/queue.json
+      - run: python3 scripts/governed_learning.py report --queue audit-results/governed-learning/queue.json
       - run: python3 scripts/shadow_coverage.py check --all-high-risk --shadow-dir /tmp/shadow-m2 --out audit-results/shadow/coverage.json
       - run: python3 scripts/golden_eval.py run --all-high-risk --out audit-results/golden/high-risk.json
+      - run: python3 scripts/telemetry_warmup.py status
+      - run: |
+          mkdir -p audit-results/telemetry
+          python3 scripts/telemetry_dashboard.py dashboard \
+            --audit-dir audit-results/ \
+            --window-days 30 \
+            --out audit-results/telemetry/dashboard.md
+      - run: python3 scripts/telemetry_dashboard.py alert --audit-dir audit-results/ --drop-threshold 0.05
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-results-${{ github.run_id }}
+          path: audit-results/
+          retention-days: 35
