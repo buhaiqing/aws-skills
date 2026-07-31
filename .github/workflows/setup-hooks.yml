@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
 
 jobs:
   composite-and-precommit-gate:
@@ -47,49 +48,67 @@ jobs:
           set -o pipefail
           python -m pytest -p no:rerunfailures scripts/tests/ -q --tb=short --junitxml=junit.xml 2>&1 | tee full-pytest.log
 
-      - name: Capture pytest failures into repo
+      - name: Publish pytest failure as Issue
         if: failure() && steps.pytest.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p docs/ci
+          set -euo pipefail
           {
-            echo "# CI pytest failure ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            echo "## CI pytest failure"
             echo
-            echo "commit: \`$GITHUB_SHA\`"
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo
-            echo "## Log tail"
-            echo
-            echo '```'
-            tail -n 200 full-pytest.log
-            echo '```'
+            echo "### Failed tests"
             echo
             python3 <<'PY'
           import xml.etree.ElementTree as ET
           from pathlib import Path
           p = Path("junit.xml")
           if not p.exists():
+              print("_junit.xml missing_")
               raise SystemExit(0)
-          print("## Failed tests")
-          print()
           root = ET.parse(p).getroot()
+          found = False
           for case in root.iter("testcase"):
               node = case.find("failure")
               if node is None:
                   node = case.find("error")
               if node is None:
                   continue
+              found = True
               cls = case.get("classname", "")
               name = case.get("name", "")
               print(f"- `{cls}::{name}`")
               msg = (node.get("message") or "").strip().splitlines()
               if msg:
-                  print(f"  - {msg[0][:400]}")
+                  print(f"  - {msg[0][:500]}")
+              body = (node.text or "").strip()
+              if body:
+                  print()
+                  print("```")
+                  print(body[:4000])
+                  print("```")
+          if not found:
+              print("_no failure/error nodes in junit_")
           PY
-          } > docs/ci/last-pytest-failure.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/ci/last-pytest-failure.md
-          git commit -m "ci: capture composite-gate pytest failure [skip ci]" || exit 0
-          git push || exit 0
+            echo
+            echo "### Log tail"
+            echo
+            echo '```'
+            tail -n 120 full-pytest.log
+            echo '```'
+          } > /tmp/pytest-failure.md
+          # Drop stale capture issues from prior attempts (same title prefix)
+          TITLE="ci-pytest-failure ${GITHUB_SHA::7}"
+          gh issue create \
+            --title "$TITLE" \
+            --body-file /tmp/pytest-failure.md \
+            --label "ci" 2>/dev/null \
+          || gh issue create \
+            --title "$TITLE" \
+            --body-file /tmp/pytest-failure.md
 
       - name: Upload pytest logs
         if: failure()
