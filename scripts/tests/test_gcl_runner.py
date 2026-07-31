@@ -11,6 +11,18 @@ import pytest
 import gcl_runner
 
 
+def test_normalize_outcome_accepts_five_statuses():
+    """ADR M1 unified enum: PASS, SAFETY_FAIL, MAX_ITER, BLOCKED, COMPENSATED."""
+    for status in ("PASS", "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATED"):
+        assert gcl_runner.normalize_outcome(status) == status
+    assert gcl_runner.normalize_outcome("blocked") == "BLOCKED"
+
+
+def test_normalize_outcome_rejects_unknown():
+    with pytest.raises(ValueError, match="unknown outcome"):
+        gcl_runner.normalize_outcome("WHO_KNOWS")
+
+
 def test_critic_context_hides_raw_request_and_user_namespace() -> None:
     captured: list[dict] = []
 

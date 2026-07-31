@@ -5,7 +5,7 @@ GCL Runner — Phase 2 reusable Orchestrator.
 Implements the loop defined in `aws-skill-generator/references/gcl-spec.md`:
 
   §4 Loop Flow        Pre-flight → Generate → Critique → Decide
-  §5 Termination      PASS / MAX_ITER / SAFETY_FAIL
+  §5 Termination      PASS / MAX_ITER / SAFETY_FAIL / BLOCKED / COMPENSATED
   §6 Trace schema     ./audit-results/gcl-trace-YYYYMMDD-HHMMSS-<run-id>.json
   §7.1 Placeholders   inject {{output.*}} from {{user.*}} before Critic
   §9 Anti-patterns    abort visibly on Safety=0; never silently downgrade
@@ -51,6 +51,28 @@ DEFAULT_COMMAND_TIMEOUT = 60.0
 _RUBRIC_DIMENSIONS = (
     "correctness", "safety", "idempotency", "traceability", "spec_compliance",
 )
+VALID_OUTCOMES = frozenset({
+    "PASS", "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATED",
+})
+
+
+def normalize_outcome(status: str) -> str:
+    """Return a canonical trace outcome (ADR M1 unified enum).
+
+    Mapping:
+    - ``PASS`` / ``SAFETY_FAIL`` / ``MAX_ITER`` — GCL termination (§5).
+    - ``BLOCKED`` — ``runtime_safety`` pre-tool BLOCK *before* GCL runs
+      (no GCL Safety=0 semantics). Not emitted by ``--self-test`` stubs.
+    - ``COMPENSATED`` — M3 compensation completed (schema-only until M3).
+
+    ``--self-test`` destructive-without-confirm stays ``SAFETY_FAIL``.
+    """
+    normalized = status.upper().strip()
+    if normalized not in VALID_OUTCOMES:
+        raise ValueError(
+            f"unknown outcome {status!r}; expected one of {sorted(VALID_OUTCOMES)}"
+        )
+    return normalized
 _SECRET_KEYS = re.compile(
     r"(?:access.?key|secret|password|passwd|session.?token|keymaterial|"
     r"plaintext|ciphertextblob|private.?key)", re.IGNORECASE,

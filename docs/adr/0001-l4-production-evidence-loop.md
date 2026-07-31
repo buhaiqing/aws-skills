@@ -67,25 +67,21 @@ Request
 
 #### Progress (2026-07-31)
 
-**DONE (bootstrap)**
+**DONE (bootstrap + Wave 2 core)**
 
 - 仓库级 `golden-scenarios.yaml`：45 个文件，每个 ≥5 场景，共 274 场景；`golden_eval` 45/45 PASS。
 - Confirmation Strings 已统一为 Operation/token 规范表（commit `f215a6a`）。
 - `te_gate --all --strict` PASS（37/37 base skill）。
+- `evals/scenarios/schema.md` + 五 skill rich `scenarios.yaml`（`risk`, `preconditions`, `expected_plan`, `expected_gate`, `expected_outcome`, `forbidden_actions`）；thin `golden-scenarios.yaml` 按 `id` 对齐。
+- 五高风险服务各 ≥10 场景：EC2 14、S3 13、IAM 11、RDS 10、KMS 10，合计 **58**；五类 `risk` 全覆盖。
+- `golden_eval.py` 双读 + `--all-high-risk` batch runner；基线 → `audit-results/golden/high-risk.json`（58/58 PASS）。
+- mutation-test CI：`scripts/mutation_gate.py` + `scripts/tests/test_mutation_safety_gate.py` + `.github/workflows/golden-high-risk.yml`（故意移除门 → `compare_to_baseline` 100% 检出）。
+- trace outcome 枚举扩展：`PASS|SAFETY_FAIL|MAX_ITER|BLOCKED|COMPENSATED`（`golden_eval.VALID_STATUSES` + `gcl_runner.normalize_outcome`；COMPENSATED 为 M3 占位，不执行补偿）。
+- 30 天 dashboard warm-up **已启动**：`docs/telemetry/dashboard-2026-07-31.md`；**禁止在 30 天基线完成前扩大 AUTO_HEAL**。
 
-**STILL OPEN (M1 exit)**
+**STILL OPEN (M1 满窗)**
 
-- `evals/scenarios/`  richer schema（`risk`, `preconditions`, `expected_plan`, `expected_gate`, `expected_outcome`, `forbidden_actions`）尚未落地。
-- 高风险服务 EC2 / S3 / IAM / RDS / KMS 各需 ≥10 场景（当前 6–7）。
-- mutation-test CI gate 未接入。
-- trace outcome 统一枚举 `BLOCKED` / `COMPENSATED` 未扩展。
-- 30 天 dashboard baseline warm-up 尚未完成。
-
-- 定义 `evals/scenarios/` schema：`risk`, `preconditions`, `expected_plan`, `expected_gate`, `expected_outcome`, `forbidden_actions`。
-- 每个服务至少覆盖 read-only、write、destructive、recovery、secret-redaction 五类场景；先选择 EC2、S3、IAM、RDS、KMS 五个高风险服务。
-- 将 `golden_eval.py` 扩展为仓库级 runner，输出 JSON 和 Markdown baseline diff。
-- 统一 trace outcome：`PASS`, `MAX_ITER`, `SAFETY_FAIL`, `BLOCKED`, `COMPENSATED`。
-- 建立首次 30 天 dashboard 基线，禁止在基线不足时扩大 AUTO_HEAL。
+- 30 天 dashboard baseline 满窗完成（warm-up 进行中，首份 snapshot 已生成）。
 
 **Exit criteria**:
 

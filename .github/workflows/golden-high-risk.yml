@@ -1,0 +1,11 @@
+on: [push, pull_request]
+jobs:
+  high-risk-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pyyaml pytest
+      - run: pytest -p no:rerunfailures scripts/tests/test_golden_eval.py scripts/tests/test_mutation_safety_gate.py -q
+      - run: python3 scripts/golden_eval.py run --all-high-risk --out audit-results/golden/high-risk.json

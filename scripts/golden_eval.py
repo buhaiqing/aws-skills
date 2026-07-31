@@ -34,7 +34,17 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-VALID_STATUSES = frozenset({"PASS", "SAFETY_FAIL", "MAX_ITER"})
+VALID_STATUSES = frozenset({
+    "PASS", "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATED",
+})
+
+HIGH_RISK_SKILLS: tuple[str, ...] = (
+    "aws-ec2-ops",
+    "aws-s3-ops",
+    "aws-iam-ops",
+    "aws-rds-ops",
+    "aws-kms-ops",
+)
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO / "scripts"
@@ -53,6 +63,12 @@ class Scenario:
     expected_status: str
     user_region: str = ""
     safety_confirm: str = ""
+    risk: str = ""
+    preconditions: list[str] = field(default_factory=list)
+    expected_plan: str = ""
+    expected_gate: str = ""
+    expected_outcome: str = ""
+    forbidden_actions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -96,8 +112,34 @@ def _yaml_minimal_load(text: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Scenario path resolution (dual-read)
+# ---------------------------------------------------------------------------
+
+def resolve_scenarios_path(skill: str, repo: Path = REPO) -> Path:
+    """Prefer rich evals source; fall back to thin golden-scenarios.yaml."""
+    rich = repo / "evals" / "scenarios" / skill / "scenarios.yaml"
+    if rich.exists():
+        return rich
+    return repo / skill / "golden-scenarios.yaml"
+
+
+def load_scenarios_for_skill(skill: str, repo: Path = REPO) -> list[Scenario]:
+    """Load scenarios for *skill* via ``resolve_scenarios_path``."""
+    return load_scenarios(resolve_scenarios_path(skill, repo))
+
+
+# ---------------------------------------------------------------------------
 # Scenario loading
 # ---------------------------------------------------------------------------
+
+def _parse_list_field(row: dict, key: str) -> list[str]:
+    raw = row.get(key, [])
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"scenario {row.get('id')!r}: {key} must be a list")
+    return [str(item) for item in raw]
+
 
 def load_scenarios(path: Path) -> list[Scenario]:
     """Parse `scenarios.yaml` (multi-doc) into a list of Scenario objects.
@@ -141,6 +183,12 @@ def load_scenarios(path: Path) -> list[Scenario]:
             expected_status=expected_status,
             user_region=str(row.get("user_region", "")),
             safety_confirm=str(row.get("safety_confirm", "")),
+            risk=str(row.get("risk", "")),
+            preconditions=_parse_list_field(row, "preconditions"),
+            expected_plan=str(row.get("expected_plan", "")),
+            expected_gate=str(row.get("expected_gate", "")),
+            expected_outcome=str(row.get("expected_outcome", "")),
+            forbidden_actions=_parse_list_field(row, "forbidden_actions"),
         ))
     return out
 
@@ -338,17 +386,80 @@ def load_results(path: Path) -> list[ScenarioResult]:
 # CLI
 # ---------------------------------------------------------------------------
 
-def _emit_run_summary(results: list[ScenarioResult]) -> int:
+def _emit_run_summary(
+    results: list[ScenarioResult],
+    *,
+    skill: str = "",
+) -> int:
     n_pass = sum(1 for r in results if r.matched_status)
     n_total = len(results)
     n_fail = n_total - n_pass
-    print(f"scenarios: {n_pass}/{n_total} matched expected_status")
+    prefix = f"{skill}: " if skill else ""
+    print(f"{prefix}scenarios: {n_pass}/{n_total} matched expected_status")
     for r in results:
         # r is always ScenarioResult dataclass; r.scenario is a dict (asdict)
         sid = r.scenario["id"] if isinstance(r.scenario, dict) else r.scenario.id
         flag = "ok" if r.matched_status else "FAIL"
         print(f"  [{flag}] {sid:30s} actual={r.actual_status}")
     return 0 if n_fail == 0 else 1
+
+
+def _save_aggregate_high_risk(
+    skill_results: dict[str, list[ScenarioResult]],
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    total_matched = 0
+    total_scenarios = 0
+    skills_with_failures: list[str] = []
+    skills_payload: dict[str, dict] = {}
+    for skill, results in skill_results.items():
+        n_pass = sum(1 for r in results if r.matched_status)
+        n_total = len(results)
+        total_matched += n_pass
+        total_scenarios += n_total
+        if n_pass < n_total:
+            skills_with_failures.append(skill)
+        skills_payload[skill] = {
+            "skill": skill,
+            "results": [asdict(r) for r in results],
+        }
+    payload = {
+        "skills": skills_payload,
+        "summary": {
+            "total_matched": total_matched,
+            "total_scenarios": total_scenarios,
+            "skills_with_failures": skills_with_failures,
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _run_all_high_risk(
+    out: Path,
+    gcl_path: Path,
+    repo: Path = REPO,
+) -> int:
+    skill_results: dict[str, list[ScenarioResult]] = {}
+    exit_code = 0
+    for skill in HIGH_RISK_SKILLS:
+        scenarios_path = resolve_scenarios_path(skill, repo)
+        scenarios = load_scenarios(scenarios_path)
+        results = run_scenarios(scenarios, skill=skill, gcl_runner_path=gcl_path)
+        skill_results[skill] = results
+        if _emit_run_summary(results, skill=skill) != 0:
+            exit_code = 1
+
+    if out.suffix == ".json":
+        _save_aggregate_high_risk(skill_results, out)
+        print(f"saved: {out}")
+    else:
+        out.mkdir(parents=True, exist_ok=True)
+        for skill, results in skill_results.items():
+            out_file = out / f"{skill}.json"
+            save_results(results, out_file, skill=skill)
+            print(f"saved: {out_file}")
+    return exit_code
 
 
 def _emit_diff_report(report: BaselineReport) -> int:
@@ -376,12 +487,22 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     run_p = sub.add_parser("run", help="Run a scenarios YAML.")
-    run_p.add_argument("--skill", required=True)
-    run_p.add_argument("--scenarios", required=True,
-                       help="Path to a scenarios YAML.")
-    run_p.add_argument("--out", required=True, help="Output JSON path.")
-    run_p.add_argument("--gcl-runner",
-                       default=str(GCL_RUNNER))
+    run_p.add_argument("--skill", help="Skill directory name (e.g. aws-ec2-ops).")
+    run_p.add_argument(
+        "--scenarios",
+        help="Path to scenarios YAML (default: dual-read via resolve_scenarios_path).",
+    )
+    run_p.add_argument(
+        "--out",
+        required=True,
+        help="Output JSON path (.json = aggregate for --all-high-risk) or directory.",
+    )
+    run_p.add_argument(
+        "--all-high-risk",
+        action="store_true",
+        help=f"Run all high-risk skills: {', '.join(HIGH_RISK_SKILLS)}",
+    )
+    run_p.add_argument("--gcl-runner", default=str(GCL_RUNNER))
 
     diff_p = sub.add_parser("diff",
                             help="Compare current vs baseline run JSON.")
@@ -391,8 +512,17 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.cmd == "run":
-        scenarios = load_scenarios(Path(args.scenarios))
         gcl_path = Path(args.gcl_runner)
+        if args.all_high_risk:
+            return _run_all_high_risk(Path(args.out), gcl_path)
+        if not args.skill:
+            ap.error("run requires --skill unless --all-high-risk is set")
+        scenarios_path = (
+            Path(args.scenarios)
+            if args.scenarios
+            else resolve_scenarios_path(args.skill)
+        )
+        scenarios = load_scenarios(scenarios_path)
         results = run_scenarios(scenarios, skill=args.skill,
                                 gcl_runner_path=gcl_path)
         save_results(results, Path(args.out), skill=args.skill)
