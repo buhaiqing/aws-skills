@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install test + lint deps
+        run: pip install 'ruff>=0.11.8,<0.17' pytest pyyaml
+
       - name: Install hooks (so local devs match CI)
         run: bash scripts/install-hooks.sh
 
@@ -29,9 +32,7 @@ jobs:
         run: python3 -m pytest -p no:rerunfailures scripts/tests/ -q
 
       - name: Ruff lint
-        run: |
-          pip install 'ruff>=0.11.8,<0.17'
-          ruff check scripts/
+        run: ruff check scripts/
 
       - name: Self-review verify (no stale P0)
         run: python3 scripts/self_review.py verify
