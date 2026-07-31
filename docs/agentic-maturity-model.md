@@ -6,7 +6,8 @@
 
 - **作者 / 维护者**: aws-skills maintainers
 - **创建日期**: 2026-07-25
-- **适用范围**: `aws-skills` 仓库（34 个 `aws-*-ops` L1 skill + 4 个 L2 composite + 2 个 meta）
+- **适用范围**: `aws-skills` 仓库（~37 个 `aws-*-ops` L1 skill + L2 composite（aiops-copilot/cruise/orchestrator、finops-core、security-copilot）+ meta（aws-skill-generator）+ aws-topo-discovery + k8s-workload-ops）
+- **最后对齐**: 2026-07-31
 - **对齐基线**: `AGENTS.md` §10-§14（Charter / GCL / CodeGraph / CADL / TE Hard Gate）
 - **关联设计**:
   - `docs/adr/0001-l4-production-evidence-loop.md`（稳定 L4 的权威架构决策与交付门）
@@ -148,7 +149,7 @@
 | **Spec + Plan Before Implement**（>5 行代码改动必写） | ✅ | `AGENTS.md` §Operational Guidelines; 17 个 specs + 17 个 plans |
 | **superpowers 模板化**（固定格式） | ✅ | `docs/superpowers/specs/2026-07-11-level3-coverage-design.md` 是 canonical 模板 |
 | **设计纪律的自我 dogfooding**（写 spec 的 commit 必须引用 spec） | ✅ | `AGENTS.md` §14 "Compound asset example" |
-| **Pre-change CodeGraph Sync**（改代码前 `codegraph sync .`） | ⚠️ | `AGENTS.md` §12 强制, 但**仅人工触发**（无 pre-commit hook, 见 L4 Gap） |
+| **Pre-change CodeGraph Sync**（改代码前 `codegraph sync .`） | ⚠️ | `AGENTS.md` §12 强制; `scripts/hooks/pre-commit` 已对 code 文件调用 `codegraph sync .`，但 **soft-fail**（`|| true`，未安装 codegraph 时静默跳过）; 仍需本地安装 codegraph |
 | **CodeGraph 跨 agent MCP 集成**（OpenCode / Cursor / Claude / Codex / Hermes） | ✅ | `AGENTS.md` §12; `.mcp.json` 声明; `codegraph install -t all` |
 | **A/B 数据驱动决策**（工具选择硬门禁） | ✅ | `2026-07-19-codegraph-ab-experiment-design.md`; `AGENTS.md` §12 Mandatory Split Gate |
 | **CADL（Compound-Asset Distillation Loop）** | ✅ | `AGENTS.md` §13 |
@@ -162,16 +163,17 @@
 | **推理规则测试**（DYNAMO-GSI-01 / EC-FAILOVER-01 / OS-HEAP-01 等 21 条） | ✅ | `aws-aiops-cruise/tests/test_inference_phase23.py` |
 | **共享模块测试**（`_shared.py`） | ✅ | `test_shared.py` |
 | **健康 overlay 测试** | ✅ | `test_health_overlay.py` |
+| **Confirmation Strings 规范表**（`| Operation | Confirmation token |` canonical） | ✅ | `references/prompt-templates.md`; commit f215a6a 统一 list/3-col 形式; 含 CS 的 base skill 已清齐 |
 
 **L3 关键缺口**: 
-- ⚠️ Pre-change CodeGraph Sync **仅人工触发**（无自动化兜底）→ 见 L4
+- ⚠️ Pre-change CodeGraph Sync **pre-commit 已接入但 soft-fail**（需 codegraph 安装 + 硬失败待补）→ 见 ADR-0001
 
 ---
 
 ## 6. L4 — Adaptive（自进化 + 多 Agent + 持续度量 / 沉淀 / 校准）
 
 > **目标**: "agent 在 L3 编排能力之上, 能自我度量、自我反思、自我校准"
-> **判定**: **L4 达成**, 当前 10 项已 In-progress, 0 项仍为 Gap。
+> **判定**: **L4 协议/scripts 层 Implemented**; 下一跃迁为生产证据闭环（ADR-0001）**Planned/Partial**。
 
 ### 6.1 ✅ 已落地（早期 L4）
 
@@ -184,7 +186,7 @@
 | **Spec/Plan 自我 dogfooding** | ✅ | `AGENTS.md` §14 "Compound asset example" 已是 dogfooded |
 | **CADL 写入约定** | ✅ | `AGENTS.md` §13 强制; failure-patterns.md §1.5 已落"烂查询 > 错工具" |
 
-### 6.2 🔧 In-progress（2026-07-25 spec 已定稿, 排期实现中）
+### 6.2 ✅ Implemented（P1–P3.4 closed）
 
 | 能力 | 状态 | 关联设计 | 验收 |
 |---|---|---|---|
@@ -192,7 +194,7 @@
 | **自动反思**（failure pattern 自动化 append） | ✅ | 同上 Task-2 | `scripts/_reflexion.py` (161 行, 7 测试含 1 集成) + `gcl_runner.py --on-fail` (追加 2 flag + 1 hook) |
 | **Pre-commit 硬门禁**（SKILL.md cross_skill_deps 验证 + te_gate） | ✅ | 同上 Task-3 | `scripts/hooks/pre-commit` (95 行 bash, 6 测试) + AGENTS.md §12 追加新段落 + 3 个 L2 composite 升级 v0.2.0 |
 | **Runtime Safety Guardrail**（pre_tool_use hook 实时查 failure-patterns） | ✅ | `2026-07-25-runtime-safety-design.md` | `scripts/runtime_safety.py` (258 行, 7 测试) + `AGENTS.md §15` (新段落) + 端到端 reflexion→runtime_safety 闭环验证通过 |
-| **Eval-Driven Dev**（每 skill ≥5 golden scenarios + baseline diff regression detection） | ✅ | `2026-07-25-eval-driven-dev-design.md` | `scripts/golden_eval.py` (399 行, 7 测试) + `aws-ec2-ops/golden-scenarios.yaml` 6 场景 seed + mutation test 真验证 (1/1 检出) + `AGENTS.md §16` |
+| **Eval-Driven Dev**（每 skill ≥5 golden scenarios + baseline diff regression detection） | ✅ | `2026-07-25-eval-driven-dev-design.md` | `scripts/golden_eval.py` (399 行, 7 测试) + **45** 个 `golden-scenarios.yaml`（**274** 场景, 全部 ≥5）+ 全量 `golden_eval` **45/45 PASS** (2026-07-31) + `AGENTS.md §16` |
 | **生产遥测面板** (Telemetry Dashboard, 30-day rolling + CI alert) | ✅ | `2026-07-25-telemetry-dashboard-design.md` | `scripts/telemetry_dashboard.py` (389 行, 7 测试) + 三源合一 (gcl-trace + golden + reflexion) + `docs/telemetry/dashboard-2026-07-25.md` 自动生成 + `AGENTS.md §17` |
 | **A/B 测试硬门禁**（baseline vs candidate 自动 gate） | ✅ | `2026-07-25-ab-gate-design.md` | `scripts/ab_gate.py` (278 行, 7 测试) + cross-skill cascade advisory + Markdown+JSON 双格式 output + `AGENTS.md §18` |
 | **跨 Session 学习**（`.omc/conventions.json` 自动写 + 检索 + 启动注入） | ✅ | `2026-07-25-cross-session-memory-design.md` | `scripts/session_memory.py` (310 行, 7 测试) + heuristics 派生 candidates + 4 scope 类型 + 3 records seeded + `AGENTS.md §19` |
@@ -202,24 +204,18 @@
 
 | 能力 | 状态 | 关联设计 |
 |---|---|---|
-
-
-
-
+| **生产证据闭环**（ADR-0001 M1–M4: Evidence Foundation / Shadow Execution / Transactional Orchestration / Governed Learning） | 📋 | `docs/adr/0001-l4-production-evidence-loop.md` — 当前 L4 主动路径 |
 | **自动 skill 生成**（generator 自动跑, 人工仅审批） | 📋 | `aws-skill-generator/` 当前需人工 invoke; 升级待 spec |
 
-### 6.4 ✅ Gap closed (was Gap 2026-07-25, closed by P3.4 2026-07-25)
+### 6.4 剩余缺口（2026-07-31 诚实标注）
 
-| 能力 | 影响 | 推荐启动 |
+| 能力 | 状态 | 说明 |
 |---|---|---|
-| **失败→沉淀闭环**（--on-fail 自动 append 即落地, 见 🔧 Task-2） | 反思记忆长期手工 | 已 In-progress |
-| **在线持续度量**（dashboard + 30 日滚动） | GCL pass-rate 不可见 | 已 In-progress |
-| **运行时 Guardrail**（destructive op 实时查 failure-patterns） | ✅ 已落地 2026-07-25 (`scripts/runtime_safety.py`) | - |
-
-| **Eval-Driven Dev**（golden scenarios + regression detection） | 改动无回归基线 | 启动 P1 续: `tests/golden/` |
-
-
-| **自动 Skill 生成闭环**（PR + 自动 generator + 自动 GCL） | 35+ skill 仍人工写 | 启动 P3 |
+| **Eval-Driven Dev（≥5 repo-wide bootstrap）** | ✅ closed | 45 文件 / 274 场景; `golden_eval` 45/45 PASS (2026-07-31) |
+| **Eval Harness 深度（ADR-0001 M1）** | 📋 | ≥10 high-risk 场景/服务、`evals/scenarios/` schema — 非 basic golden 缺口 |
+| **生产证据闭环**（Shadow / Telemetry SLO / Transactional / Governed Learning） | 📋 | ADR-0001 M1–M4; 当前 L4 主动路径 |
+| **自动 Skill 生成闭环** | 📋 | generator 仍人工 invoke; 见 §6.3 |
+| **Failure pattern 100% 自动化** | ⚠️ | `_reflexion.py` 已落地; 长期资产仍部分手工维护 |
 
 ---
 
@@ -238,12 +234,14 @@
 ## 8. 状态总览（一图速览）
 
 ```
-L1 ██████████████████████ 100% 🟢 Foundational (short-path closed: 3 skills 补 ### SHOULD subsections; 40/40 严格合规)
-L2 █████████████████████ 100% 🟢 Operational (P0 closed: composite_lint 自动验证, CI 强制 install hooks)
-L3 ██████████████████████ 100%  ✅  Orchestration (P0 closure 2026-07-25: pre-commit sync + 3 composite frontmatter validated)
-L4 ████████████████████  99% 🟢 Adaptive (TE Gate: 4/37 ⚠️ → P0-B in flight) (short-path: cross-runtime 37/37 score 1.00; CodeGraph 重建; Makefile 加 setup; F-007 文档化)
+L1 ██████████████████████ 100% ✅ Foundational
+L2 ██████████████████████ 100% ✅ Operational
+L3 ██████████████████████ 100% ✅ Orchestration
+L4 ████████████████████░  ~99% ✅ Adaptive — protocol/scripts 闭环; production-evidence (ADR-0001) next
+     TE 37/37 strict PASS (P0-B closed 2026-07-28); golden 45/45 files ≥5 scenarios (274 total)
 
-总体成熟度: L3 完成 ✅, L4 实质完成 88% (scripts/ 100% 实现, 强制/e2e 待补); 见 maturity-2026-07-26.md
+总体成熟度: L3 完成 ✅; L4 协议层闭环; 下一跃迁见 ADR-0001（非更多 SKILL 扩张）
+     （注: 2026-07-26 诚实重审曾报 L4 88%「scripts vs 强制生效分离」— 见 changelog v9）
 ```
 
 ### 8.1 运行健康证据（机器生成，带日期）
@@ -261,7 +259,7 @@ L4 ████████████████████  99% 🟢 Adapti
 > **2026-07-25 里程碑**: P0 + P1 同时完成 → L3 = 100% ✅, L4 = 45%。
 > - L3 闭环: pre-commit sync 自动化 + 3 个 L2 composite frontmatter 升级 v0.2.0 + status=validated
 > - L4 启动: gcl_metrics 报表 + reflexion 自动 append + pre-commit 硬门禁
-> **当前里程碑**: P2 + P3.1 + P3.2 全部完成 (L4 95%)。仅剩 P3.3 自动 Skill 生成 (研究性, 不在仓库定位范围)。
+> **当前里程碑 (2026-07-31)**: TE P0-B closed（37/37 `--strict`）+ repo-wide golden（45 文件 / 274 场景, 45/45 PASS）+ Confirmation Strings 规范表统一（f215a6a）; **下一跃迁** = ADR-0001 Evidence Foundation（M1–M4 生产证据闭环, 非更多静态 TE/golden bootstrap）。
 
 ---
 
@@ -321,6 +319,7 @@ L4 ████████████████████  99% 🟢 Adapti
 | 2026-07-28 (v22) | **Risk-ordered batch 4**: `aws-securityhub-ops` 311→112, `aws-eventbridge-ops` 318→114, `aws-s3-ops` 326→109; retained Security Hub disable boundaries, EventBridge dependency-order deletion, and S3 A2/A6/A9/A15 plus recursive scope confirmation; **22/37 skills pass `--strict`**, 15/37 backlog. | 主 Agent |
 | 2026-07-28 (v23) | **Risk-ordered batch 5**: `aws-efs-ops` 328→100, `aws-route53-ops` 343→110, `aws-ecr-ops` 349→103; retained EFS dependency cleanup, Route53 multi-signal failover/record diff, and ECR explicit image-set/public-policy controls; **25/37 skills pass `--strict`**, 12/37 backlog. | 主 Agent |
 | 2026-07-28 (v24) | **P0-B closure**: final 12 skills (`rds`, `vpc`, `waf`, `guardduty`, `ecs`, `athena`, `application-autoscaling`, `kms`, `acm`, `dynamodb`, `cloudtrail`, `ec2`) compressed with service-specific safety gates retained; **37/37 skills pass `te_gate --all --strict`**, backlog closed. | 主 Agent |
+| 2026-07-31 (v25) | Align maturity inventory: TE 37/37; golden 45 files/274 scenarios; CS tables canonical; CodeGraph pre-commit soft-hook; ADR-0001 as next L4 path | 主 Agent |
 
 ---
 

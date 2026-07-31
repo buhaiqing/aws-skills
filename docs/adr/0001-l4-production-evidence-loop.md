@@ -65,6 +65,22 @@ Request
 
 **Target**: 可重复评测和稳定指标基线。
 
+#### Progress (2026-07-31)
+
+**DONE (bootstrap)**
+
+- 仓库级 `golden-scenarios.yaml`：45 个文件，每个 ≥5 场景，共 274 场景；`golden_eval` 45/45 PASS。
+- Confirmation Strings 已统一为 Operation/token 规范表（commit `f215a6a`）。
+- `te_gate --all --strict` PASS（37/37 base skill）。
+
+**STILL OPEN (M1 exit)**
+
+- `evals/scenarios/`  richer schema（`risk`, `preconditions`, `expected_plan`, `expected_gate`, `expected_outcome`, `forbidden_actions`）尚未落地。
+- 高风险服务 EC2 / S3 / IAM / RDS / KMS 各需 ≥10 场景（当前 6–7）。
+- mutation-test CI gate 未接入。
+- trace outcome 统一枚举 `BLOCKED` / `COMPENSATED` 未扩展。
+- 30 天 dashboard baseline warm-up 尚未完成。
+
 - 定义 `evals/scenarios/` schema：`risk`, `preconditions`, `expected_plan`, `expected_gate`, `expected_outcome`, `forbidden_actions`。
 - 每个服务至少覆盖 read-only、write、destructive、recovery、secret-redaction 五类场景；先选择 EC2、S3、IAM、RDS、KMS 五个高风险服务。
 - 将 `golden_eval.py` 扩展为仓库级 runner，输出 JSON 和 Markdown baseline diff。
