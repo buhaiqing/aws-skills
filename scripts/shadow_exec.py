@@ -37,16 +37,32 @@ _SECRET_ASSIGNMENT = re.compile(
     re.IGNORECASE,
 )
 
-# Ops known to support native AWS dry-run (allowlist; extend in later waves).
+# Ops with documented AWS CLI --dry-run (EC2 primary; extend carefully).
+# Ref: https://docs.aws.amazon.com/cli/latest/reference/ec2/
 DRY_RUN_ALLOWLIST: frozenset[str] = frozenset({
+    # instances
     "ec2 terminate-instances",
     "ec2 stop-instances",
     "ec2 start-instances",
+    "ec2 reboot-instances",
     "ec2 run-instances",
+    "ec2 modify-instance-attribute",
+    # volumes / snapshots
     "ec2 create-volume",
     "ec2 delete-volume",
+    "ec2 attach-volume",
+    "ec2 detach-volume",
     "ec2 create-snapshot",
     "ec2 delete-snapshot",
+    # networking (common write / destructive-adjacent)
+    "ec2 create-security-group",
+    "ec2 delete-security-group",
+    "ec2 authorize-security-group-ingress",
+    "ec2 revoke-security-group-ingress",
+    "ec2 authorize-security-group-egress",
+    "ec2 revoke-security-group-egress",
+    "ec2 create-tags",
+    "ec2 delete-tags",
 })
 
 

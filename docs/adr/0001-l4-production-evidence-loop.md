@@ -83,6 +83,14 @@ Request
 
 - 30 天 dashboard baseline 满窗完成（warm-up 进行中，首份 snapshot 已生成）。
 
+**Telemetry 刷新节奏（Wave B1）**
+
+| 动作 | 频率 | 命令 / 产物 |
+|---|---|---|
+| Dashboard 快照 | 每次合并到 `main` 的 high-risk CI，或本地日更 | `python3 scripts/telemetry_dashboard.py dashboard --audit-dir audit-results/ --window-days 30 --out docs/telemetry/dashboard-YYYY-MM-DD.md` |
+| 回归告警 | CI（blocking） | `python3 scripts/telemetry_dashboard.py alert --audit-dir audit-results/ --drop-threshold 0.05` |
+| 满窗关单 | warm-up 起算满 30 天后 | 核对：信号源齐全、`alert` exit 0、ADR 本段 checkbox 勾选；**仍不自动扩大 AUTO_HEAL**（仅解锁评审） |
+
 **Exit criteria**（工程项 ✅ / 满窗项 ⚠️）:
 
 - [x] 5 个高风险服务各 ≥10 个场景，总计 ≥50（实际 58）。

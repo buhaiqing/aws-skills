@@ -21,11 +21,22 @@ from runtime_safety import (  # noqa: E402
 )
 from shadow_coverage import (  # noqa: E402
     check_destructive_shadow_coverage,
+    check_shadow_coverage,
     false_block_rate,
     iter_destructive_scenarios,
     plan_from_scenario,
 )
 from shadow_exec import run_shadow  # noqa: E402
+
+
+def test_include_write_risk_shadow_coverage(tmp_path: Path) -> None:
+    report = check_shadow_coverage(
+        shadow_dir=tmp_path / "shadow-write",
+        risks=("destructive", "write"),
+    )
+    assert report.destructive_total > 27  # 27 destructive + ≥1 write
+    assert report.covered == report.destructive_total
+    assert not report.failed
 
 
 def test_all_high_risk_destructive_get_shadow_evidence(tmp_path: Path) -> None:

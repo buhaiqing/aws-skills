@@ -178,6 +178,22 @@ def test_proxy_blocks_plan_drift_on_resource_id(tmp_path):
     assert json.loads(result.stdout)["executed"] is False
 
 
+def test_proxy_blocks_plan_drift_on_region(tmp_path):
+    plan, shadow_dir, command, call, token = _destructive_fixture(tmp_path, "i-123")
+    drifted = [
+        "aws", "ec2", "terminate-instances", "--instance-ids", "i-123",
+        "--region", "eu-west-1",
+    ]
+    result = run_proxy({
+        "command": drifted,
+        "plan_hash": plan.plan_hash,
+        "safety_confirm": token,  # bound to us-east-1 argv
+    }, dry_run=True, env=fake_aws_env(tmp_path), shadow_dir=shadow_dir)
+
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["executed"] is False
+
+
 def test_proxy_blocks_legacy_token_even_with_shadow(tmp_path):
     plan, shadow_dir, command, call, _token = _destructive_fixture(tmp_path)
     legacy = build_confirmation_token(call)

@@ -24,3 +24,6 @@ jobs:
 
       - name: Ruff lint (full repo)
         run: ruff check . --output-format=github
+
+      - name: Links lint (SKILL.md anchors)
+        run: python3 scripts/links_lint.py lint --all

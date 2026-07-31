@@ -109,8 +109,15 @@ for f in $CHANGED; do
             fi
             ;;
         *.py|*.ts|*.go|*.rs|*.js|*.java)
+            # A3: when codegraph is installed, sync must succeed (hard).
+            # When missing: skip with stderr warn (CI / machines without binary).
             if command -v codegraph >/dev/null 2>&1; then
-                codegraph sync . >/dev/null 2>&1 || true
+                if ! codegraph sync . >/dev/null 2>&1; then
+                    FAIL_REASONS+=("codegraph sync . failed — refresh index before commit")
+                    FAIL=1
+                fi
+            else
+                printf 'pre-commit warn: codegraph not on PATH; skipping sync\n' >&2
             fi
             ;;
     esac

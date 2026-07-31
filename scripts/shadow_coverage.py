@@ -88,8 +88,8 @@ def _extract_resource_ids(request: str) -> list[str]:
     return out[:8]
 
 
-def plan_from_scenario(skill: str, scn: Scenario) -> ExecutionPlan:
-    """Build a minimal ExecutionPlan for a destructive scenario."""
+def plan_from_scenario(skill: str, scn: Scenario, *, risk: str = "destructive") -> ExecutionPlan:
+    """Build a minimal ExecutionPlan for a rich scenario."""
     if scn.expected_plan.strip():
         operation = scn.expected_plan.strip()
     else:
@@ -101,21 +101,77 @@ def plan_from_scenario(skill: str, scn: Scenario) -> ExecutionPlan:
         args={"scenario_id": scn.id, "request": scn.request},
         region=scn.user_region or "us-east-1",
         resource_ids=_extract_resource_ids(scn.request),
-        risk="destructive",
+        risk=risk,
     )
+
+
+def iter_scenarios_by_risk(
+    risk: str,
+    repo: Path = REPO,
+    skills: tuple[str, ...] = HIGH_RISK_SKILLS,
+) -> list[tuple[str, Scenario]]:
+    """Load high-risk rich scenarios matching ``risk`` (case-insensitive)."""
+    want = risk.strip().lower()
+    out: list[tuple[str, Scenario]] = []
+    for skill in skills:
+        for scn in load_scenarios_for_skill(skill, repo):
+            if scn.risk.strip().lower() == want:
+                out.append((skill, scn))
+    return out
 
 
 def iter_destructive_scenarios(
     repo: Path = REPO,
     skills: tuple[str, ...] = HIGH_RISK_SKILLS,
 ) -> list[tuple[str, Scenario]]:
-    """Load high-risk rich scenarios with ``risk: destructive`` (case-insensitive)."""
-    out: list[tuple[str, Scenario]] = []
-    for skill in skills:
-        for scn in load_scenarios_for_skill(skill, repo):
-            if scn.risk.strip().lower() == "destructive":
-                out.append((skill, scn))
-    return out
+    return iter_scenarios_by_risk("destructive", repo=repo, skills=skills)
+
+
+def check_shadow_coverage(
+    *,
+    shadow_dir: Path,
+    risks: tuple[str, ...] = ("destructive",),
+    repo: Path = REPO,
+    skills: tuple[str, ...] = HIGH_RISK_SKILLS,
+) -> CoverageReport:
+    """Run simulate shadow for high-risk scenarios matching ``risks``."""
+    shadow_dir.mkdir(parents=True, exist_ok=True)
+    report = CoverageReport()
+    for risk in risks:
+        for skill, scn in iter_scenarios_by_risk(risk, repo=repo, skills=skills):
+            report.destructive_total += 1  # field name kept; counts all selected risks
+            try:
+                plan = plan_from_scenario(skill, scn, risk=risk)
+                if not plan.plan_hash:
+                    raise ValueError("empty plan_hash")
+                result = run_shadow(
+                    plan,
+                    mode="simulate",
+                    audit_dir=shadow_dir,
+                    persist=True,
+                )
+                row = ScenarioCoverage(
+                    skill=skill,
+                    scenario_id=scn.id,
+                    plan_hash=plan.plan_hash,
+                    ok=bool(result.ok and result.plan_hash),
+                    path=result.path,
+                    error=result.error,
+                )
+            except Exception as exc:  # noqa: BLE001
+                row = ScenarioCoverage(
+                    skill=skill,
+                    scenario_id=scn.id,
+                    plan_hash="",
+                    ok=False,
+                    error=str(exc),
+                )
+            report.results.append(row)
+            if row.ok:
+                report.covered += 1
+            else:
+                report.failed.append(row)
+    return report
 
 
 def check_destructive_shadow_coverage(
@@ -124,43 +180,10 @@ def check_destructive_shadow_coverage(
     repo: Path = REPO,
     skills: tuple[str, ...] = HIGH_RISK_SKILLS,
 ) -> CoverageReport:
-    """Run simulate shadow for every high-risk destructive scenario."""
-    shadow_dir.mkdir(parents=True, exist_ok=True)
-    report = CoverageReport()
-    for skill, scn in iter_destructive_scenarios(repo=repo, skills=skills):
-        report.destructive_total += 1
-        try:
-            plan = plan_from_scenario(skill, scn)
-            if not plan.plan_hash:
-                raise ValueError("empty plan_hash")
-            result = run_shadow(
-                plan,
-                mode="simulate",
-                audit_dir=shadow_dir,
-                persist=True,
-            )
-            row = ScenarioCoverage(
-                skill=skill,
-                scenario_id=scn.id,
-                plan_hash=plan.plan_hash,
-                ok=bool(result.ok and result.plan_hash),
-                path=result.path,
-                error=result.error,
-            )
-        except Exception as exc:  # noqa: BLE001 — surface per-scenario
-            row = ScenarioCoverage(
-                skill=skill,
-                scenario_id=scn.id,
-                plan_hash="",
-                ok=False,
-                error=str(exc),
-            )
-        report.results.append(row)
-        if row.ok:
-            report.covered += 1
-        else:
-            report.failed.append(row)
-    return report
+    """Backward-compat wrapper: destructive-only coverage."""
+    return check_shadow_coverage(
+        shadow_dir=shadow_dir, risks=("destructive",), repo=repo, skills=skills,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,13 +191,18 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     check_p = sub.add_parser(
         "check",
-        help="Assert 100% destructive high-risk scenarios produce plan+shadow",
+        help="Assert selected risk scenarios produce plan+shadow",
     )
     check_p.add_argument(
         "--all-high-risk",
         action="store_true",
         required=True,
         help=f"Cover skills: {', '.join(HIGH_RISK_SKILLS)}",
+    )
+    check_p.add_argument(
+        "--include-write",
+        action="store_true",
+        help="Also cover risk=write scenarios (Wave B3)",
     )
     check_p.add_argument(
         "--shadow-dir",
@@ -189,12 +217,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "check":
-        report = check_destructive_shadow_coverage(
+        risks: tuple[str, ...] = ("destructive", "write") if args.include_write else ("destructive",)
+        report = check_shadow_coverage(
             shadow_dir=Path(args.shadow_dir),
+            risks=risks,
         )
         summary = report.to_dict()
+        summary["risks"] = list(risks)
         print(
-            f"shadow_coverage: covered={report.covered}/"
+            f"shadow_coverage: risks={list(risks)} covered={report.covered}/"
             f"{report.destructive_total} "
             f"pass_rate={report.pass_rate:.0%} "
             f"failed={len(report.failed)}"

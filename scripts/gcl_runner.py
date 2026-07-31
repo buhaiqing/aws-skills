@@ -370,6 +370,8 @@ def _run_loop(
     critic,
     safety_confirm: str = "",
     flaky_critic: bool = False,
+    plan_hash: str = "",
+    shadow_path: str = "",
 ) -> dict[str, Any]:
     skill = load_skill(skill_name)
     trace: dict[str, Any] = {
@@ -378,6 +380,9 @@ def _run_loop(
         "rubric_version": "v1",
         "iterations": [],
         "final": {"status": "MAX_ITER", "iter": 0, "output": None},
+        # ADR-0001 M2: optional pre-GCL evidence pointers (empty when unused).
+        "plan_hash": plan_hash or None,
+        "shadow": {"path": shadow_path} if shadow_path else None,
     }
     best = None
     feedback: list[str] = []
@@ -495,6 +500,8 @@ def run(
     critic_cmd: list[str] | None = None,
     safety_confirm: str = "",
     flaky_critic: bool = False,
+    plan_hash: str = "",
+    shadow_path: str = "",
 ) -> dict[str, Any]:
     """Top-level Orchestrator entry point. Returns the trace object (§6)."""
     def gen(ctx: dict[str, Any]) -> dict[str, Any]:
@@ -506,6 +513,7 @@ def run(
     return _run_loop(
         skill_name, request, user_region, gen, crit,
         safety_confirm=safety_confirm, flaky_critic=flaky_critic,
+        plan_hash=plan_hash, shadow_path=shadow_path,
     )
 
 
@@ -520,6 +528,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--request", required=False, default="(inspect-only)")
     ap.add_argument("--user-region", default=os.environ.get("AWS_DEFAULT_REGION", ""))
     ap.add_argument("--safety-confirm", default="")
+    ap.add_argument("--plan-hash", default="", help="ADR-0001 M2: record plan_hash on trace")
+    ap.add_argument("--shadow-path", default="", help="ADR-0001 M2: record shadow evidence path on trace")
     ap.add_argument("--generator-cmd", default=None,
                     help="Optional external command for the Generator agent")
     ap.add_argument("--critic-cmd", default=None,
@@ -560,6 +570,8 @@ def main(argv: list[str] | None = None) -> int:
         critic_cmd=crit_cmd,
         safety_confirm=args.safety_confirm,
         flaky_critic=args.flaky_critic,
+        plan_hash=args.plan_hash,
+        shadow_path=args.shadow_path,
     )
 
     out_path = _trace_path()

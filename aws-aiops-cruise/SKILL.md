@@ -86,7 +86,7 @@ Every runbook: **Pre-flight → Execute → Validate → Recover**. Pre-flight: 
 
 ## Quality Gate (GCL)
 
-Recommended GCL, `max_iter=3`. Rubric: [`references/rubric.md`](references/rubric.md). Prompts: [`references/prompt-templates.md`](references/prompt-templates.md). Safety = 0 on any write API. Thresholds: Correctness ≥0.5, Safety =1, Idempotency ≥0.8, Traceability ≥0.8, Spec ≥0.8. Full rubric: [`references/skill-body-extras.md#quality-gate-gcl--full-rubric`](references/skill-body-extras.md#quality-gate-gcl--full-rubric).
+Recommended GCL, `max_iter=3`. Rubric: [`references/rubric.md`](references/rubric.md). Prompts: [`references/prompt-templates.md`](references/prompt-templates.md). Safety = 0 on any write API. Thresholds: Correctness ≥0.5, Safety =1, Idempotency ≥0.8, Traceability ≥0.8, Spec ≥0.8. Full rubric: [`references/skill-body-extras.md#quality-gate-gcl-full-rubric`](references/skill-body-extras.md#quality-gate-gcl-full-rubric).
 
 ## Orchestrator & Risk
 
