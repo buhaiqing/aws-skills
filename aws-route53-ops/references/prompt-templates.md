@@ -45,6 +45,21 @@
   Route 53 is global).
 ```
 
+## Supported Operations (Generator reference)
+- list-hosted-zones, get-hosted-zone, create-hosted-zone, delete-hosted-zone
+- list-resource-record-sets, change-resource-record-sets
+- list-health-checks, create-health-check, delete-health-check
+- get-change, list-reusable-delegation-sets
+
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `change-resource-record-sets: DELETE` | `confirm=DELETE_RECORD <zone>:<name>:<type>` |
+| `change-resource-record-sets: DELETE` (prod) | `confirm=DELETE_PROD_DNS_RECORD <name>` |
+| `delete-hosted-zone` | `confirm=DELETE_HOSTED_ZONE <zone-id>` |
+| `delete-health-check` | `confirm=DELETE_HEALTH_CHECK <id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -53,7 +68,7 @@
 | Placeholder | Resolved from | Notes |
 |---|---|---|
 | `{{user.request}}` | agent runtime | sanitized |
-| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops |
+| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; trace must record exact literal per operation (`confirm=DELETE_RECORD <zone>:<name>:<type>`, `confirm=DELETE_HOSTED_ZONE <zone-id>`, etc.) |
 | `{{user.region}}` | user input or `{{env.AWS_DEFAULT_REGION}}` | Route 53 is global; canonical `us-east-1`; rule A7 |
 | `{{env.AWS_ACCESS_KEY_ID}}` | runtime env | NEVER prompt user; fail if unset |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | runtime env | NEVER log (rule A9) |
@@ -64,10 +79,13 @@
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification | one of the listed operation types |
+| `{{output.requested_region}}` | Orchestrator from `{{user.region}}` | Critic region-check target (rule A7; canonical `us-east-1`) |
+| `{{output.safety_confirm_token}}` | Orchestrator from user confirmation | Critic Safety-gate target |
 
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table (waf-ops pattern); added `{{output.requested_region}}` and `{{output.safety_confirm_token}}`. |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-route53-ops` (Phase 1, required, not pilot) |
 
 ---

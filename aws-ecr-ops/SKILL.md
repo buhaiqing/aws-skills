@@ -11,16 +11,11 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-07-11"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
-  environment:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_SESSION_TOKEN
-    - AWS_DEFAULT_REGION
-    - AWS_PROFILE
+  environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION, AWS_PROFILE]
   gcl:
     enabled: true
     class: required
@@ -78,10 +73,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/update repository | Validate encryption, mutability, scanning, replication | Token for disruptive policy/mutability changes |
-| Delete repository | List images and downstream ECS/EKS references; avoid force by default | `DELETE <repository_name>`; force requires stronger confirmation |
-| Batch delete images | Resolve explicit digests/tags, count and total bytes; no wildcard/empty list | `DELETE <count> images` |
+| Delete repository | List images and downstream ECS/EKS references; avoid force by default | `confirm=DELETE <repository_name>` |
+| Batch delete images | Resolve explicit digests/tags, count and total bytes; no wildcard/empty list | `confirm=DELETE <count> images` |
 | Lifecycle policy | Preview affected images; protect deployed/recent tags | Human confirmation before destructive expiry |
-| Repository policy | Diff principals/actions; reject public or broad cross-account access unless approved | Public/cross-account confirmation |
+| Repository policy | Diff principals/actions; reject public or broad cross-account access unless approved | `confirm=PUT_POLICY_PUBLIC <repository_name>` |
 | Delete scan/replication/cache config | Show security/supply-chain impact | Human confirmation |
 
 Mask registry tokens, image layer contents, vulnerability details that expose secrets, and credentials in traces.

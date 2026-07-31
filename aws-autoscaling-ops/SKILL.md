@@ -13,7 +13,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -85,13 +85,13 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Required checks | Confirmation |
 |---|---|---|
-| Create/update ASG | Verify launch template, subnets, quota, capacity bounds | Token for desired capacity 0 |
-| Delete ASG | Describe instances/LBs/TGs; scale to 0 first; validate group absent | `DELETE {{user.asg_name}}` |
-| Delete launch config/policy/schedule/hook | Verify target and dependencies | `DELETE_LC`, `DELETE_POLICY`, `DELETE_SCHEDULE`, or `DELETE_HOOK` + name |
+| Create/update ASG | Verify launch template, subnets, quota, capacity bounds | `confirm=SCALE_TO_ZERO <asg-name>` when desired → 0 |
+| Delete ASG | Describe instances/LBs/TGs; scale to 0 first; validate group absent | `confirm=DELETE {{user.asg_name}}` |
+| Delete launch config/policy/schedule/hook | Verify target and dependencies | `confirm=DELETE_LC`, `confirm=DELETE_POLICY`, `confirm=DELETE_SCHEDULE`, or `confirm=DELETE_HOOK` + name |
 | Suspend processes | Inspect suspended processes; warn for HealthCheck/ReplaceUnhealthy | Human confirmation for high-impact processes |
 | Instance refresh | No active refresh; production MinHealthyPercentage ≥90%; poll completion | Human confirmation |
-| Attach/detach instance | Inspect group/capacity; ask whether desired capacity decrements | `DETACH {{user.instance_id}}` |
-| Detach target group | Inspect traffic impact and attachments | `DETACH_TG <arn>` |
+| Attach/detach instance | Inspect group/capacity; ask whether desired capacity decrements | `confirm=DETACH {{user.instance_id}}` |
+| Detach target group | Inspect traffic impact and attachments | `confirm=DETACH_TG <tg-arn>` |
 
 ## Quality Gate (GCL)
 

@@ -11,7 +11,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-07-06"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -81,11 +81,11 @@ Pre-flight: volume is `available`, instance exists, and device is unused; Execut
 
 ### Detach Volume
 
-Pre-flight: instruct the user to unmount at OS level and inspect attachments; require `DETACH {{user.volume_id}}`; Execute `detach-volume` (force only when explicitly requested); Validate detached state; Recover by waiting for in-progress transitions.
+Pre-flight: instruct the user to unmount at OS level and inspect attachments; require `confirm=DETACH_VOLUME {{user.volume_id}}`; Execute `detach-volume` (force only when explicitly requested); Validate detached state; Recover by waiting for in-progress transitions.
 
 ### Delete Volume
 
-Pre-flight: verify volume is `available` and not attached; require `DELETE {{user.volume_id}}`; Execute `delete-volume`; Validate `describe-volumes` returns not found; Recover `VolumeInUse` by halting and resolving attachment.
+Pre-flight: verify volume is `available` and not attached; require `confirm=DELETE_VOLUME {{user.volume_id}}`; Execute `delete-volume`; Validate `describe-volumes` returns not found; Recover `VolumeInUse` by halting and resolving attachment.
 
 ### Modify Volume
 
@@ -97,7 +97,7 @@ Pre-flight: verify source volume; Execute `create-snapshot`; Validate `.Snapshot
 
 ### Delete Snapshot
 
-Pre-flight: inspect volumes created from the snapshot; require `DELETE_SNAPSHOT {{user.snapshot_id}}`; Execute `delete-snapshot`; Validate absence; Recover by halting on dependency or throttling errors.
+Pre-flight: inspect volumes created from the snapshot; require `confirm=DELETE_SNAPSHOT {{user.snapshot_id}}`; Execute `delete-snapshot`; Validate absence; Recover by halting on dependency or throttling errors.
 
 ## Safety Gates
 

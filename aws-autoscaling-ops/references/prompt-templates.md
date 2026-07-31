@@ -63,10 +63,27 @@
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-auto-scaling-group` | `confirm=DELETE <asg-name>` |
+| `delete-launch-configuration` | `confirm=DELETE_LC <lc-name>` |
+| `delete-policy` | `confirm=DELETE_POLICY <policy-name>` |
+| `delete-scheduled-action` | `confirm=DELETE_SCHEDULE <action-name>` |
+| `delete-lifecycle-hook` | `confirm=DELETE_HOOK <hook-name>` |
+| `detach-instances` | `confirm=DETACH <instance-id>` |
+| `detach-load-balancer-target-groups` | `confirm=DETACH_TG <tg-arn>` |
+| `set-desired-capacity` → 0 | `confirm=SCALE_TO_ZERO <asg-name>` |
+
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-07 | Initial GCL prompt templates for `aws-autoscaling-ops` GCL rollout |
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings |
 
 ---
 

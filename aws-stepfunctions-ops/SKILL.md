@@ -10,7 +10,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with 
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: '2026-06-04'
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -100,14 +100,14 @@ Lambda → `aws-lambda-ops`; IAM → `aws-iam-ops`; metrics → `aws-cloudwatch-
 Before proceeding:
 1. Check for running executions via `list-executions`
 2. Stop active executions via `stop-execution`
-3. Confirm: Type DELETE {{user.StateMachineName}} to proceed.
+3. Confirm: `confirm=DELETE_SM {{user.StateMachineName}}` to proceed.
 ```
 
 ## Token Efficiency
 TE-1…TE-6 apply; query live state-machine data, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Quality Gate (GCL)
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Before deletion list and stop running executions, then confirm `DELETE_SM <sm-name>`; confirm `STOP_EXECUTION <execution-arn>` and definition updates; apply A7–A10 from `gcl-spec.md` §8.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Before deletion list and stop running executions, then confirm `confirm=DELETE_SM <sm-name>`; confirm `confirm=STOP_EXECUTION <execution-arn>` and definition updates; apply A7–A10 from `gcl-spec.md` §8.
 
 ## Reference Files
 [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [integration.md](../aws-skill-generator/references/integration.md)

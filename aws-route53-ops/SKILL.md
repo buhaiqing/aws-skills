@@ -14,7 +14,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, netw
 metadata:
   author: aws
   version: "1.2.0"
-  last_updated: '2026-06-04'
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -86,9 +86,9 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/update record | Diff exact name/type/set identifier and routing impact | Token for production/failover changes |
-| Delete record | Fetch exact current value; DELETE payload must match | `DELETE_RECORD <name> <type>`; production requires stronger confirmation |
-| Delete hosted zone | Refuse while any non-NS/SOA record remains; inspect delegation | `DELETE_ZONE <id>` |
-| Delete health check | Inspect record associations and failover impact | Human confirmation |
+| Delete record | Fetch exact current value; DELETE payload must match | `confirm=DELETE_RECORD <zone>:<name>:<type>` |
+| Delete hosted zone | Refuse while any non-NS/SOA record remains; inspect delegation | `confirm=DELETE_HOSTED_ZONE <zone-id>` |
+| Delete health check | Inspect record associations and failover impact | `confirm=DELETE_HEALTH_CHECK <id>` |
 | Automated failover | Correlate Route53 and ELB health; never switch on one noisy sample | Decision-tier/token authorization |
 
 Never delete default NS/SOA records directly. Mask private endpoint/IP metadata when policy requires.

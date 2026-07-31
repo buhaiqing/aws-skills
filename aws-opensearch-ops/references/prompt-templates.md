@@ -38,6 +38,15 @@
   request was not echoed from a `describe-*` lookup (rule A8).
 ```
 
+## Confirmation Strings
+- `upgrade-domain`:           `confirm=UPGRADE_DOMAIN <domain-name> to <version>`
+- `delete-domain`:            `confirm=DELETE_DOMAIN <domain-name>`
+- `delete-domain` (prod tag): `confirm=DELETE_PROD_DOMAIN <domain-name>`
+- `delete-snapshot`:          `confirm=DELETE_SNAPSHOT <snapshot-name> from <domain-name>`
+- `delete-vpc-endpoint`:      `confirm=DELETE_VPC_ENDPOINT <vpc-endpoint-id>`
+- `delete-ingestion`:         `confirm=DELETE_INGESTION <pipeline-name>`
+- `delete-ingestion` (running): `confirm=DELETE_RUNNING_INGESTION <pipeline-name>`
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.

@@ -1,0 +1,46 @@
+---
+skill: aws-security-copilot
+description: |
+  Golden suite for aws-security-copilot v0.1.0. 6 scenarios (read-only composite):
+  2 posture/list PASS, 2 investigation PASS, 1 empty safety_confirm PASS, 1 idempotent.
+  Run: python3 scripts/golden_eval.py run --skill aws-security-copilot \
+  --scenarios aws-security-copilot/golden-scenarios.yaml --out audit-results/golden/aws-security-copilot.json
+
+scenarios:
+  - id: secops-posture-summary
+    description: cross-service security posture summary
+    request: show me the security posture — any critical GuardDuty or Security Hub findings
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: secops-guardduty-investigate
+    description: GuardDuty finding investigation delegates to aws-guardduty-ops
+    request: investigate high severity GuardDuty findings from the last 24 hours
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: secops-compliance-check
+    description: Config compliance scan across accounts
+    request: run a compliance check and summarize non-compliant Config rules
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: secops-audit-no-confirm
+    description: read-only secrets/KMS/CloudTrail audit with empty safety_confirm PASS
+    request: audit Secrets Manager, KMS key rotation, and recent CloudTrail events
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: secops-iam-analyzer
+    description: IAM Access Analyzer findings via aws-iam-ops delegate
+    request: list IAM Access Analyzer policy findings for external access
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: secops-posture-idempotent
+    description: repeat posture summary is idempotent read-only orchestration
+    request: show me the security posture — any critical GuardDuty or Security Hub findings
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""

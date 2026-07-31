@@ -10,7 +10,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-07-06"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -85,8 +85,8 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Create resource/method | Verify parent/root, authorization, request settings | — |
 | Put Lambda integration | Verify Lambda ARN, invoke permission, URI, response mapping | — |
 | Deploy API | Verify methods/integrations; create deployment and validate stage | Production confirmation when replacing live deployment |
-| Delete stage | Inspect deployment, cache, traffic, and custom domains | `DELETE_STAGE {{user.stage_name}}` |
-| Delete API | List stages/resources/deployments and display blast radius | `DELETE_API {{user.api_id}}` |
+| Delete stage | Inspect deployment, cache, traffic, and custom domains | `confirm=DELETE_STAGE {{user.stage_name}}` |
+| Delete API | List stages/resources/deployments and display blast radius | `confirm=DELETE_REST_API {{user.api_id}}` |
 
 Mask authorization headers, API keys, request bodies, and integration credentials in traces. Deletion is irreversible and must never infer confirmation from intent.
 

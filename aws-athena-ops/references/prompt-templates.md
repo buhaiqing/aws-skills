@@ -33,6 +33,15 @@
 - Spec Compliance = 0 if database/catalog does not exist
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-work-group` | `confirm=DELETE_WORK_GROUP {{user.workgroup_name}}` |
+| `delete-named-query` | `confirm=DELETE_NAMED_QUERY {{user.named_query_id}}` |
+| `delete-data-catalog` | `confirm=DELETE_CATALOG {{user.catalog_name}}` |
+| `delete-prepared-statement` | `confirm=DELETE_PREPARED_STATEMENT {{user.prepared_statement_name}}` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -49,19 +58,6 @@
 | `{{output.critic_scores}}` | previous Critic | empty on iter 1 |
 | `{{output.iter}}` | counter | starts at 1 |
 | `{{output.operation}}` | classified op | see enum above |
-
----
-
-## Confirmation Strings (mandatory for every destructive op)
-
-> Substituted into the Generator template's `{skill.confirmation_strings}` slot.
-
-| Operation | Confirmation token | Safety consequence if absent |
-|---|---|---|
-| `delete-work-group` | `confirm=DELETE_WORK_GROUP <name>` | Safety = 0 → ABORT |
-| `delete-named-query` | `confirm=DELETE_NAMED_QUERY <id>` | Safety = 0 → ABORT |
-| `delete-data-catalog` | `confirm=DELETE_CATALOG <name>` | Safety = 0 → ABORT |
-| `delete-prepared-statement` | `confirm=DELETE_PREPARED_STATEMENT <name>` | Safety = 0 → ABORT |
 
 > See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
 > for the canonical Generator / Critic / Orchestrator templates and the

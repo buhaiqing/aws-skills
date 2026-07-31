@@ -1,0 +1,46 @@
+---
+skill: aws-finops-core
+description: |
+  Golden suite for aws-finops-core v1.0.0. 6 scenarios (read-only composite):
+  2 cost/idle PASS, 2 reporting PASS, 1 empty safety_confirm PASS, 1 idempotent.
+  Run: python3 scripts/golden_eval.py run --skill aws-finops-core \
+  --scenarios aws-finops-core/golden-scenarios.yaml --out audit-results/golden/aws-finops-core.json
+
+scenarios:
+  - id: finops-cost-anomaly
+    description: cost spike investigation via Cost Explorer
+    request: investigate unplanned cost spike over the last 30 days by service
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: finops-idle-sweep
+    description: idle resource discovery delegates to base skills
+    request: find idle EC2, RDS, Lambda, and load balancers with zero activity for 7 days
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: finops-tag-compliance
+    description: tag compliance audit for chargeback reporting
+    request: run tag compliance report for Environment and CostCenter tags
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: finops-ri-coverage-no-confirm
+    description: read-only RI/SP review with empty safety_confirm PASS
+    request: review reserved instance and savings plan coverage before renewal
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: finops-monthly-review
+    description: monthly cost review before finance close
+    request: monthly finops review — top anomalies, idle resources, and budget alerts
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: finops-idle-sweep-idempotent
+    description: repeat idle sweep is idempotent read-only orchestration
+    request: find idle EC2, RDS, Lambda, and load balancers with zero activity for 7 days
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""

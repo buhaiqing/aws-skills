@@ -1,0 +1,46 @@
+---
+skill: aws-aiops-copilot
+description: |
+  Golden suite for aws-aiops-copilot v0.1.0. 6 scenarios (read-only composite):
+  2 health/patrol PASS, 2 delegation PASS, 1 empty safety_confirm PASS, 1 idempotent.
+  Run: python3 scripts/golden_eval.py run --skill aws-aiops-copilot \
+  --scenarios aws-aiops-copilot/golden-scenarios.yaml --out audit-results/golden/aws-aiops-copilot.json
+
+scenarios:
+  - id: aiops-health-check
+    description: unified health check delegates to aws-aiops-cruise
+    request: check my AWS health across production services
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: aiops-single-service-rca
+    description: single-service RCA routes to cruise health-check/rca
+    request: why is the RDS database slow in us-east-1
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: aiops-cross-service-rca
+    description: multi-service symptoms delegate to orchestrator
+    request: prod is slow — correlate latency across ALB, ECS, and RDS
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: aiops-patrol-no-confirm
+    description: read-only patrol with empty safety_confirm still PASS
+    request: run a read-only patrol on my AWS account
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: aiops-unified-entry-rca
+    description: unified entry point maps intent to cruise RCA
+    request: investigate elevated 5xx errors on the payment API
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: aiops-health-check-idempotent
+    description: same health-check intent yields stable delegation plan
+    request: check my AWS health across production services
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: ""

@@ -16,7 +16,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-06-08"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -83,11 +83,11 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/modify domain | Validate engine/type, VPC, access policy, encryption; poll active | Token for high-impact topology/access changes |
-| Upgrade domain | Verify supported target and upgrade eligibility | `UPGRADE_DOMAIN <name> to <version>` |
-| Delete domain | Display permanent index/data loss; describe current state | `DELETE_DOMAIN <name>` |
-| Delete snapshot | Verify snapshot and recovery need | `DELETE_SNAPSHOT <snapshot> from <domain>` |
-| Delete VPC endpoint | Describe endpoint/domain users | `DELETE_VPC_ENDPOINT <id>` |
-| Delete ingestion pipeline | Verify pipeline is not active and inspect consumers | `DELETE_INGESTION <name>` |
+| Upgrade domain | Verify supported target and upgrade eligibility | `confirm=UPGRADE_DOMAIN <name> to <version>` |
+| Delete domain | Display permanent index/data loss; describe current state | `confirm=DELETE_DOMAIN <name>` |
+| Delete snapshot | Verify snapshot and recovery need | `confirm=DELETE_SNAPSHOT <snapshot> from <domain>` |
+| Delete VPC endpoint | Describe endpoint/domain users | `confirm=DELETE_VPC_ENDPOINT <id>` |
+| Delete ingestion pipeline | Verify pipeline is not active and inspect consumers | `confirm=DELETE_INGESTION <name>` |
 | Auto-heal/diagnose | Collect health, shards, metrics; AUTO_HEAL only non-destructive | Tier/token rules below |
 
 Mask credentials, access-policy secrets, auth headers, query bodies, and sensitive index data in traces.

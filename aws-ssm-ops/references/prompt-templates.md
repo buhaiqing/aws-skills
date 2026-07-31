@@ -35,6 +35,13 @@
   from a `describe-*` / `list-*` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `send-command` | `confirm=SEND_COMMAND <instance-ids>` |
+| `delete-parameter` | `confirm=DELETE_PARAMETER <name>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -43,7 +50,7 @@
 | Placeholder | Resolved from | Notes |
 |---|---|---|
 | `{{user.request}}` | agent runtime | sanitized; never includes secret env values |
-| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; trace must record exact literal per operation (`confirm=SEND_COMMAND <doc>`, `confirm=DELETE_PARAM <name>`, etc.) |
+| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; trace must record exact literal per operation (`confirm=SEND_COMMAND <instance-ids>`, `confirm=DELETE_PARAMETER <name>`, etc.) |
 | `{{user.region}}` | user input or `{{env.AWS_DEFAULT_REGION}}` | SSM resources are regional; mismatch → Correctness=0 (rule A7) |
 | `{{env.AWS_ACCESS_KEY_ID}}` | runtime env | NEVER prompt user; fail if unset |
 | `{{env.AWS_SECRET_ACCESS_KEY}}` | runtime env | NEVER prompt user; NEVER log (rule A9) |
@@ -60,6 +67,7 @@
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table; aligned DELETE_PARAMETER token with rubric. |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-ssm-ops` |
 
 ---

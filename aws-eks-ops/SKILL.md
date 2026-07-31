@@ -15,7 +15,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-10"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -76,9 +76,17 @@ EC2 → `aws-ec2-ops`; VPC → `aws-vpc-ops`; pod IAM → `aws-iam-ops`; load ba
 
 Every operation follows **Pre-flight → Execute → Validate → Recover**. Run `aws --version`, `aws sts get-caller-identity --output json`, and verify VPC, IAM, kubectl, and identifiers. Use CLI `--output json`, then boto3 after 3 CLI failures. Poll cluster/nodegroup/Fargate status to `ACTIVE`; recover with bounded throttling backoff and halt on name conflicts, quota, or missing resources. See [aws-cli-usage.md](references/aws-cli-usage.md), [boto3-sdk-usage.md](references/boto3-sdk-usage.md), and [troubleshooting.md](references/troubleshooting.md).
 
-## Safety Gates
+## Operations and Safety
 
-Delete cluster only in order: list/delete Fargate profiles, addons, and nodegroups; wait for each deletion; then delete the cluster and confirm `DELETE_CLUSTER {{user.cluster_name}}`. Delete nodegroup requires `DELETE_NODEGROUP {{user.nodegroup_name}}` because instances terminate. Version updates require confirmation and only one minor version jump. Mask kubeconfig/certificate data in traces.
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Delete cluster | Sequenced cleanup: Fargate profiles → addons → nodegroups → cluster | `confirm=DELETE_CLUSTER <name>` |
+| Delete nodegroup | Describe nodegroup; terminates EC2 instances | `confirm=DELETE_NODEGROUP <name>` |
+| Delete addon | Describe addon and cluster dependencies | `confirm=DELETE_ADDON <name>` |
+| Delete Fargate profile | List profiles and pod selectors | `confirm=DELETE_FARGATE_PROFILE <name>` |
+| Update cluster version | One minor version jump; compat check | Human confirmation |
+
+Mask kubeconfig/certificate data in traces.
 
 ## Quality Gate (GCL)
 
@@ -90,7 +98,7 @@ TE-1…TE-6 apply; query live versions and quotas, keep SDK examples comment-onl
 
 ## Reference Files
 
-[quick-start.md](references/quick-start.md) · [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [security-best-practices.md](references/security-best-practices.md) · [backup-recovery.md](references/backup-recovery.md)
+[quick-start.md](references/quick-start.md) · [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md)
 
 ## AIOps Delegate Contract
 

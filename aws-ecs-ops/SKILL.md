@@ -19,7 +19,7 @@ metadata:
     - ecs-idle-service-discovery
     - ecs-fargate-rightsizing
     - ecs-fargate-spot-optimization
-  last_updated: "2026-07-21"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -88,10 +88,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/update cluster/service | Validate task definition, network, capacity, desired count; read back | Token for production scale/deploy |
-| Stop task | Echo task and reason; assess service replacement | `STOP_TASK <task_arn>` in production |
-| Delete service | Drain/scale to 0 and inspect traffic/dependencies | `DELETE_SERVICE <name>` |
+| Stop task | Echo task and reason; assess service replacement | `confirm=STOP_TASK {{user.task_arn}}` in production |
+| Delete service | Drain/scale to 0 and inspect traffic/dependencies | `confirm=DELETE_SERVICE {{user.service_name}}` |
 | Deregister task definition | Verify revisions and live service references | Human confirmation |
-| Delete cluster | Verify no services/tasks remain | `DELETE_CLUSTER <name>` |
+| Delete cluster | Verify no services/tasks remain | `confirm=DELETE_CLUSTER {{user.cluster_name}}` |
 | Update capacity providers | Diff capacity/fallback impact | Human confirmation |
 
 Mask container environment variables, secrets, image credentials, task payloads, and logs in traces.

@@ -10,7 +10,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -79,7 +79,7 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 |---|---|---|
 | Describe/list findings | Read-only; verify detector and filters | — |
 | Create/update filter/list | Validate criteria and action/rank | Token for broad archive/suppression |
-| Delete filter | Verify exact filter and findings impact | `DELETE_GUARDDUTY_FILTER <name>` |
+| Delete filter | Verify exact filter and findings impact | `confirm=DELETE_GUARDDUTY_FILTER <name>` |
 | Disable/delete detector | Show account-wide detection impact and members | Human confirmation |
 | Archive finding | Echo finding IDs and reason; preserve evidence | Token for bulk archive |
 | Update threat/member/publishing | Diff scope and downstream response | Human confirmation for impact |

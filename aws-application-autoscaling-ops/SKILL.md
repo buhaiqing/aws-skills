@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.2.0"
-  last_updated: "2026-07-21"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   type: base
@@ -90,8 +90,8 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Ver
 | Register target | Verify resource and namespace/dimension; validate min≤max | — |
 | Update target capacity | Show current and requested capacity and outage/cost impact | Token for production or scale-to-zero |
 | Put policy | Verify target and policy uniqueness; validate metric/threshold | Token for aggressive/production policy |
-| Deregister target | List and remove scaling policies first (A11); validate absent | `DEREGISTER_TARGET <resource_id>` |
-| Delete policy | Verify target/policy and auto-scale impact | `DELETE_SCALING_POLICY <policy_name>` |
+| Deregister target | List and remove scaling policies first (A11); validate absent | `confirm=DEREGISTER_SCALABLE_TARGET {{user.resource_id}}` |
+| Delete policy | Verify target/policy and auto-scale impact | `confirm=DELETE_SCALING_POLICY {{user.policy_name}}` |
 | Tag resource | Diff keys/values; mask sensitive tags | Human confirmation for ownership/cost tags |
 
 ## Quality Gate (GCL)

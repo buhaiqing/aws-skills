@@ -54,9 +54,17 @@
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-queue` | `confirm=DELETE_QUEUE <queue-name>` |
+| `purge-queue` | `confirm=PURGE_QUEUE <queue-name>` |
+
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-sqs-ops` |
 
 ---

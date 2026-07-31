@@ -41,6 +41,17 @@
   `describe-*` / `get-*` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `disable-security-hub` | `confirm=DISABLE_SECURITY_HUB` |
+| `delete-insight` | `confirm=DELETE_INSIGHT <arn>` |
+| `delete-action-target` | `confirm=DELETE_ACTION_TARGET <arn>` |
+| `disable-import-findings-for-product` | `confirm=DISABLE_PRODUCT <arn>` |
+| `delete-automation-rule` | `confirm=DELETE_AUTOMATION_RULE <arn>` |
+| `delete-configuration-policy` | `confirm=DELETE_POLICY <id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -69,6 +80,7 @@
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table aligned with `rubric.md` confirm= literals. |
 | 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `aws-securityhub-ops` (required) |
 
 ---

@@ -11,7 +11,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-07-12"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -76,9 +76,9 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create file system | Validate encryption, tags, throughput/lifecycle; poll available | — |
-| Delete file system | Verify no mount targets, access points, backups, or consumers | `DELETE <file_system_id>` |
-| Create/delete mount target | Validate subnet/AZ and SG; delete only after consumers drain | Human confirmation before deletion |
-| Create/delete access point | Validate POSIX/root directory and consumers | Human confirmation before deletion |
+| Delete file system | Verify no mount targets, access points, backups, or consumers | `confirm=DELETE_FS <file-system-id>` |
+| Create/delete mount target | Validate subnet/AZ and SG; delete only after consumers drain | `confirm=DELETE_MOUNT_TARGET <mount-target-id>` |
+| Create/delete access point | Validate POSIX/root directory and consumers | `confirm=DELETE_ACCESS_POINT <access-point-id>` |
 | Update policy/throughput | Diff access and performance impact; read back | Token for public/widened access or disruptive change |
 
 Never log mount credentials, policy secrets, NFS client data, or sensitive tags.

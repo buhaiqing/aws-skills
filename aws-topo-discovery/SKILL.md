@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-13"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent, Claude Code, Cursor, or compatible Agent runtimes
   type: cross-product-discovery
   cli_applicability: cli-only
@@ -35,29 +35,14 @@ metadata:
 
 ## Common JSON Paths (Centralized)
 
-See [references/execution-commands.md §JSON Output Path Mapping](references/execution-commands.md#json-output-path-mapping) for all jq paths.
-
-
-Full jq mappings: `references/execution-commands.md` §JSON Output Path Mapping.
-
-## READ-ONLY PRINCIPLE
-
-See [references/read-only-principle.md](references/read-only-principle.md).
-
+VPC: .Vpcs[].{VpcId,CidrBlock,State}
+Subnets: .Subnets[].{SubnetId,VpcId,CidrBlock,AvailabilityZone}
+ELB: .LoadBalancers[].{LoadBalancerName,DNSName,Type,VpcId}
+Full jq mappings: [execution-commands.md#json-output-path-mapping](references/execution-commands.md#json-output-path-mapping)
 
 ## Overview
 
-`aws-topo-discovery` is a **cross-product network discovery tool** that automatically scans VPC network structures and associated resources (EC2/RDS/ELB/NAT/Elastic IP/EKS/Lambda/S3/Security Groups) under an AWS account, and generates structured network topology maps and resource inventory reports.
-
-### Core Features
-
-See [references/core-features.md](references/core-features.md) for all feature descriptions.
-
-### Relationship with Existing Skills
-
-See [references/relationships.md](references/relationships.md).
-
-
+Cross-product **read-only** network discovery: scans VPC topology and associated resources (EC2/RDS/ELB/NAT/EIP/EKS/Lambda/S3/SG), generates topology maps and inventory reports. Absolute read-only — see [read-only-principle.md](references/read-only-principle.md) and [safety-gate.md](references/safety-gate.md).
 
 ## Trigger & Scope
 
@@ -66,6 +51,7 @@ See [references/relationships.md](references/relationships.md).
 - Cross-product network topology mapping (VPC + EC2/RDS/ELB/NAT/EIP/EKS/Lambda/S3/SG)
 - Bulk resource inventory across an AWS account
 - Compliance audit needing full resource graph
+- HCL export, baseline snapshots, or drift comparison
 
 ### SHOULD NOT Use When
 
@@ -73,57 +59,19 @@ See [references/relationships.md](references/relationships.md).
 - Real-time monitoring → `aws-cloudwatch-ops`
 - Security findings investigation → `aws-guardduty-ops`
 
-### Delegation
-
-- Full SHOULD/SHOULD NOT criteria: see [references/trigger-scope.md](references/trigger-scope.md)
-
-## Delegation Rules
-
-| Capability | Delegate To | Notes |
-|------------|-------------|-------|
-| GCL quality gate | Self (`references/gcl-rubric.md`) | Optional per AGENTS.md §11.5; `max_iter=3`; read-only — Safety must = 1 |
+Full criteria: [trigger-scope.md](references/trigger-scope.md). Features: [core-features.md](references/core-features.md). Skill relationships: [relationships.md](references/relationships.md).
 
 ## Quality Gate (GCL)
 
-This Skill follows the AGENTS.md §11 Generator-Critic-Loop quality gate (**optional**, `max_iter=3`).
+Optional GCL (`max_iter=3`, read-only — Safety must = 1). Rubric: [gcl-rubric.md](references/gcl-rubric.md).
 
-### Rubric Dimensions
+## Pre-flight → Execute → Validate → Recover
 
-See [references/gcl-rubric.md](references/gcl-rubric.md) for full rubric.
-### GCL Prompt
+User decisions: [preflight-interaction.md](references/preflight-interaction.md). Variables: [variable-convention.md](references/variable-convention.md). Five-phase flows: [execution-flows.md](references/execution-flows.md). Recovery: [failure-recovery.md](references/failure-recovery.md).
 
-Generator → Critic loop details are in [references/gcl-rubric.md](references/gcl-rubric.md), following the standard AGENTS.md §11 workflow.
+## Extended References
 
-## Pre-flight Interaction (User Decisions)
-
-See [references/preflight-interaction.md](references/preflight-interaction.md) for the full configuration checklist.
-
-## Variable Convention
-
-See [references/variable-convention.md](references/variable-convention.md) for all placeholders.
-
-## Execution Flows
-
-See [references/execution-flows.md](references/execution-flows.md) for all 5 phases (pre-flight → data collection → rendering → report → verification).
-
-## Failure Recovery
-
-See [references/failure-recovery.md](references/failure-recovery.md) for the full error table.
-
-
----
-
-## Causal Graph Operations
-
-See [references/causal-graph-operations.md](references/causal-graph-operations.md) for `get-causal-graph` and `find-root-cause` operations.
-
-## Well-Architected Assessment
-
-See [references/well-architected.md](references/well-architected.md) for Security / Reliability / Cost / Operational Excellence / Performance guidance.
-
-## Token Efficiency
-
-See [references/token-efficiency.md](references/token-efficiency.md).
+Causal graph: [causal-graph-operations.md](references/causal-graph-operations.md) · Well-Architected: [well-architected.md](references/well-architected.md) · Token efficiency: [token-efficiency.md](references/token-efficiency.md)
 
 ## See Also
 

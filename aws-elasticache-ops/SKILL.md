@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-26"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -85,8 +85,8 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Modify/scale | Describe current config and failover impact; read back | Token when `--apply-immediately` may fail over |
 | Create snapshot | Verify source and unique name; poll available | — |
 | Delete snapshot | Inspect dependencies and retention need | Human confirmation |
-| Delete replication group | Display members/endpoints; default final snapshot; validate absent | `DELETE_RG <group-id>` |
-| Delete cache cluster | Display nodes/endpoints; default final snapshot; validate absent | `DELETE_CLUSTER <cluster-id>` |
+| Delete replication group | Display members/endpoints; default final snapshot; validate absent | `confirm=DELETE_RG <group-id>` |
+| Delete cache cluster | Display nodes/endpoints; default final snapshot; validate absent | `confirm=DELETE_CLUSTER <cluster-id>` |
 
 Never hardcode engine versions or node types; query live support. Mask auth tokens and sensitive endpoint data in traces.
 

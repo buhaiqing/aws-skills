@@ -15,7 +15,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-06-08"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -86,12 +86,12 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Disable Security Hub | List enabled standards and products; show loss of aggregation/score | `DISABLE_SECURITY_HUB` |
-| Delete insight | Describe ARN and filters | `DELETE_INSIGHT <arn>` |
-| Delete action target | Inspect automations/users | `DELETE_ACTION_TARGET <arn>` |
-| Disable product import | Inspect subscription and downstream findings | `DISABLE_PRODUCT <arn>` |
-| Delete automation rule | Describe rule/actions/order | `DELETE_AUTOMATION_RULE <arn>` |
-| Delete configuration policy | Inspect associations and affected accounts/OUs | `DELETE_POLICY <id>` |
+| Disable Security Hub | List enabled standards and products; show loss of aggregation/score | `confirm=DISABLE_SECURITY_HUB` |
+| Delete insight | Describe ARN and filters | `confirm=DELETE_INSIGHT <arn>` |
+| Delete action target | Inspect automations/users | `confirm=DELETE_ACTION_TARGET <arn>` |
+| Disable product import | Inspect subscription and downstream findings | `confirm=DISABLE_PRODUCT <arn>` |
+| Delete automation rule | Describe rule/actions/order | `confirm=DELETE_AUTOMATION_RULE <arn>` |
+| Delete configuration policy | Inspect associations and affected accounts/OUs | `confirm=DELETE_POLICY <id>` |
 
 Mask finding details that contain credentials, tokens, personal data, or sensitive resource metadata. AUTO_HEAL may update finding workflow only when policy permits; it must not disable controls or the Hub.
 

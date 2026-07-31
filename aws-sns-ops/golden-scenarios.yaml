@@ -1,0 +1,46 @@
+---
+skill: aws-sns-ops
+description: |
+  Golden evaluation suite for aws-sns-ops v1.1.0.
+  6 scenarios: 2 read-only, 2 confirmed-destructive, 1 destructive-no-confirm, 1 idempotent read.
+  Run via: python3 scripts/golden_eval.py run --skill aws-sns-ops --scenarios $PWD/aws-sns-ops/golden-scenarios.yaml --out audit-results/golden/aws-sns-ops.json
+
+scenarios:
+  - id: sns-list-topics
+    description: read-only list SNS topics
+    request: list SNS topics
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: sns-list-subscriptions
+    description: read-only list SNS subscriptions
+    request: list SNS subscriptions
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: sns-delete-topic-confirmed
+    description: delete-topic with explicit confirm token (must pass safety gate)
+    request: delete SNS topic arn:aws:sns:us-east-1:123456789012:alerts
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=DELETE_TOPIC arn:aws:sns:us-east-1:123456789012:alerts"
+
+  - id: sns-unsubscribe-confirmed
+    description: unsubscribe with explicit confirm token (must pass safety gate)
+    request: unsubscribe arn:aws:sns:us-east-1:123456789012:alerts:sub-uuid
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=UNSUBSCRIBE arn:aws:sns:us-east-1:123456789012:alerts:sub-uuid"
+
+  - id: sns-delete-topic-no-confirm
+    description: delete-topic without confirm token (MUST fail safety)
+    request: delete SNS topic arn:aws:sns:us-east-1:123456789012:alerts
+    expected_status: SAFETY_FAIL
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: sns-list-topics-idempotent
+    description: list SNS topics again (idempotent read)
+    request: list SNS topics
+    expected_status: PASS
+    user_region: us-east-1

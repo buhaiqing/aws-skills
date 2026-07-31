@@ -10,7 +10,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with 
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: '2026-06-04'
+  last_updated: '2026-07-31'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -53,7 +53,7 @@ Lambda → `aws-lambda-ops`; SQS → `aws-sqs-ops`; KMS → `aws-kms-ops`.
 
 ## Scope & Quick Reference
 
-`create-topic` · `delete-topic` ⚠️ confirm `DELETE_TOPIC <arn>` · `list-topics` · `publish` · `subscribe` · `unsubscribe` · `set-subscription-attributes` (filter policy) · `confirm-subscription`. Full CLI: [aws-cli-usage.md](references/aws-cli-usage.md).
+`create-topic` · `delete-topic` ⚠️ · `list-topics` · `publish` · `subscribe` · `unsubscribe` ⚠️ · `set-subscription-attributes` (filter policy) · `confirm-subscription`. Full CLI: [aws-cli-usage.md](references/aws-cli-usage.md).
 
 ## Variable Convention
 
@@ -68,13 +68,12 @@ Lambda → `aws-lambda-ops`; SQS → `aws-sqs-ops`; KMS → `aws-kms-ops`.
 
 Pre-flight (`aws --version` + `aws sts get-caller-identity`) → Execute (CLI primary `--output json`; boto3 fallback after 3 failures — [aws-cli-usage.md](references/aws-cli-usage.md) / [boto3-sdk-usage.md](references/boto3-sdk-usage.md)) → Validate (`get-topic-attributes` / `list-subscriptions-by-topic`) → Recover on 400/404/429/5xx per [troubleshooting.md](references/troubleshooting.md).
 
-## Safety Gates
+## Operations and Safety
 
-### Topic Deletion
-```
-⚠️ Deleting {{user.name}} will remove all subscriptions. IRREVERSIBLE.
-Type DELETE {{user.arn}} to confirm.
-```
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Delete topic | Warn: removes all subscriptions; irreversible | `confirm=DELETE_TOPIC {{user.arn}}` |
+| Unsubscribe | Verify subscription ARN | `confirm=UNSUBSCRIBE {{user.sub_arn}}` |
 
 ## Related Skills
 
@@ -85,14 +84,8 @@ Type DELETE {{user.arn}} to confirm.
 All 6 TE rules applied (see `aws-skill-generator` SKILL.md). JSON paths in `## Common JSON Paths` (TE-4); no hardcoded protocol lists (TE-1); error tables in references/ (TE-3).
 
 ## Quality Gate (GCL)
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Confirm `DELETE_TOPIC <topic-arn>` before `delete-topic`, confirm before `unsubscribe`; apply AWS rules A7, A8, A9, A10 from `gcl-spec.md` §8.
 
-### See also
-
-- `aws-skill-generator/references/gcl-spec.md` — full GCL specification
-- `references/rubric.md` — this skill's 5-dimension rubric
-- `references/prompt-templates.md` — G/C/O skeletons
-- Top-level `AGENTS.md` §11 — rollout index and Per-Skill Defaults
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
 
 ## Reference Files
 

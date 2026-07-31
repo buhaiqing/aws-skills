@@ -41,6 +41,22 @@
   `describe-file-systems` lookup (rule A8).
 ```
 
+## Supported Operations (Generator reference)
+- describe-file-systems, describe-mount-targets, describe-access-points
+- create-file-system, delete-file-system
+- create-mount-target, delete-mount-target
+- create-access-point, delete-access-point
+- put-file-system-policy, update-file-system
+
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-file-system` | `confirm=DELETE_FS <file-system-id>` |
+| `delete-mount-target` | `confirm=DELETE_MOUNT_TARGET <mount-target-id>` |
+| `delete-access-point` | `confirm=DELETE_ACCESS_POINT <access-point-id>` |
+| `put-file-system-policy` (public) | `confirm=PUT_POLICY_PUBLIC <file-system-id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -49,7 +65,7 @@
 | Placeholder | Resolved from | Notes |
 |---|---|---|
 | `{{user.request}}` | agent runtime | sanitized; never includes secret env values |
-| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; trace must record exact literal per operation |
+| `{{user.safety_confirm}}` | explicit user confirmation | required for destructive ops; trace must record exact literal per operation (`confirm=DELETE_FS <file-system-id>`, `confirm=DELETE_MOUNT_TARGET <mount-target-id>`, etc.) |
 | `{{user.region}}` | user input or `{{env.AWS_DEFAULT_REGION}}` | EFS is regional; mismatch → Correctness=0 (rule A7) |
 | `{{user.file_system_id}}` | user input | Echoed from `describe-file-systems` (rule A8) |
 | `{{user.mount_target_id}}` | user input | Echoed from `describe-mount-targets` |
@@ -65,10 +81,13 @@
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
+| `{{output.requested_region}}` | Orchestrator from `{{user.region}}` | Critic region-check target (rule A7) |
+| `{{output.safety_confirm_token}}` | Orchestrator from user confirmation | Critic Safety-gate target |
 
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table (waf-ops pattern); added `{{output.requested_region}}` and `{{output.safety_confirm_token}}`. |
 | 1.0.0 | 2026-07-12 | Initial GCL prompt templates for `aws-efs-ops` GCL rollout (required) |
 
 ---

@@ -38,6 +38,13 @@
   `describe-secret` / `list-secrets` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-secret` | `confirm=DELETE_SECRET <name>` |
+| `delete-secret` (force) | `confirm=FORCE_DELETE_SECRET <name>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -63,6 +70,7 @@
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table aligned with `rubric.md` confirm= literals. |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-secretsmanager-ops` |
 
 ---

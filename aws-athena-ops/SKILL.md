@@ -12,7 +12,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -80,10 +80,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
 | Create/update workgroup | Diff bytes-scanned/result-location/encryption controls | Token for production cost-policy changes |
-| Start/stop query | Echo SQL/workgroup and output location; poll terminal status | `STOP_QUERY <execution_id>` |
+| Start/stop query | Echo SQL/workgroup and output location; poll terminal status | `confirm=STOP_QUERY {{user.query_execution_id}}` |
 | Get results | Verify execution identity; mask sensitive rows | — |
-| Delete workgroup | Inspect running queries and cost/result configuration | `DELETE_WORK_GROUP <name>` |
-| Delete named query/catalog/prepared statement | Verify exact ID and dependent consumers | `DELETE_NAMED_QUERY`, `DELETE_CATALOG`, or `DELETE_PREPARED_STATEMENT` |
+| Delete workgroup | Inspect running queries and cost/result configuration | `confirm=DELETE_WORK_GROUP {{user.workgroup_name}}` |
+| Delete named query/catalog/prepared statement | Verify exact ID and dependent consumers | `confirm=DELETE_NAMED_QUERY {{user.named_query_id}}` · `confirm=DELETE_CATALOG {{user.catalog_name}}` · `confirm=DELETE_PREPARED_STATEMENT {{user.prepared_statement_name}}` |
 
 Mask SQL literals, result rows, credentials, and S3 output paths where sensitive.
 

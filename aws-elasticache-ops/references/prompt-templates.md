@@ -32,6 +32,20 @@
   was not echoed from a `describe-*` lookup (rule A8).
 ```
 
+## Supported Operations (Generator reference)
+- describe-replication-groups, describe-cache-clusters, describe-snapshots
+- create-replication-group, create-cache-cluster, create-snapshot
+- delete-replication-group, delete-cache-cluster, delete-snapshot
+- modify-replication-group, modify-cache-cluster
+
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-replication-group` | `confirm=DELETE_RG <group-id>` |
+| `delete-cache-cluster` | `confirm=DELETE_CLUSTER <cluster-id>` |
+| `delete-snapshot` | `confirm=DELETE_SNAPSHOT <snapshot-name>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -53,10 +67,13 @@
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
+| `{{output.requested_region}}` | Orchestrator from `{{user.region}}` | Critic region-check target (rule A7) |
+| `{{output.safety_confirm_token}}` | Orchestrator from user confirmation | Critic Safety-gate target |
 
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table (waf-ops pattern); added `{{output.requested_region}}` and `{{output.safety_confirm_token}}`. |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-elasticache-ops` |
 
 ---

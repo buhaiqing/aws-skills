@@ -47,6 +47,13 @@
   CloudFront is global).
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-distribution` | `confirm=DELETE_DISTRIBUTION {{user.DistributionId}}` |
+| `delete-distribution` (prod) | `confirm=DELETE_PROD_DISTRIBUTION {{user.DistributionId}}` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.

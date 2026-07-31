@@ -94,10 +94,10 @@ All destructive ops require explicit human confirmation with the op-specific str
 
 | Op | Confirmation string |
 |----|---------------------|
-| `delete-resource-share` | `DELETE_RESOURCE_SHARE {{user.share_arn}}` |
-| `delete-permission` | `DELETE_PERMISSION {{user.permission_arn}}` |
-| `delete-permission-version` | `DELETE_PERMISSION_VERSION {{user.permission_arn}} {{user.permission_version}}` |
-| `reject-resource-share-invitation` | `REJECT_INVITATION {{user.invitation_arn}}` |
+| `delete-resource-share` | `confirm=DELETE_RESOURCE_SHARE {{user.share_arn}}` |
+| `delete-permission` | `confirm=DELETE_PERMISSION {{user.permission_arn}}` |
+| `delete-permission-version` | `confirm=DELETE_PERMISSION_VERSION {{user.permission_arn}} {{user.permission_version}}` |
+| `reject-resource-share-invitation` | `confirm=REJECT_INVITATION {{user.invitation_arn}}` |
 
 Before each: display the impact (principals/shares that will lose access), then require the typed confirmation string.
 

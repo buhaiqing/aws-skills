@@ -62,9 +62,18 @@
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification of the user request | one of the listed operation types |
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-repository` | `confirm=DELETE <repository-name>` |
+| `batch-delete-image` | `confirm=DELETE <count> images` |
+| `set-repository-policy` (Principal `*`) | `confirm=PUT_POLICY_PUBLIC <repository-name>` |
+
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings table for L4 golden eval alignment |
 | 1.0.0 | 2026-07-12 | Initial GCL prompt templates for `aws-ecr-ops` GCL rollout (required) |
 
 ---

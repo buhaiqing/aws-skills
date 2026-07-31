@@ -12,7 +12,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-15"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -75,12 +75,12 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Send command | Echo targets, inspect command/document, poll each invocation | `SEND_COMMAND <instance-ids>` |
+| Send command | Echo targets, inspect command/document, poll each invocation | `confirm=SEND_COMMAND <instance-ids>` |
 | Get/list invocation | Verify command and instance IDs; read-only | — |
 | List managed instances | Read-only; validate PingStatus | — |
 | Start session | Verify target and plugin; interactive shell access | Human confirmation |
 | Cancel command | Verify command is running; validate cancelled state | Human confirmation |
-| Delete parameter/document | Inspect dependencies and versions | `DELETE_PARAMETER <name>` or operation-specific token |
+| Delete parameter/document | Inspect dependencies and versions | `confirm=DELETE_PARAMETER <name>` or operation-specific token |
 
 Mask secrets from command parameters, stdout, stderr, and traces. Never log credentials or session material.
 

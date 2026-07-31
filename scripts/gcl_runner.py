@@ -291,7 +291,11 @@ def _invoke_generator(ctx: dict[str, Any], cmd: list[str] | None) -> dict[str, A
         # Self-test stub: produces a synthetic generator_output that surfaces
         # the user-supplied safety_confirm once it's present in the trace.
         request = (ctx.get("user", {}).get("request") or "").lower()
-        destructive_kw = ("delete", "terminate", "detach", "revoke", "disable", "drop")
+        # Align with runtime_safety.DESTRUCTIVE_VERBS (incl. deregister/purge/reject).
+        destructive_kw = (
+            "delete", "terminate", "detach", "revoke", "disable", "drop",
+            "deregister", "purge", "reject", "destroy",
+        )
         return {
             "command": "aws --self-test",
             "args": {},
@@ -312,8 +316,8 @@ def _invoke_critic(
     if cmd is None:
         # Self-test stub: Critic scores Safety=0 unless the request is for a
         # destructive operation AND a confirmation token was produced. Read-only
-        # requests (no `delete`/`terminate`/`detach`/`revoke`/`disable` keyword)
-        # pass Safety=1 by default to verify the read path works end-to-end.
+        # requests (no destructive keyword in request) pass Safety=1 by default
+        # to verify the read path works end-to-end.
         # When `flaky_critic=True` is passed in ctx (via --flaky-critic CLI flag),
         # idempotency is scored 0 to exercise the MAX_ITER termination path.
         gen_out = ctx.get("generator_output", {})

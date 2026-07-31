@@ -16,7 +16,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-15"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -103,14 +103,14 @@ KMS → `aws-kms-ops`; Lambda → `aws-lambda-ops`; IAM → `aws-iam-ops`.
 ```
 ⚠️ Deleting {{user.SecretName}} will remove all versions. Default recovery window: 30 days.
 Use --force-delete-without-recovery for immediate deletion (no recovery).
-Confirm: Type DELETE {{user.SecretName}} to proceed.
+Confirm: `confirm=DELETE_SECRET {{user.SecretName}}` (or `confirm=FORCE_DELETE_SECRET {{user.SecretName}}` for immediate deletion).
 ```
 
 ## Token Efficiency
 TE-1…TE-6 apply; query live secret metadata, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Quality Gate (GCL)
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Confirm `DELETE_SECRET <name>` before deletion, `FORCE_DELETE_SECRET <name>` for immediate deletion, and confirm before `put-secret-value`; apply A7–A10, with SecretString/Binary always masked.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Confirm `confirm=DELETE_SECRET <name>` before deletion, `confirm=FORCE_DELETE_SECRET <name>` for immediate deletion, and confirm before `put-secret-value`; apply A7–A10, with SecretString/Binary always masked.
 
 ## Reference Files
 [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [integration.md](../aws-skill-generator/references/integration.md)

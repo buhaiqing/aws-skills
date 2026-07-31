@@ -9,7 +9,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials, netw
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: '2026-06-04'
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -88,7 +88,7 @@ S3 → `aws-s3-ops`; Route53 → `aws-route53-ops`; ACM → `aws-acm-ops`; Lambd
 ⚠️ Distribution must be DISABLED before deletion.
 1. `update-distribution` with Enabled=false
 2. Wait for Deployed status
-3. Confirm: Type DELETE {{user.DistributionId}} to proceed.
+3. Confirm: `confirm=DELETE_DISTRIBUTION {{user.DistributionId}}` (prod: `confirm=DELETE_PROD_DISTRIBUTION {{user.DistributionId}}`).
 ```
 
 ## Related Skills
@@ -109,7 +109,7 @@ TE-1…TE-6 apply; query live distribution data, keep SDK examples comment-only,
 - [Troubleshooting](references/troubleshooting.md)
 - [Integration Setup](../aws-skill-generator/references/integration.md)
 ## Quality Gate (GCL)
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. For deletion: disable first, poll `Status=Deployed`, then confirm `DELETE_DISTRIBUTION <id>` (prod uses `DELETE_PROD_DISTRIBUTION <id>`); apply A7–A10 from `gcl-spec.md` §8.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. For deletion: disable first, poll `Status=Deployed`, then `confirm=DELETE_DISTRIBUTION {{user.DistributionId}}` (prod: `confirm=DELETE_PROD_DISTRIBUTION {{user.DistributionId}}`); apply A7–A10; Safety=0 aborts.
 
 ## AIOps Delegate Contract
 

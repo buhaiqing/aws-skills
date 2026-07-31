@@ -1,0 +1,46 @@
+---
+skill: aws-elasticache-ops
+description: |
+  Golden evaluation suite for aws-elasticache-ops v1.1.0.
+  6 scenarios: 2 read-only, 2 confirmed-destructive, 1 destructive-no-confirm, 1 idempotent read.
+  Run via: python3 scripts/golden_eval.py run --skill aws-elasticache-ops --scenarios $PWD/aws-elasticache-ops/golden-scenarios.yaml --out audit-results/golden/aws-elasticache-ops.json
+
+scenarios:
+  - id: elasticache-describe-replication-groups
+    description: read-only describe replication groups
+    request: list ElastiCache replication groups
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: elasticache-describe-cache-clusters
+    description: read-only describe cache clusters
+    request: describe ElastiCache cluster my-cache-001
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: elasticache-delete-replication-group-confirmed
+    description: delete-replication-group with explicit confirm token (must pass safety gate)
+    request: delete ElastiCache replication group my-redis-rg
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=DELETE_RG my-redis-rg"
+
+  - id: elasticache-delete-cache-cluster-confirmed
+    description: delete-cache-cluster with explicit confirm token (must pass safety gate)
+    request: delete ElastiCache cluster my-cache-001
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=DELETE_CLUSTER my-cache-001"
+
+  - id: elasticache-delete-replication-group-no-confirm
+    description: delete-replication-group without confirm token (MUST fail safety)
+    request: delete ElastiCache replication group my-redis-rg
+    expected_status: SAFETY_FAIL
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: elasticache-describe-replication-groups-idempotent
+    description: describe-replication-groups again (idempotent read)
+    request: list ElastiCache replication groups
+    expected_status: PASS
+    user_region: us-east-1

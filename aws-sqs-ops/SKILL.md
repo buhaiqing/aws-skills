@@ -10,7 +10,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with 
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: '2026-06-04'
+  last_updated: '2026-07-31'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -56,9 +56,7 @@ Lambda → `aws-lambda-ops`; KMS → `aws-kms-ops`; metrics → `aws-cloudwatch-
 
 | Placeholder | Source | Agent Action |
 |-------------|--------|--------------|
-| `{{env.AWS_ACCESS_KEY_ID}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_SECRET_ACCESS_KEY}}` | Runtime env | NEVER ask user; fail if unset |
-| `{{env.AWS_DEFAULT_REGION}}` | Runtime env | Use default only if skill allows |
+| `{{env.AWS_*}}` | Runtime env | Never ask; fail closed if unset |
 | `{{user.QueueName}}` | User input | Ask once; reuse |
 | `{{user.QueueUrl}}` | User input | Ask once; reuse |
 | `{{user.MessageBody}}` | User input | Ask once; reuse |
@@ -74,34 +72,22 @@ Lambda → `aws-lambda-ops`; KMS → `aws-kms-ops`; metrics → `aws-cloudwatch-
 
 **Validate**: Use `get-queue-attributes` to confirm create/update. Poll max 60s for delete/purge.
 
-**Common Recovery**:
-| Error | Action |
-|-------|--------|
-| InvalidParameterValue (400) | Fix params; retry once |
-| ResourceNotFound (404) | Verify queue name/URL |
-| Throttling (429) | Backoff, retry 3x |
-| InternalError (5xx) | Retry 3x; HALT |
+**Recover**: 400/404/429/5xx per [troubleshooting.md](references/troubleshooting.md).
 
-## Safety Gates
+## Operations and Safety
 
-### Queue Deletion
-```
-⚠️ Queue deletion is irreversible. All messages in {{user.QueueName}} will be lost.
-Confirm: Type DELETE {{user.QueueName}} to proceed.
-```
-
-### Queue Purge
-```
-⚠️ Purging {{user.QueueName}} will delete all messages immediately. No recovery possible.
-Confirm: Type PURGE {{user.QueueName}} to proceed.
-```
+| Operation | Pre-flight / validation | Confirmation |
+|---|---|---|
+| Delete queue | Irreversible; all messages in queue lost | `confirm=DELETE_QUEUE {{user.QueueName}}` |
+| Purge queue | Deletes all messages immediately; no recovery | `confirm=PURGE_QUEUE {{user.QueueName}}` |
 
 ## Token Efficiency
 
 TE-1…TE-6 apply; query live attributes/limits, keep SDK examples comment-only, centralize JSON paths above, use asset anchors, and keep flows single-sourced.
 
 ## Quality Gate (GCL)
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Confirm `DELETE_QUEUE <queue-name>` before `delete-queue` and `PURGE_QUEUE <queue-name>` before `purge-queue`; apply A7, A8, A9, A10 from `gcl-spec.md` §8.
+
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts.
 
 ## Reference Files
 
