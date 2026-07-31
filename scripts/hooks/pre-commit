@@ -59,8 +59,17 @@ check_skill_md() {
 
 # Lint gate: fail-closed ruff on full repo (all .py files, independent of staged files).
 # Catches context-breaking lint slips anywhere in the repo, not just in scripts/.
+# ponytail: --config pins rule set to the hook repo's ruff.toml so REPO_ROOT
+# hermetic tests (cwd in a tmp git tree) do not skip E7 via missing local config.
+TOOLING_ROOT="$(dirname "$SCRIPTS_DIR")"
+RUFF_CFG="$TOOLING_ROOT/ruff.toml"
 if command -v ruff >/dev/null 2>&1; then
-    if ! ruff check "$REPO" >/dev/null 2>&1; then
+    if [ -f "$RUFF_CFG" ]; then
+        RUFF_CMD=(ruff check --config "$RUFF_CFG" "$REPO")
+    else
+        RUFF_CMD=(ruff check "$REPO")
+    fi
+    if ! "${RUFF_CMD[@]}" >/dev/null 2>&1; then
         FAIL_REASONS+=("ruff check . failed — fix before committing (ruff check --fix .)")
         FAIL=1
     fi
