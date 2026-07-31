@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Execute structured tool calls only after Runtime Safety allows them."""
+"""Execute structured tool calls only after Runtime Safety allows them.
+
+ADR-0001 M2: destructive AWS ops additionally require plan_hash + on-disk
+ShadowEvidence (ok=true) + plan-bound safety_confirm before ALLOW exec.
+"""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from runtime_safety import ToolCall, check_tool_call, load_failure_patterns
+from runtime_safety import ToolCall, check_tool_call, detect_destructive, load_failure_patterns
+from shadow_exec import SHADOW_DIR, find_shadow_evidence
 
 
 def _emit(payload: dict) -> None:
@@ -31,6 +36,7 @@ def _tool_call_from_payload(command: list[str], payload: dict) -> ToolCall:
         args=call_args,
         is_destructive=payload.get("is_destructive"),
         safety_confirm=str(payload.get("safety_confirm") or ""),
+        plan_hash=str(payload.get("plan_hash") or ""),
     )
 
 
@@ -55,11 +61,47 @@ def _is_trusted_aws_executable(command_name: str) -> bool:
         return False
 
 
+def _shadow_gate(
+    call: ToolCall,
+    *,
+    shadow_dir: Path,
+) -> dict | None:
+    """BLOCK payload if destructive call lacks plan_hash / shadow / plan-bound token setup.
+
+    Token correctness is still enforced by check_tool_call once plan_hash is set.
+    Returns None when the shadow preconditions pass.
+    """
+    if not detect_destructive(call.tool_name):
+        return None
+    if not call.plan_hash:
+        return {
+            "decision": "BLOCK",
+            "executed": False,
+            "reason": "destructive op requires plan_hash + ShadowEvidence before execution",
+        }
+    evidence = find_shadow_evidence(call.plan_hash, audit_dir=shadow_dir)
+    if evidence is None:
+        return {
+            "decision": "BLOCK",
+            "executed": False,
+            "reason": (
+                f"missing ok ShadowEvidence for plan_hash={call.plan_hash[:16]}… "
+                f"under {shadow_dir}"
+            ),
+        }
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="safe_tool_proxy")
     parser.add_argument("--patterns", action="append", required=True)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--shadow-dir",
+        default=str(SHADOW_DIR),
+        help="Directory of shadow-*.json evidence (ADR-0001 M2)",
+    )
     args = parser.parse_args(argv)
 
     raw = sys.stdin.read().strip()
@@ -85,6 +127,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     call = _tool_call_from_payload(command, payload)
+    shadow_block = _shadow_gate(call, shadow_dir=Path(args.shadow_dir))
+    if shadow_block is not None:
+        _emit(shadow_block)
+        return 1
+
     patterns = []
     for pattern_path in args.patterns:
         patterns.extend(load_failure_patterns(Path(pattern_path)))
@@ -101,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         _emit({
             "decision": "ALLOW", "executed": False, "would_execute": True,
             "command": command,
+            "plan_hash": call.plan_hash or None,
         })
         return 0
 
@@ -121,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
+        "plan_hash": call.plan_hash or None,
     })
     return completed.returncode
 

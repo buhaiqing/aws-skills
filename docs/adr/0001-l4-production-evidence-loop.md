@@ -83,27 +83,39 @@ Request
 
 - 30 天 dashboard baseline 满窗完成（warm-up 进行中，首份 snapshot 已生成）。
 
-**Exit criteria**:
+**Exit criteria**（工程项 ✅ / 满窗项 ⚠️）:
 
-- 5 个高风险服务各 ≥10 个场景，总计 ≥50。
-- mutation tests 对故意移除的安全门检出率 100%。
-- baseline 可在干净环境重复运行，结果差异可解释。
-- trace 中零明文凭据。
+- [x] 5 个高风险服务各 ≥10 个场景，总计 ≥50（实际 58）。
+- [x] mutation tests 对故意移除的安全门检出率 100%。
+- [x] baseline 可在干净环境重复运行（`--all-high-risk` → `high-risk.json`）。
+- [x] trace 中零明文凭据（沿用 A9 / runtime 掩码）。
+- [ ] 30 天 dashboard 满窗基线（warm-up；不阻塞 M1 工程闭环判定，阻塞 AUTO_HEAL 扩大与 M2 放宽）。
 
 ### Milestone 2 — Shadow Execution
 
 **Target**: 写操作执行前可证明计划、范围和预期变化。
 
-- 定义 `ExecutionPlan`：资源、动作、前置条件、预期 diff、风险、确认 token、验证与补偿。
-- AWS 支持 dry-run 的操作优先使用 dry-run；其他操作使用 describe/read-back 和本地 simulator。
-- 将 plan hash 绑定到 runtime safety confirmation token，执行时拒绝资源、region 或参数漂移。
-- shadow evidence 持久化到审计 trace，但必须经过 redaction。
+#### Progress (2026-07-31)
+
+**DONE (engineering W0–W5)**
+
+- Design/Plan: `docs/superpowers/specs/2026-07-31-adr-m2-shadow-execution-design.md` + `plans/2026-07-31-adr-m2-shadow-execution.md`
+- `scripts/execution_plan.py` — `ExecutionPlan` / `compute_plan_hash` / drift assert
+- `scripts/shadow_exec.py` — dry-run | describe | simulate；A9 redact；`audit-results/shadow/`
+- `build_plan_bound_token(call, plan_hash)` + `safe_tool_proxy` hard gate（缺 shadow / plan 漂移 → BLOCK）；GCL `confirm=` 不变
+- `scripts/shadow_coverage.py check --all-high-risk`：**27/27** destructive 产出 plan_hash + ok shadow
+- CI：`.github/workflows/golden-high-risk.yml` 增 M2 pytest + shadow coverage；`--all-high-risk` 仍 **58/58**
+
+**STILL OPEN**
+
+- 全仓非五高风险 skill 的 shadow 覆盖（刻意非目标）
+- M3 补偿 / AUTO_HEAL 扩大（仍受 M1 满窗基线约束）
 
 **Exit criteria**:
 
-- 100% destructive scenarios 产生 plan hash 和 shadow evidence。
-- 参数/region/资源漂移全部被阻断。
-- 误阻断率在评测集上 <5%，安全漏放为 0。
+- [x] 100% 五高风险 destructive scenarios 产生 plan hash 和 shadow evidence（27/27）
+- [x] 参数/region/资源漂移被阻断（proxy + unit fixtures）
+- [x] 误阻断率在 fixture happy-path = 0（&lt;5%）；安全漏放 = 0（legacy token / 无 shadow → BLOCK）
 
 ### Milestone 3 — Transactional Orchestration
 

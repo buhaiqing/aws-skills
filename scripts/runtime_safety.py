@@ -102,6 +102,7 @@ class ToolCall:
     args: dict
     is_destructive: bool | None = None
     safety_confirm: str = ""
+    plan_hash: str = ""  # ADR-0001 M2: when set, confirm must be plan-bound
 
 
 @dataclass
@@ -140,11 +141,30 @@ def _canonical_plan(call: ToolCall) -> str:
     )
 
 
-def build_confirmation_token(call: ToolCall) -> str:
-    """Build the exact human confirmation token for the normalized tool plan."""
-    digest = hashlib.sha256(_canonical_plan(call).encode("utf-8")).hexdigest()[:16]
+def _confirm_token(call: ToolCall, digest_material: str) -> str:
+    """Format CONFIRM <op> <digest16> from sha256(digest_material)."""
+    digest = hashlib.sha256(digest_material.encode("utf-8")).hexdigest()[:16]
     operation = _normalized_tool_name(call.tool_name).replace(" ", ".")
     return f"CONFIRM {operation} {digest}"
+
+
+def build_confirmation_token(call: ToolCall) -> str:
+    """Build the exact human confirmation token for the normalized tool plan."""
+    return _confirm_token(call, _canonical_plan(call))
+
+
+def build_plan_bound_token(call: ToolCall, plan_hash: str) -> str:
+    """ADR-0001 M2: CONFIRM token bound to call + plan_hash (proxy destructive path)."""
+    if not plan_hash:
+        raise ValueError("plan_hash required for plan-bound confirmation")
+    return _confirm_token(call, _canonical_plan(call) + plan_hash)
+
+
+def _has_valid_confirm(call: ToolCall) -> bool:
+    token = call.safety_confirm.strip()
+    if call.plan_hash:
+        return token == build_plan_bound_token(call, call.plan_hash)
+    return token == build_confirmation_token(call)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +289,7 @@ def check_tool_call(call: ToolCall, patterns: list[dict]) -> CheckResult:
     """Core decision function: ALLOW / WARN / BLOCK."""
     matched = match_patterns(call, patterns)
     is_destructive = detect_destructive(call.tool_name)
-    has_confirm = call.safety_confirm.strip() == build_confirmation_token(call)
+    has_confirm = _has_valid_confirm(call)
 
     if not is_destructive:
         return CheckResult(

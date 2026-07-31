@@ -93,5 +93,6 @@ done && echo OK
 
 ## 完成定义
 
-Wave 1：spec + plan 合并 → 可开始 T1。
-Wave 2：A1–A5 全 exit 0；ADR M1 progress 已更新（mutation/trace outcome landing this PR；dashboard warm-up started）。
+- [x] Wave 1：spec + plan 合并 → T1 可开始。
+- [x] Wave 2：A1–A5 全 exit 0；mutation CI + outcome 五态已合入（`d338b9b`）；dashboard warm-up started。
+- **Status**: **DONE**（M1 工程闭环）。剩余仅 30 天满窗基线（见 ADR Progress STILL OPEN）。

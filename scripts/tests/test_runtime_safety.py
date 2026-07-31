@@ -21,9 +21,62 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from runtime_safety import (  # noqa: E402
     ToolCall,
     build_confirmation_token,
+    build_plan_bound_token,
     load_failure_patterns,
     check_tool_call,
 )
+
+
+def test_plan_bound_token_differs_from_legacy_and_binds_hash():
+    call = ToolCall(
+        tool_name="aws ec2 terminate-instances",
+        args={"instance_ids": ["i-123"]},
+    )
+    legacy = build_confirmation_token(call)
+    bound_a = build_plan_bound_token(call, "hash-aaa")
+    bound_b = build_plan_bound_token(call, "hash-bbb")
+    assert bound_a != legacy
+    assert bound_a != bound_b
+    assert bound_a.startswith("CONFIRM aws.ec2.terminate-instances ")
+
+
+def test_check_call_allow_with_plan_bound_token(tmp_path):
+    p = _make_pattern_file(tmp_path, [])
+    call = ToolCall(
+        tool_name="aws ec2 terminate-instances",
+        args={"instance_ids": ["i-123"]},
+        plan_hash="deadbeef" * 8,
+    )
+    call.safety_confirm = build_plan_bound_token(call, call.plan_hash)
+    result = check_tool_call(call, patterns=load_failure_patterns(p))
+    assert result.decision == "ALLOW"
+
+
+def test_build_plan_bound_token_requires_plan_hash():
+    call = ToolCall(
+        tool_name="aws ec2 terminate-instances",
+        args={"instance_ids": ["i-123"]},
+    )
+    try:
+        build_plan_bound_token(call, "")
+        raised = False
+    except ValueError as exc:
+        raised = True
+        assert "plan_hash" in str(exc)
+    assert raised
+
+
+def test_legacy_token_rejected_when_plan_hash_set(tmp_path):
+    """When plan_hash is set, legacy build_confirmation_token must not ALLOW."""
+    p = _make_pattern_file(tmp_path, [])
+    call = ToolCall(
+        tool_name="aws ec2 terminate-instances",
+        args={"instance_ids": ["i-123"]},
+        plan_hash="abcdef01" * 8,
+    )
+    call.safety_confirm = build_confirmation_token(call)
+    result = check_tool_call(call, patterns=load_failure_patterns(p))
+    assert result.decision == "BLOCK"
 
 
 def _make_pattern_file(tmp_path: Path, rows: list[dict]) -> Path:

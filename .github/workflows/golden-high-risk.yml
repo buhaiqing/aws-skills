@@ -8,4 +8,6 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install pyyaml pytest
       - run: pytest -p no:rerunfailures scripts/tests/test_golden_eval.py scripts/tests/test_mutation_safety_gate.py -q
+      - run: pytest -p no:rerunfailures scripts/tests/test_execution_plan.py scripts/tests/test_shadow_exec.py scripts/tests/test_safe_tool_proxy.py scripts/tests/test_shadow_coverage.py -q
+      - run: python3 scripts/shadow_coverage.py check --all-high-risk --shadow-dir /tmp/shadow-m2 --out audit-results/shadow/coverage.json
       - run: python3 scripts/golden_eval.py run --all-high-risk --out audit-results/golden/high-risk.json
