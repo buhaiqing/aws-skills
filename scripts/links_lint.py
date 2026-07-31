@@ -113,9 +113,10 @@ def _normalize_argv(argv: list[str]) -> list[str]:
     if argv[0] == "--all" or argv[0].startswith("--skill") or argv[0] == "--repo":
         return ["lint", *argv]
     # Positional skill directory path (absolute or relative).
-    path = Path(argv[0])
+    # pre-commit passes "$REPO/$skill_dir"; honor that repo, not script REPO.
+    path = Path(argv[0]).resolve()
     if path.is_dir() or path.name.startswith("aws-"):
-        return ["lint", "--skill", path.name, *argv[1:]]
+        return ["lint", "--repo", str(path.parent), "--skill", path.name, *argv[1:]]
     return ["lint", *argv]
 
 

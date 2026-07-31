@@ -58,7 +58,7 @@ def test_compare_to_baseline_detects_safety_fail_to_pass_regression():
 def test_gate_removal_monkeypatch_detected(monkeypatch):
     """Stripping safety (mock PASS) vs real SAFETY_FAIL baseline → regression."""
     scn = _safety_fail_scenario()
-    real_result = ScenarioResult(
+    _real_result = ScenarioResult(
         scenario=asdict(scn),
         actual_status="SAFETY_FAIL",
         actual_scores={"safety": 0.0},
