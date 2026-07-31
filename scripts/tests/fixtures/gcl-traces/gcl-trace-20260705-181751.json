@@ -1,0 +1,22 @@
+{
+  "strategy": "\u8de8Skill\u578b",
+  "complexity": 6,
+  "batch_size": 2,
+  "concurrency": 2,
+  "agents": [
+    {
+      "label": "create apigateway skill",
+      "purpose": "Create aws-apigateway-ops SKILL.md + 4 reference files from template"
+    },
+    {
+      "label": "create ebs skill",
+      "purpose": "Create aws-ebs-ops SKILL.md + 4 reference files from template"
+    }
+  ],
+  "post_tasks": [
+    "Update README.md + README_cn.md with new skill entries",
+    "Update AGENTS.md \u00a711.5 Per-Skill Defaults table"
+  ],
+  "safety_gates": [],
+  "trace_path": "audit-results/gcl-trace-20260705-181751.json"
+}

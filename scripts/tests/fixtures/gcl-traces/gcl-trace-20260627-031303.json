@@ -1,0 +1,63 @@
+{
+  "skill": "aws-s3-ops",
+  "request": "list buckets",
+  "rubric_version": "v1",
+  "iterations": [
+    {
+      "iter": 1,
+      "generator": {
+        "command": "aws --self-test",
+        "args": {},
+        "exit_code": 0,
+        "result_excerpt": "{\"stub\": \"self-test\", \"iter\": 1}",
+        "safety_confirm_token": ""
+      },
+      "critic": {
+        "scores": {
+          "correctness": 1.0,
+          "safety": 1.0,
+          "idempotency": 0.0,
+          "traceability": 1.0,
+          "spec_compliance": 1.0
+        },
+        "suggestions": [],
+        "blocking": false
+      },
+      "decision": "RETRY"
+    },
+    {
+      "iter": 2,
+      "generator": {
+        "command": "aws --self-test",
+        "args": {},
+        "exit_code": 0,
+        "result_excerpt": "{\"stub\": \"self-test\", \"iter\": 2}",
+        "safety_confirm_token": ""
+      },
+      "critic": {
+        "scores": {
+          "correctness": 1.0,
+          "safety": 1.0,
+          "idempotency": 0.0,
+          "traceability": 1.0,
+          "spec_compliance": 1.0
+        },
+        "suggestions": [],
+        "blocking": false
+      },
+      "decision": "RETURN_BEST"
+    }
+  ],
+  "final": {
+    "status": "MAX_ITER",
+    "iter": 2,
+    "output": {
+      "command": "aws --self-test",
+      "args": {},
+      "exit_code": 0,
+      "result_excerpt": "{\"stub\": \"self-test\", \"iter\": 1}",
+      "safety_confirm_token": ""
+    },
+    "reason": "max_iter reached; some dimensions below threshold"
+  }
+}

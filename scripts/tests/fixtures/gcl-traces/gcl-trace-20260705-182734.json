@@ -1,0 +1,11 @@
+{
+  "strategy": "跨Skill型",
+  "complexity": 6,
+  "batch_size": 3,
+  "concurrency": 3,
+  "agents": [
+    {"label": "frontmatter + docs", "purpose": "#6 AIOps stack table + #7 cruise cross_skill_deps + #8 new skill cross_skill_deps"},
+    {"label": "collectors", "purpose": "#1 EBS collector + #2 API GW collector"},
+    {"label": "inference rules", "purpose": "#3 ECS-TASK-01 doc + #4 APIGW rules + #5 EBS rules + #9 orchestrator patch"}
+  ]
+}

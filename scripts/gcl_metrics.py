@@ -143,8 +143,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--days", type=int, default=30)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out", type=str, default=None)
+    ap.add_argument(
+        "--audit-dir",
+        type=Path,
+        default=AUDIT_DIR,
+        help="directory of gcl-trace-*.json (default: repo audit-results/)",
+    )
     args = ap.parse_args(argv)
-    rows = collect_traces(AUDIT_DIR, days=args.days)
+    rows = collect_traces(args.audit_dir, days=args.days)
     if args.json:
         out = json.dumps(
             [{**asdict(r), "path": str(r.path)} for r in rows],

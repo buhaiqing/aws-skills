@@ -1,7 +1,6 @@
 """TDD tests for scripts/_reflexion.py — L4 dim #3 reflexion automation.
 
-Real fixtures: audit-results/gcl-trace-20260627-031257.json (SAFETY_FAIL)
-and audit-results/gcl-trace-20260627-031303.json (MAX_ITER).
+Real fixtures: scripts/tests/fixtures/gcl-traces/ (committed; audit-results is gitignored).
 """
 from __future__ import annotations
 
@@ -23,8 +22,9 @@ from _reflexion import (  # noqa: E402
 )
 
 
-SAFETY_FAIL_TRACE = REPO / "audit-results" / "gcl-trace-20260627-031257.json"
-MAX_ITER_TRACE = REPO / "audit-results" / "gcl-trace-20260627-031303.json"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "gcl-traces"
+SAFETY_FAIL_TRACE = _FIXTURES / "gcl-trace-20260627-031257.json"
+MAX_ITER_TRACE = _FIXTURES / "gcl-trace-20260627-031303.json"
 
 
 def test_derive_from_pass_trace_returns_empty():
