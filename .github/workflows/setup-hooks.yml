@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   composite-and-precommit-gate:
     name: composite lint + setup hooks + pytest + ruff
@@ -22,12 +25,8 @@ jobs:
       - name: Install test + lint deps
         run: |
           python -m pip install 'ruff>=0.11.8,<0.17' pytest pyyaml
-          echo "## Tooling" >> "$GITHUB_STEP_SUMMARY"
-          echo "- python: $(command -v python) ($(python --version))" >> "$GITHUB_STEP_SUMMARY"
-          echo "- python3: $(command -v python3) ($(python3 --version))" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ruff bin: $(command -v ruff)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ruff module: $(python -m ruff --version)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- python3 -m ruff: $(python3 -m ruff --version)" >> "$GITHUB_STEP_SUMMARY"
+          python -m ruff --version
+          command -v ruff
 
       - name: Install hooks (so local devs match CI)
         run: bash scripts/install-hooks.sh
@@ -38,28 +37,59 @@ jobs:
       - name: Pytest (precommit subset first)
         env:
           PYTHON_BIN: python
-        run: |
-          set -o pipefail
-          python -m pytest -p no:rerunfailures scripts/tests/test_precommit_hook.py -vv --tb=short 2>&1 | tee precommit-pytest.log
-          {
-            echo "## Precommit pytest"
-            echo '```'
-            tail -n 80 precommit-pytest.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: python -m pytest -p no:rerunfailures scripts/tests/test_precommit_hook.py -q --tb=short
 
       - name: Pytest regression
+        id: pytest
         env:
           PYTHON_BIN: python
         run: |
           set -o pipefail
-          python -m pytest -p no:rerunfailures scripts/tests/ -q --tb=short 2>&1 | tee full-pytest.log
+          python -m pytest -p no:rerunfailures scripts/tests/ -q --tb=short --junitxml=junit.xml 2>&1 | tee full-pytest.log
+
+      - name: Capture pytest failures into repo
+        if: failure() && steps.pytest.outcome == 'failure'
+        run: |
+          mkdir -p docs/ci
           {
-            echo "## Full pytest (tail)"
+            echo "# CI pytest failure ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            echo
+            echo "commit: \`$GITHUB_SHA\`"
+            echo
+            echo "## Log tail"
+            echo
             echo '```'
-            tail -n 100 full-pytest.log
+            tail -n 200 full-pytest.log
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo
+            python3 <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          p = Path("junit.xml")
+          if not p.exists():
+              raise SystemExit(0)
+          print("## Failed tests")
+          print()
+          root = ET.parse(p).getroot()
+          for case in root.iter("testcase"):
+              node = case.find("failure")
+              if node is None:
+                  node = case.find("error")
+              if node is None:
+                  continue
+              cls = case.get("classname", "")
+              name = case.get("name", "")
+              print(f"- `{cls}::{name}`")
+              msg = (node.get("message") or "").strip().splitlines()
+              if msg:
+                  print(f"  - {msg[0][:400]}")
+          PY
+          } > docs/ci/last-pytest-failure.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ci/last-pytest-failure.md
+          git commit -m "ci: capture composite-gate pytest failure [skip ci]" || exit 0
+          git push || exit 0
 
       - name: Upload pytest logs
         if: failure()
@@ -67,8 +97,8 @@ jobs:
         with:
           name: pytest-ci-logs
           path: |
-            precommit-pytest.log
             full-pytest.log
+            junit.xml
 
       - name: Ruff lint
         run: ruff check scripts/
