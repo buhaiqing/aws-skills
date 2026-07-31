@@ -32,7 +32,7 @@
 
 ## Confirmation Strings
 
-N/A — aws-finops-core is read-only; no destructive operations.
+> Read-only skill — no destructive operations; table omitted per new-skill-template.
 
 ## Changelog
 

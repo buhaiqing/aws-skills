@@ -40,12 +40,14 @@
 
 ## Confirmation Strings
 
-| Severity | Pattern | Example |
-|----------|---------|---------|
-| CRITICAL | `confirm=HALT <finding-id>` | `confirm=HALT F01-CRED-EXPOSED` |
-| HIGH | `confirm=<action> <resource-id>` | `confirm=restrict-sg sg-0123456789abcdef0` |
-| MEDIUM | Pre-approved playbook | No explicit confirm |
-| LOW | Log only | No action |
+> Composite orchestration confirms; MEDIUM/LOW need no token.
+
+| Operation | Confirmation token |
+|---|---|
+| CRITICAL finding halt | `confirm=HALT <finding-id>` |
+| HIGH remediation | `confirm=<action> <resource-id>` |
+| MEDIUM playbook | _(none)_ |
+| LOW log-only | _(none)_ |
 
 ## Variable Convention (skill-specific deltas)
 

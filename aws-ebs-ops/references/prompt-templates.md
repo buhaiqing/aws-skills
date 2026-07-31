@@ -28,9 +28,9 @@
 
 | Operation | Confirmation token |
 |---|---|
-| delete-volume | `confirm=DELETE_VOLUME {{user.volume_id}}` |
-| detach-volume | `confirm=DETACH_VOLUME {{user.volume_id}}` |
-| delete-snapshot | `confirm=DELETE_SNAPSHOT {{user.snapshot_id}}` |
+| `delete-volume` | `confirm=DELETE_VOLUME {{user.volume_id}}` |
+| `detach-volume` | `confirm=DETACH_VOLUME {{user.volume_id}}` |
+| `delete-snapshot` | `confirm=DELETE_SNAPSHOT {{user.snapshot_id}}` |
 
 ## Variable Convention (deltas)
 

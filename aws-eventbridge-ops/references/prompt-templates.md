@@ -50,22 +50,22 @@
 
 ---
 
-## Confirmation Strings (mandatory for every destructive op)
+## Confirmation Strings
 
-| Operation | Confirmation token | Safety consequence if absent |
-|---|---|---|
-| `delete-rule` | `confirm=DELETE_RULE <name>` | Safety = 0 → ABORT |
-| `remove-targets` | `confirm=REMOVE_TARGETS <rule>` | Safety = 0 → ABORT |
-| `put-rule` (modify pattern on active) | `confirm=MODIFY_RULE <name>` | Safety = 0 → ABORT |
-| `delete-event-bus` | `confirm=DELETE_BUS <name>` | Safety = 0 → ABORT |
-| `delete-schedule` | `confirm=DELETE_SCHEDULE <name>` | Safety = 0 → ABORT |
-| `delete-schedule` (invoked last hour) | `confirm=DELETE_SCHEDULE_ACTIVE <name>` | Safety = 0 → ABORT |
-| `delete-pipe` | `confirm=DELETE_PIPE <name>` | Safety = 0 → ABORT |
-| `update-pipe` (Source/Target) | `confirm=UPDATE_PIPE <name>` | Safety = 0 → ABORT |
-| `delete-archive` | `confirm=DELETE_ARCHIVE <name>` | Safety = 0 → ABORT |
-| `delete-api-destination` | `confirm=DELETE_API_DEST <name>` | Safety = 0 → ABORT |
-| `delete-connection` | `confirm=DELETE_CONNECTION <name>` | Safety = 0 → ABORT |
-| `put-permission` Principal `*` | `confirm=BUS_PERMISSION_PUBLIC <bus>` | Safety = 0 → ABORT |
+| Operation | Confirmation token |
+|---|---|
+| `delete-rule` | `confirm=DELETE_RULE <name>` |
+| `remove-targets` | `confirm=REMOVE_TARGETS <rule>` |
+| `put-rule` (modify pattern on active) | `confirm=MODIFY_RULE <name>` |
+| `delete-event-bus` | `confirm=DELETE_BUS <name>` |
+| `delete-schedule` | `confirm=DELETE_SCHEDULE <name>` |
+| `delete-schedule` (invoked last hour) | `confirm=DELETE_SCHEDULE_ACTIVE <name>` |
+| `delete-pipe` | `confirm=DELETE_PIPE <name>` |
+| `update-pipe` (Source/Target) | `confirm=UPDATE_PIPE <name>` |
+| `delete-archive` | `confirm=DELETE_ARCHIVE <name>` |
+| `delete-api-destination` | `confirm=DELETE_API_DEST <name>` |
+| `delete-connection` | `confirm=DELETE_CONNECTION <name>` |
+| `put-permission` Principal `*` | `confirm=BUS_PERMISSION_PUBLIC <bus>` |
 
 > See [`prompt-skeletons.md`](../../aws-skill-generator/references/prompt-skeletons.md)
 > for the canonical Generator / Critic / Orchestrator templates and the

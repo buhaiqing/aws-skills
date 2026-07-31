@@ -34,10 +34,10 @@
 
 ## Confirmation Strings
 
-| Operation | Required token |
+| Operation | Confirmation token |
 |---|---|
-| stop-logging | `confirm=STOP_LOGGING <trail>` |
-| delete-trail | `confirm=DELETE_TRAIL <name>` |
+| `stop-logging` | `confirm=STOP_LOGGING <trail>` |
+| `delete-trail` | `confirm=DELETE_TRAIL <name>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -66,6 +66,7 @@
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-cloudtrail-ops` |
 | 1.1.0 | 2026-07-31 | Added Confirmation Strings table for stop-logging and delete-trail |
+| 1.1.1 | 2026-07-31 | Canonical 2-col Confirmation Strings table (`Confirmation token` header; backticked Operation cells) |
 
 ---
 

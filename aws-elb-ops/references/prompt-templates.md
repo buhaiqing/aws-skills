@@ -42,21 +42,21 @@
   from a `describe-*` lookup (rule A8).
 ```
 
-## Confirmation Strings (mandatory for every destructive op)
+## Confirmation Strings
 
 > Substituted into the Generator template's `{skill.confirmation_strings}` slot.
 > **A12 note**: this skill uses `DEREGISTER_DRAIN` / `DEREGISTER_ALL` literals
 > (not the generic `DRAIN_TARGETS` placeholder from gcl-spec §8).
 
-| Operation | Confirmation token | Safety consequence if absent |
-|---|---|---|
-| `deregister-targets` (≥ 50% healthy) | `confirm=DEREGISTER_DRAIN <tg-arn> count=<n>/<total>` | Safety = 0 → ABORT |
-| `deregister-targets` (ALL healthy) | `confirm=DEREGISTER_ALL <tg-arn>` | Safety = 0 → ABORT |
-| `delete-load-balancer` | `confirm=DELETE_LB <lb-arn>` | Safety = 0 → ABORT |
-| `delete-listener` | `confirm=DELETE_LISTENER <listener-arn>` | Safety = 0 → ABORT |
-| `delete-rule` (non-default) | `confirm=DELETE_RULE <rule-arn>` | Safety = 0 → ABORT |
-| `modify-load-balancer-attributes` (disable deletion protection) | `confirm=DISABLE_DELETION_PROTECTION <lb-arn>` | Safety = 0 → ABORT |
-| `modify-target-group` (permissive matcher) | `confirm=PERMISSIVE_MATCHER <tg-arn>` | Spec Compliance = 0 → ABORT |
+| Operation | Confirmation token |
+|---|---|
+| `deregister-targets` (≥ 50% healthy) | `confirm=DEREGISTER_DRAIN <tg-arn> count=<n>/<total>` |
+| `deregister-targets` (ALL healthy) | `confirm=DEREGISTER_ALL <tg-arn>` |
+| `delete-load-balancer` | `confirm=DELETE_LB <lb-arn>` |
+| `delete-listener` | `confirm=DELETE_LISTENER <listener-arn>` |
+| `delete-rule` (non-default) | `confirm=DELETE_RULE <rule-arn>` |
+| `modify-load-balancer-attributes` (disable deletion protection) | `confirm=DISABLE_DELETION_PROTECTION <lb-arn>` |
+| `modify-target-group` (permissive matcher) | `confirm=PERMISSIVE_MATCHER <tg-arn>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -82,6 +82,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.1.0 | 2026-07-30 | Added `## Confirmation Strings` table from hard rules; A12 note documents `DEREGISTER_DRAIN`/`DEREGISTER_ALL` literals (not `DRAIN_TARGETS`). |
+| 1.1.1 | 2026-07-31 | Canonical 2-col Confirmation Strings table (dropped Safety consequence column) |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-elb-ops` (Phase 1, **recommended**, not pilot) |
 
 ---

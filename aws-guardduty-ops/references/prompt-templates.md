@@ -43,13 +43,19 @@
 - create-admin, delete-admin
 
 ## Confirmation Strings
-- `delete-filter`:           `confirm=DELETE_GUARDDUTY_FILTER <name>`
-- `delete-detector`:         `confirm=DELETE_GUARDDUTY_DETECTOR <detector-id>`
-- `delete-ip-set`:           `confirm=DELETE_GUARDDUTY_IPSET <ip-set-id>`
-- `delete-threat-intel-set`: `confirm=DELETE_GUARDDUTY_THREATINTELSET <threat-intel-set-id>`
-- `delete-member`:           `confirm=DELETE_GUARDDUTY_MEMBER <account-id>`
-- `delete-admin`:            `confirm=DELETE_GUARDDUTY_ADMIN <account-id>`
-- `disable-guardduty`:       `confirm=DISABLE_GUARDDUTY <detector-id>`
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-filter` | `confirm=DELETE_GUARDDUTY_FILTER <name>` |
+| `delete-detector` | `confirm=DELETE_GUARDDUTY_DETECTOR <detector-id>` |
+| `delete-ip-set` | `confirm=DELETE_GUARDDUTY_IPSET <ip-set-id>` |
+| `delete-threat-intel-set` | `confirm=DELETE_GUARDDUTY_THREATINTELSET <threat-intel-set-id>` |
+| `delete-member` | `confirm=DELETE_GUARDDUTY_MEMBER <account-id>` |
+| `delete-admin` | `confirm=DELETE_GUARDDUTY_ADMIN <account-id>` |
+| `disable-guardduty` | `confirm=DISABLE_GUARDDUTY <detector-id>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -86,6 +92,7 @@
 |---|---|---|
 | 1.0.0 | 2026-06-12 | Initial GuardDuty prompt templates (Group 5 rollout). |
 | 1.1.0 | 2026-06-27 | Migrated bare `{{cli_command}}` / `{{boto3_code}}` / `{{generator_output}}` to spec-compliant `{{output.*}}` namespaces (gcl-spec v1.11.0 §7.1). Added explicit Critic isolation guarantee; added `{{output.requested_region}}` and `{{output.safety_confirm_token}}` placeholders for rule A7 + Safety gate. Renamed section headers to match the canonical Generator/Critic/Orchestrator pattern used by the other 30 skills. |
+| 1.2.0 | 2026-07-31 | Confirmation Strings → canonical Operation/token table |
 
 ---
 

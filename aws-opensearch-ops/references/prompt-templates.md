@@ -39,13 +39,19 @@
 ```
 
 ## Confirmation Strings
-- `upgrade-domain`:           `confirm=UPGRADE_DOMAIN <domain-name> to <version>`
-- `delete-domain`:            `confirm=DELETE_DOMAIN <domain-name>`
-- `delete-domain` (prod tag): `confirm=DELETE_PROD_DOMAIN <domain-name>`
-- `delete-snapshot`:          `confirm=DELETE_SNAPSHOT <snapshot-name> from <domain-name>`
-- `delete-vpc-endpoint`:      `confirm=DELETE_VPC_ENDPOINT <vpc-endpoint-id>`
-- `delete-ingestion`:         `confirm=DELETE_INGESTION <pipeline-name>`
-- `delete-ingestion` (running): `confirm=DELETE_RUNNING_INGESTION <pipeline-name>`
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `upgrade-domain` | `confirm=UPGRADE_DOMAIN <domain-name> to <version>` |
+| `delete-domain` | `confirm=DELETE_DOMAIN <domain-name>` |
+| `delete-domain` (prod tag) | `confirm=DELETE_PROD_DOMAIN <domain-name>` |
+| `delete-snapshot` | `confirm=DELETE_SNAPSHOT <snapshot-name> from <domain-name>` |
+| `delete-vpc-endpoint` | `confirm=DELETE_VPC_ENDPOINT <vpc-endpoint-id>` |
+| `delete-ingestion` | `confirm=DELETE_INGESTION <pipeline-name>` |
+| `delete-ingestion` (running) | `confirm=DELETE_RUNNING_INGESTION <pipeline-name>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -71,6 +77,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `aws-opensearch-ops` (Phase 1, required, not pilot) |
+| 1.1.0 | 2026-07-31 | Confirmation Strings → canonical Operation/token table |
 
 ---
 
