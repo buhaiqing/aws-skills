@@ -13,7 +13,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-07-19"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -89,25 +89,26 @@ Recorder: `.ConfigurationRecorders[0].{name,roleARN,recordingGroup}` | Channel: 
 
 ## Execution Flow Pattern
 
-Every op: **Pre-flight → Execute (CLI, boto3 fallback after 3 failures) → Validate → Recover**. Pre-flight: `aws --version && aws sts get-caller-identity`. For recorder setup: verify `AWSServiceRoleForConfig` exists. Full flows: [`references/operations.md`](references/operations.md).
+Every op: **Pre-flight → Execute (CLI, boto3 fallback after 3 failures) → Validate → Recover**. Pre-flight: `aws --version && aws sts get-caller-identity`; recorder setup verifies `AWSServiceRoleForConfig`. Flows: [`references/operations.md`](references/operations.md).
 
 ## Reference Files
 
-- [`references/operations.md`](references/operations.md) — all CLI commands, validation, recovery
-- [`references/aws-cli-usage.md`](references/aws-cli-usage.md) | [`references/boto3-sdk-usage.md`](references/boto3-sdk-usage.md)
-- [`references/core-concepts.md`](references/core-concepts.md) | [`references/troubleshooting.md`](references/troubleshooting.md)
-- [`references/security-baseline-rules.md`](references/security-baseline-rules.md) | [`references/cis-checklist.md`](references/cis-checklist.md)
-- [`references/auto-remediation.md`](references/auto-remediation.md) | [`references/delegate-contract.md`](references/delegate-contract.md)
-- [`references/integration.md`](references/integration.md) | [`references/rubric.md`](references/rubric.md) | [`references/prompt-templates.md`](references/prompt-templates.md)
+[`references/operations.md`](references/operations.md) · [`references/aws-cli-usage.md`](references/aws-cli-usage.md) · [`references/boto3-sdk-usage.md`](references/boto3-sdk-usage.md) · [`references/core-concepts.md`](references/core-concepts.md) · [`references/troubleshooting.md`](references/troubleshooting.md) · [`references/security-baseline-rules.md`](references/security-baseline-rules.md) · [`references/cis-checklist.md`](references/cis-checklist.md) · [`references/auto-remediation.md`](references/auto-remediation.md) · [`references/delegate-contract.md`](references/delegate-contract.md) · [`references/integration.md`](references/integration.md) · [`references/rubric.md`](references/rubric.md) · [`references/prompt-templates.md`](references/prompt-templates.md)
+
+## Operations and Safety
+
+| Operation | Pre-flight | Confirmation |
+|---|---|---|
+| Stop recorder | Describe recorder status | `confirm=STOP_RECORDER <name>` |
+| Delete recorder | Stop first; describe status | `confirm=DELETE_RECORDER <name>` |
+| Delete rule | `describe-config-rules`; not in active pack | `confirm=DELETE_RULE <name>` |
+| Delete channel / pack / aggregator | Describe resource; verify deps | `confirm=DELETE_CHANNEL <name>` / `confirm=DELETE_PACK <name>` / `confirm=DELETE_AGGREGATOR <name>` |
+| Delete org rule / auth / retention | Org master or auth lookup | `confirm=DELETE_ORG_RULE <name>` / `confirm=DELETE_AUTH <id>` / `confirm=DELETE_RETENTION` |
+| Short retention (<30d) | Warn compliance history loss | `confirm=SHORT_RETENTION <days>` |
 
 ## Quality Gate (GCL)
 
-Full spec: [`aws-skill-generator/references/gcl-spec.md`](../../aws-skill-generator/references/gcl-spec.md).
-5-dimension rubric (Safety=0→ABORT) in [`references/rubric.md`](references/rubric.md).
-
-Destructive ops (all require GCL): `delete-config-rule`, `delete-configuration-recorder` (stop first), `delete-delivery-channel`, `delete-conformance-pack`, `delete-configuration-aggregator`, `delete-organization-config-rule`, `delete-aggregation-authorization`, `delete-retention-configuration`, `stop-configuration-recorder`. Safety tokens: `confirm=DELETE_<OP> <name>` / `confirm=STOP_RECORDER <name>`. Full rubric: [`references/rubric.md`](references/rubric.md), prompts: [`references/prompt-templates.md`](references/prompt-templates.md), spec: [`gcl-spec.md`](../../aws-skill-generator/references/gcl-spec.md).
-
-Prompt templates: [`references/prompt-templates.md`](references/prompt-templates.md)
+Recommended GCL, `max_iter=3`, rubric [`references/rubric.md`](references/rubric.md), prompts [`references/prompt-templates.md`](references/prompt-templates.md); persist traces under `./audit-results/`. Apply A7–A10; Safety=0 aborts. Spec: [`gcl-spec.md`](../../aws-skill-generator/references/gcl-spec.md).
 
 ## Token Efficiency (C6 MUST PASS)
 

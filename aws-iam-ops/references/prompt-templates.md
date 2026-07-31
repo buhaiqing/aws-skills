@@ -45,6 +45,19 @@
   `{{output.requested_region}}` (rule A7).
 ```
 
+## Confirmation Strings
+
+> GCL Critic checks `confirm=` literals; L4 runtime_safety uses hash tokens separately.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-user` | `confirm=DELETE_USER <user-name>` |
+| `delete-role` | `confirm=DELETE_ROLE <role-name>` |
+| `detach-user-policy` / `detach-role-policy` | `confirm=DETACH_POLICY <principal>:<policy-arn>` |
+| `attach-*-policy` (AdministratorAccess) | `confirm=ATTACH_ADMIN <arn>` |
+| `attach-*-policy` (`*:*`) | `confirm=ATTACH_WILDCARD <arn>` |
+| `update-assume-role-policy` (`Principal: *`) | `confirm=TRUST_PUBLIC <role-name>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -69,6 +82,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-iam-ops` GCL pilot (second rollout after `aws-ec2-ops`) |
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings table (`DELETE_USER`, `ATTACH_ADMIN`, etc.) before Variable Convention |
 
 ---
 

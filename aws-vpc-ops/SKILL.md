@@ -9,7 +9,7 @@ compatibility: AWS CLI v2, boto3 SDK (Python 3.10+), valid AWS credentials with 
 metadata:
   author: aws
   version: "1.3.0"
-  last_updated: '2026-06-04'
+  last_updated: '2026-07-31'
   runtime: Harness AI Agent
   cli_applicability: dual-path
   destructive_ops_require_confirm: true
@@ -77,12 +77,12 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Create/modify network | Validate CIDR overlap, AZ, route and SG impact | Token for production route/SG changes |
-| Delete VPC | Run 8 describes: subnets, IGWs, NATs, RTs, SGs, endpoints, peering, NACLs; require empty | `DELETE <vpc_id>` |
-| Delete subnet | Verify no ENI/resources | Human confirmation |
-| Delete route table | Main table cannot be deleted; custom table must have no associations | Human confirmation |
-| Delete IGW/NAT | Detach IGW first; record released EIP for NAT | Human confirmation |
-| Delete endpoint/peering/SG | Inspect consumers, ENIs, routes, and default SG constraints | Resource-bound confirmation |
+| Create/modify network | Validate CIDR overlap, AZ, route and SG impact | `confirm=MODIFY_PROD_<OP> <id>` (prod-tagged) |
+| Delete VPC | Run 8 describes: subnets, IGWs, NATs, RTs, SGs, endpoints, peering, NACLs; require empty | `confirm=DELETE_VPC <vpc-id>` |
+| Delete subnet | Verify no ENI/resources | `confirm=DELETE_SUBNET <subnet-id>` |
+| Delete route table | Main table cannot be deleted; custom table must have no associations | `confirm=DELETE_ROUTE_TABLE <rt-id>` |
+| Delete IGW/NAT | Detach IGW first; record released EIP for NAT | `confirm=DELETE_IGW <igw-id>` / `confirm=DELETE_NAT_GATEWAY <nat-id>` |
+| Delete endpoint/peering/SG | Inspect consumers, ENIs, routes, and default SG constraints | `confirm=DELETE_VPC_ENDPOINT <vpce-id>` / `confirm=DELETE_VPC_PEERING <pcx-id>` / `confirm=DELETE_SECURITY_GROUP <sg-id>` |
 
 Never infer network deletion consent from a generic “cleanup” request.
 

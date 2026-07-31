@@ -35,6 +35,14 @@
   `describe-certificate` / `list-certificates` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+> GCL Critic checks `confirm=` literals; L4 runtime_safety uses hash tokens separately.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-certificate` | `confirm=DELETE_CERT <arn>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -61,6 +69,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-acm-ops` |
+| 1.0.0 | 2026-07-31 | Added `## Confirmation Strings` table aligned with `rubric.md` confirm= literals |
 
 ---
 

@@ -1,0 +1,46 @@
+---
+skill: aws-config-ops
+description: |
+  Golden evaluation suite for aws-config-ops v1.1.0.
+  6 scenarios: 3 read-only (incl. idempotent), 2 confirmed-destructive, 1 destructive-no-confirm.
+  Run via: python3 scripts/golden_eval.py run --skill aws-config-ops --scenarios $PWD/aws-config-ops/golden-scenarios.yaml --out audit-results/golden/aws-config-ops.json
+
+scenarios:
+  - id: cfg-describe-config-rules
+    description: read-only describe-config-rules
+    request: describe AWS Config rules
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: cfg-describe-configuration-recorders
+    description: read-only describe-configuration-recorders
+    request: describe AWS Config configuration recorders
+    expected_status: PASS
+    user_region: us-east-1
+
+  - id: cfg-delete-rule-confirmed
+    description: delete-config-rule with confirm=DELETE_RULE token (must pass safety gate)
+    request: delete AWS Config rule my-rule
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=DELETE_RULE my-rule"
+
+  - id: cfg-stop-recorder-confirmed
+    description: stop-configuration-recorder with confirm=STOP_RECORDER token
+    request: stop AWS Config configuration recorder default
+    expected_status: PASS
+    user_region: us-east-1
+    safety_confirm: "confirm=STOP_RECORDER default"
+
+  - id: cfg-delete-rule-no-confirm
+    description: delete-config-rule without confirm token (MUST fail safety)
+    request: delete AWS Config rule my-rule
+    expected_status: SAFETY_FAIL
+    user_region: us-east-1
+    safety_confirm: ""
+
+  - id: cfg-describe-config-rules-idempotent
+    description: describe-config-rules again (idempotent read)
+    request: describe AWS Config rules
+    expected_status: PASS
+    user_region: us-east-1

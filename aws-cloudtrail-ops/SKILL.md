@@ -8,7 +8,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -81,8 +81,8 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Ver
 |---|---|---|
 | Create/update trail | Validate destinations, policy, KMS, org/multi-region scope | Token for audit coverage reduction |
 | Start logging | Validate delivery and status | — |
-| Stop logging | Display audit gap, scope, compliance impact and duration | `STOP_LOGGING <trail>` |
-| Delete trail | Verify exact trail and destinations; show permanent audit loss | `DELETE_TRAIL <name>` |
+| Stop logging | Display audit gap, scope, compliance impact and duration | `confirm=STOP_LOGGING <trail>` |
+| Delete trail | Verify exact trail and destinations; show permanent audit loss | `confirm=DELETE_TRAIL <name>` |
 | Put event/insight selectors | Diff included/excluded event sources and coverage | Human confirmation for reduced coverage |
 | Lookup events | Read-only; mask CloudTrailEvent secrets/personal data | — |
 

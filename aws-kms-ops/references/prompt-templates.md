@@ -50,6 +50,18 @@
   lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+| Operation | Confirmation token |
+|---|---|
+| `schedule-key-deletion` | `PERMANENTLY DELETE <key-id>` (literal; not `confirm=`) |
+| `put-key-policy` widen | `confirm=PUT_KEY_POLICY_WIDEN <key-id>` |
+| `put-key-policy` Principal `*` | `confirm=PUT_KEY_POLICY_PUBLIC <key-id>` |
+| `disable-key` | `confirm=DISABLE_KEY <key-id>` |
+| `delete-imported-key-material` | `confirm=DELETE_IMPORTED_KEY_MATERIAL <key-id>` |
+| `delete-custom-key-store` | `confirm=DELETE_CUSTOM_KEY_STORE <cks-id>` |
+| `revoke-grant` / `retire-grant` | `confirm=REVOKE_GRANT <grant-id>` / `confirm=RETIRE_GRANT <grant-id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -76,6 +88,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-kms-ops` GCL pilot (third rollout after `aws-ec2-ops` and `aws-iam-ops`) |
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table before Variable Convention |
 
 ---
 

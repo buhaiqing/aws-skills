@@ -46,6 +46,22 @@
   `describe-*` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the literals below. A14 skip-final-snapshot uses bare
+> `DELETE_NO_SNAPSHOT <db-id>` (no `confirm=` prefix).
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-db-instance` (with snapshot) | `confirm=DELETE_DB_INSTANCE <db-id> snapshot=<snap-id>` |
+| `delete-db-instance --skip-final-snapshot` | `DELETE_NO_SNAPSHOT <db-id>` (A14 literal) |
+| `delete-db-snapshot` | `confirm=DELETE_DB_SNAPSHOT <snap-id>` |
+| `delete-db-cluster-snapshot` | `confirm=DELETE_DB_CLUSTER_SNAPSHOT <snap-id>` |
+| prod delete | `confirm=DELETE_PROD_DB <db-id>` |
+| storage shrink | `confirm=MODIFY_STORAGE_SHRINK <db-id>` |
+| promote cross-region | `confirm=PROMOTE_CROSS_REGION_REPLICA <db-id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -71,6 +87,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-rds-ops` (Phase 1, required, not pilot) |
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings table; aligned literals with rubric (A14 bare `DELETE_NO_SNAPSHOT`) |
 
 ---
 

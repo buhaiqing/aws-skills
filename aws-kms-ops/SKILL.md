@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "2.1.0"
-  last_updated: "2026-06-04"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -86,10 +86,13 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 |---|---|---|
 | Create/alias/rotate key | Validate usage/spec/policy and aliases | — |
 | Encrypt/decrypt/data key | Verify context and destination; mask output | Token for side-effecting use |
-| Disable key | Show dependent resources and outage impact | Human confirmation |
+| Disable key | Show dependent resources and outage impact | `confirm=DISABLE_KEY <key-id>` |
 | Schedule key deletion | Inspect grants/dependencies; pending window ≥7 days | `PERMANENTLY DELETE <key-id>` |
-| Delete imported material/custom key store | Verify key type, enabled CMKs, and recovery impossibility | Resource-bound confirmation |
-| Update key policy/grants | Diff principals/operations; reject wildcard broadening | Human/public-access confirmation |
+| Delete imported key material | Verify key type and recovery impossibility | `confirm=DELETE_IMPORTED_KEY_MATERIAL <key-id>` |
+| Delete custom key store | No enabled CMKs in store | `confirm=DELETE_CUSTOM_KEY_STORE <cks-id>` |
+| Put key policy (widen) | Diff principals/operations; reject wildcard broadening | `confirm=PUT_KEY_POLICY_WIDEN <key-id>` |
+| Put key policy (`Principal: *`) | Public access impact review | `confirm=PUT_KEY_POLICY_PUBLIC <key-id>` |
+| Revoke/retire grant | Pre-flight dependent services | `confirm=REVOKE_GRANT <grant-id>` / `confirm=RETIRE_GRANT <grant-id>` |
 
 AUTO_HEAL may rotate or report compliance, never schedule deletion, disable a key, or widen policy.
 

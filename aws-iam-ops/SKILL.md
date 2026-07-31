@@ -15,7 +15,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   type: base
   provides:
@@ -94,7 +94,7 @@ All 6 TE rules applied (see `aws-skill-generator` SKILL.md). Per-operation detai
 [aws-cli-usage.md](references/aws-cli-usage.md) · [boto3-sdk-usage.md](references/boto3-sdk-usage.md) · [core-concepts.md](references/core-concepts.md) · [troubleshooting.md](references/troubleshooting.md) · [operations.md](references/operations.md) · [rubric.md](references/rubric.md) · [prompt-templates.md](references/prompt-templates.md) · [integration.md](../aws-skill-generator/references/integration.md)
 ## Quality Gate (GCL)
 
-`required` · `max_iterations=2` · rubric `references/rubric.md` (v1) · per `aws-skill-generator/references/gcl-spec.md`. Destructive ops (all `delete-*` / `detach-*` plus `attach-*-policy` with `*:*` or `AdministratorAccess`) require `confirm=<OP> <resource>` token; see references/operations.md per-op templates.
+`required` · `max_iterations=2` · rubric `references/rubric.md` (v1) · per `aws-skill-generator/references/gcl-spec.md`. Destructive ops require `confirm=` tokens: `DELETE_USER`, `DELETE_ROLE`, `DETACH_POLICY`, `ATTACH_ADMIN`, `ATTACH_WILDCARD`, `TRUST_PUBLIC` — see [prompt-templates.md#confirmation-strings](references/prompt-templates.md#confirmation-strings).
 
 AWS rules in force: **A9** `SecretAccessKey` masked (Safety=0 fail) · **A10** `aws sts get-caller-identity` first · **A8** resource id echoed from `get-*` lookup · **A7** `--region` matches `{{user.region}}` or `{{env.AWS_DEFAULT_REGION}}` (canonical: `us-east-1`). See `references/rubric.md` for IAM special cases (`*:*` policy guard, root-account key refusal, `Principal: *` trust policy guard, attached-policies pre-flight for `delete-user`).
 

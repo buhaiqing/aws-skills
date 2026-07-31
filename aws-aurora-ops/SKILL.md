@@ -16,7 +16,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.2.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -84,10 +84,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 |---|---|---|
 | Create cluster/instances | Validate engine, subnet, SG; poll available | — |
 | Add/modify reader | Inspect members and outage impact; validate status | AI_ASSIST token when needed |
-| Failover | Verify available and target writer; validate endpoint | `FAILOVER {{user.DBClusterIdentifier}}` |
+| Failover | Verify available and target writer; validate endpoint | `confirm=FAILOVER_CLUSTER {{user.DBClusterIdentifier}}` |
 | Stop/start | Check cluster state; validate availability | Human confirmation |
-| Delete cluster | Display blast radius; default final snapshot; validate deletion | `DELETE {{user.DBClusterIdentifier}}`; no-snapshot additionally `DELETE_NO_SNAPSHOT {{user.DBClusterIdentifier}}` |
-| Backtrack | Verify MySQL and target time; validate recovery | `BACKTRACK {{user.DBClusterIdentifier}} to {{user.BacktrackTime}}` |
+| Delete cluster | Display blast radius; default final snapshot; validate deletion | `confirm=DELETE_DB_CLUSTER {{user.DBClusterIdentifier}}`; skip-snapshot additionally `DELETE_NO_SNAPSHOT {{user.DBClusterIdentifier}}`; prod tag additionally `confirm=DELETE_PROD_CLUSTER {{user.DBClusterIdentifier}}` |
+| Backtrack | Verify MySQL and target time; validate recovery | `confirm=BACKTRACK {{user.DBClusterIdentifier}} to {{user.BacktrackTime}}` |
 | Global detach/delete | Inspect members and DR impact | Human confirmation |
 | AIOps remediation | Collect metrics, detect rule, RCA, choose tier, act, feedback | Tier/token rules below |
 
@@ -97,7 +97,7 @@ Parse `aiops_delegate` (`request_id`, `parent_intent`, `action_mode`, `decision_
 
 ## Quality Gate (GCL)
 
-Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A5, A7, A8, A9, A10 from `gcl-spec.md` §8; mask credentials and require confirmation tokens in traces.
+Required GCL, `max_iter=2`, rubric `references/rubric.md`, prompts `references/prompt-templates.md`; persist traces under `./audit-results/`. Apply A14, A7, A8, A9, A10 from `gcl-spec.md` §8; mask credentials and require confirmation tokens in traces.
 
 ## Token Efficiency
 

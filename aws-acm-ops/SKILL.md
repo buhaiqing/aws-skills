@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-31"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   aiops_level: full-chain
@@ -86,7 +86,7 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Ver
 | Request/import certificate | Validate domain/SAN, validation method, key algorithm | — |
 | Create validation records | Verify exact DNS records and zone ownership | — |
 | Renew/rebind certificate | Inspect service listener/distribution and expiry; validate deployment | Token for production binding |
-| Delete certificate | `describe-certificate` and inspect `InUseBy`; warn HTTPS breakage | `DELETE_CERT <arn>` |
+| Delete certificate | `describe-certificate` and inspect `InUseBy`; warn HTTPS breakage | `confirm=DELETE_CERT <arn>` |
 | Auto-bind/auto-renew | Correlate expiry and service health; bounded changes only | AUTO_HEAL within approved scope |
 
 Never log private keys, certificate bodies, DNS validation secrets, or account credentials.

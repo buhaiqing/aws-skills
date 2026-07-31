@@ -60,10 +60,24 @@
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification | one of the listed operation types |
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-function` | `confirm=DELETE_FUNCTION <function-name>` |
+| `delete-function` (with mappings) | `confirm=DELETE_FUNCTION_WITH_TRIGGERS <name>` |
+| `delete-event-source-mapping` | `confirm=DELETE_EVENT_SOURCE_MAPPING <uuid>` |
+| `delete-layer-version` | `confirm=DELETE_LAYER_VERSION <layer>:<version>` |
+| `put-function-concurrency` = 0 | `confirm=SET_CONCURRENCY_ZERO <name>` |
+
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-lambda-ops` (Phase 1, required, not pilot) |
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings table; aligned `confirm=` literals with rubric |
 
 ---
 

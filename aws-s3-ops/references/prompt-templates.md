@@ -54,6 +54,22 @@
   or `list-buckets` lookup (rule A8).
 ```
 
+## Confirmation Strings
+
+> GCL Critic checks `confirm=` literals; L4 runtime_safety uses hash tokens separately.
+> RM_RECURSIVE hard rules may also require count/bytes in trace; table uses short form matching golden.
+
+| Operation | Confirmation token |
+|---|---|
+| `aws s3 rm --recursive` | `confirm=RM_RECURSIVE <bucket>` |
+| `put-bucket-policy` (Principal `*`) | `confirm=PUT_POLICY_PUBLIC <bucket>` |
+| `put-bucket-acl` public | `confirm=PUT_ACL_PUBLIC <bucket>` |
+| `put-object-acl` public | `confirm=PUT_OBJECT_ACL_PUBLIC <bucket>/<key>` |
+| `put-bucket-lifecycle` expiry <30d | `confirm=PUT_LIFECYCLE_SHORT <bucket>` |
+| `delete-bucket` MFA Delete | `confirm=DELETE_MFA_BUCKET <bucket>` |
+| `delete-bucket` (empty) | `confirm=DELETE_BUCKET <bucket>` |
+| sensitive `put-object` | `confirm=UPLOAD_SENSITIVE <bucket>/<key>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -81,6 +97,7 @@
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-s3-ops` GCL pilot (fourth rollout after `aws-ec2-ops`, `aws-iam-ops`, `aws-kms-ops`) |
+| 1.1.0 | 2026-07-31 | Added Confirmation Strings table (`RM_RECURSIVE`, `PUT_POLICY_PUBLIC`, etc.) before Variable Convention |
 
 ---
 

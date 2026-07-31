@@ -21,7 +21,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.0.0"
-  last_updated: "2026-05-31"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   aiops_level: full-chain
@@ -91,9 +91,9 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 |---|---|---|
 | Create/update ACL/rule | Validate lock token, capacity, default action and rule order | Token for production traffic changes |
 | Rate limit auto-mitigation | Correlate WAF metrics and attack signals; cap scope/duration | AUTO_HEAL only within approved bounds |
-| Delete web ACL | Disassociate from every resource first; fetch current lock token | `DELETE_WEB_ACL <name>` |
-| Delete rule group | List ACL references and capacity consumers | Human confirmation |
-| Delete IP/regex set | Inspect rule references and traffic impact | Resource-bound confirmation |
+| Delete web ACL | Disassociate from every resource first; fetch current lock token | `confirm=DELETE_WEB_ACL <name>` |
+| Delete rule group | List ACL references and capacity consumers | `confirm=DELETE_RULE_GROUP <name>` |
+| Delete IP/regex set | Inspect rule references and traffic impact | `confirm=DELETE_IP_SET <name>` |
 | Disable logging/association | Show observability or protection impact | Human confirmation |
 
 Mask request bodies, IP lists where sensitive, tokens, and logging credentials in traces.

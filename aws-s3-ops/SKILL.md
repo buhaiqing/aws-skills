@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.1.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -80,15 +80,15 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Fir
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Put/get/list object | Verify bucket/key and encryption; mask sensitive content | Sensitive files (`.env`, credentials, `*.pem`, `*.key`) require explicit approval |
-| Delete object/version | Echo exact key/version and verify lookup | Resource-bound token |
-| Batch delete | `Objects` must be non-empty, explicit, bounded; wildcards abort | Count-bound confirmation |
-| Recursive remove | Print object count and total bytes before execution | Scope/count/bytes confirmation |
-| Delete bucket | Inspect versioning, objects, versions, delete markers, replication | Bucket-bound confirmation; versioned buckets require deleting versions first |
-| Public policy/ACL | Diff policy; block `Principal:"*"`/public ACL unless explicitly approved | Public-access confirmation |
-| Lifecycle expiration <30d | Show affected prefix/count and data-loss date | Explicit expiration confirmation |
-| Remove website/CORS/policy/replication/encryption | Show production impact and current config | Human confirmation |
-| Abort multipart upload | Show size/parts and resumability | Confirmation for large/non-resumable upload |
+| Put/get/list object | Verify bucket/key and encryption; mask sensitive content | Sensitive files: `confirm=UPLOAD_SENSITIVE <bucket>/<key>` |
+| Delete object/version | Echo exact key/version and verify lookup | Echo key/version from lookup; batch uses bounded `Objects` |
+| Batch delete | `Objects` non-empty, explicit, bounded; wildcards abort | Non-empty array + count echo (rule A6) |
+| Recursive remove | Print object count and total bytes before execution | `confirm=RM_RECURSIVE <bucket>` (+ count/bytes in trace) |
+| Delete bucket | Inspect versioning, objects, versions, delete markers, replication | `confirm=DELETE_BUCKET <bucket>`; MFA Delete: `confirm=DELETE_MFA_BUCKET <bucket>` |
+| Public policy/ACL | Diff policy; block `Principal:"*"`/public ACL unless approved | `confirm=PUT_POLICY_PUBLIC <bucket>` / `confirm=PUT_ACL_PUBLIC <bucket>` / `confirm=PUT_OBJECT_ACL_PUBLIC <bucket>/<key>` |
+| Lifecycle expiration <30d | Show affected prefix/count and data-loss date | `confirm=PUT_LIFECYCLE_SHORT <bucket>` |
+| Remove website/CORS/policy/replication/encryption | Show production impact and current config | Human confirmation before config removal |
+| Abort multipart upload | Show size/parts and resumability | Human confirmation for large/non-resumable upload |
 
 A2: versioned bucket deletion without prior object-version cleanup → Safety=0 abort. A6: empty/wildcard batch delete → abort. A7 region must match. A8 bucket must be echoed from lookup. A9 sensitive files/content never enter traces. A10 STS identity is first command. A15 public-access widening requires explicit public confirmation.
 

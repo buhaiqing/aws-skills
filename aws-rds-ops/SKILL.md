@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.2.0"
-  last_updated: "2026-06-27"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -81,11 +81,13 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 
 | Operation | Pre-flight / validation | Confirmation |
 |---|---|---|
-| Create/modify instance/cluster | Validate engine, class, network, maintenance impact; read back | Token for disruptive/reboot changes |
+| Create/modify instance/cluster | Validate engine, class, network, maintenance impact; read back | `confirm=` token for disruptive/reboot/storage-shrink changes |
 | Failover/stop/start | Verify current state and impact; poll availability | Human confirmation |
-| Delete instance/cluster | Display blast radius; default final snapshot; inspect dependents | `DELETE <id>`; `DELETE_NO_SNAPSHOT <id>` required for skip-final-snapshot |
-| Delete snapshot/parameter group | Verify existence and references | `DELETE_SNAPSHOT`/`DELETE_PG <name>` |
-| Delete subnet group/event subscription | Verify no resources reference it | Human confirmation |
+| Delete instance (with snapshot) | Display blast radius; instance `Available`; inspect dependents | `confirm=DELETE_DB_INSTANCE <id> snapshot=<snap-id>` |
+| Delete instance (skip snapshot) | Same pre-flight; irreversible data loss | `DELETE_NO_SNAPSHOT <id>` (A14 bare literal) |
+| Delete snapshot/cluster snapshot | Verify existence and `Status=available` | `confirm=DELETE_DB_SNAPSHOT` / `confirm=DELETE_DB_CLUSTER_SNAPSHOT` |
+| Prod delete / cross-region promote | Verify tags/state; read back from describe | `confirm=DELETE_PROD_DB` / `confirm=PROMOTE_CROSS_REGION_REPLICA` |
+| Delete parameter/subnet group/event sub | Verify no resources reference it | Human confirmation |
 | Slow query diagnosis | Read-only metrics/PI/engine data; mask SQL secrets | — |
 
 Never log `MasterUserPassword`, SQL credentials, connection strings, or query secrets.

@@ -37,6 +37,25 @@
 - Missing fields → score 0 with justification
 ```
 
+## Confirmation Strings
+
+> L4 `runtime_safety.py` uses hash tokens via `build_confirmation_token`;
+> GCL Critic checks the `confirm=` literals below.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-vpc` | `confirm=DELETE_VPC <vpc-id>` |
+| `delete-subnet` | `confirm=DELETE_SUBNET <subnet-id>` |
+| `delete-route-table` | `confirm=DELETE_ROUTE_TABLE <rt-id>` |
+| `delete-internet-gateway` | `confirm=DELETE_IGW <igw-id>` |
+| `delete-nat-gateway` | `confirm=DELETE_NAT_GATEWAY <nat-id>` |
+| `delete-vpc-endpoints` | `confirm=DELETE_VPC_ENDPOINT <vpce-id>` |
+| `delete-vpc-peering-connection` | `confirm=DELETE_VPC_PEERING <pcx-id>` |
+| `delete-security-group` | `confirm=DELETE_SECURITY_GROUP <sg-id>` |
+| `authorize-*-ingress` (public) | `confirm=AUTHORIZE_SG_PUBLIC <sg-id>` |
+| prod-tagged delete | `confirm=DELETE_PROD_<OP> <id>` |
+| prod-tagged modify | `confirm=MODIFY_PROD_<OP> <id>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -56,6 +75,13 @@
 | `{{output.critic_blocking}}` | previous Critic run | empty on iter 1 |
 | `{{output.iter}}` | Orchestrator counter | starts at 1 |
 | `{{output.operation}}` | Orchestrator classification | one of listed types |
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-vpc-ops` (Phase 1, required, not pilot) |
+| 1.3.0 | 2026-07-31 | Added `## Confirmation Strings` table aligned with `rubric.md` confirm= literals |
 
 ---
 

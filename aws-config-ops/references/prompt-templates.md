@@ -34,6 +34,23 @@
 - Safety = 0 if stop-recorder without confirm (all destructive ops require it)
 ```
 
+## Confirmation Strings
+
+> GCL Critic checks `confirm=` literals; L4 runtime_safety uses hash tokens separately.
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-config-rule` | `confirm=DELETE_RULE <name>` |
+| `delete-configuration-recorder` | `confirm=DELETE_RECORDER <name>` (stop recorder first) |
+| `delete-delivery-channel` | `confirm=DELETE_CHANNEL <name>` |
+| `delete-conformance-pack` | `confirm=DELETE_PACK <name>` |
+| `delete-configuration-aggregator` | `confirm=DELETE_AGGREGATOR <name>` |
+| `delete-organization-config-rule` | `confirm=DELETE_ORG_RULE <name>` |
+| `delete-retention-configuration` | `confirm=DELETE_RETENTION` |
+| `delete-aggregation-authorization` | `confirm=DELETE_AUTH <authorized-account>` |
+| `stop-configuration-recorder` | `confirm=STOP_RECORDER <name>` |
+| `put-retention-configuration` (< 30 days) | `confirm=SHORT_RETENTION <days>` |
+
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
 > are defined once in `prompt-skeletons.md` §Variable convention.
@@ -50,6 +67,13 @@
 | `{{output.critic_scores}}` | previous Critic | empty on iter 1 |
 | `{{output.iter}}` | counter | starts at 1 |
 | `{{output.operation}}` | classified op | see enum above |
+
+## Changelog
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.0 | 2026-06-08 | Initial GCL prompt templates for `aws-config-ops` |
+| 1.1.0 | 2026-07-31 | Added `## Confirmation Strings` table before Variable Convention |
 
 ---
 

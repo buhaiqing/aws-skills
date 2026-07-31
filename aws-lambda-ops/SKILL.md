@@ -17,7 +17,7 @@ compatibility: >-
 metadata:
   author: aws
   version: "1.2.0"
-  last_updated: "2026-06-26"
+  last_updated: "2026-07-31"
   runtime: Harness AI Agent
   cli_applicability: dual-path
   gcl:
@@ -86,10 +86,10 @@ Every operation follows **Pre-flight → Execute → Validate → Recover**. Run
 |---|---|---|
 | Create/update code | Verify role, package, runtime; validate Active/Successful | Token for runtime/VPC/role changes |
 | Invoke | Echo function/version; mask payload/output secrets | Token when invocation has side effects |
-| Create/delete event mapping | Inspect source, mapping state, and blast radius | Human confirmation before deletion |
-| Delete function | `get-function`; list mappings, aliases and URLs; refuse hidden trigger removal | `DELETE_FUNCTION <name>`; with mappings use `DELETE_FUNCTION_WITH_TRIGGERS <name>` |
-| Delete layer/config/permission | Describe dependency and callers | Operation-specific confirmation |
-| Set concurrency to 0 | Explain function is effectively stopped | Human confirmation |
+| Create/delete event mapping | Inspect source, mapping state, and blast radius | `confirm=DELETE_EVENT_SOURCE_MAPPING <uuid>` before deletion |
+| Delete function | `get-function`; list mappings, aliases and URLs; refuse hidden trigger removal | `confirm=DELETE_FUNCTION <name>`; with mappings `confirm=DELETE_FUNCTION_WITH_TRIGGERS <name>` |
+| Delete layer/config/permission | Describe dependency and callers | `confirm=DELETE_LAYER_VERSION <layer>:<version>` or operation-specific `confirm=` |
+| Set concurrency to 0 | Explain function is effectively stopped | `confirm=SET_CONCURRENCY_ZERO <name>` |
 
 Never include environment-variable values, literal secrets, function code, payload secrets, or credentials in traces; reference Secrets Manager/SSM ARNs instead.
 

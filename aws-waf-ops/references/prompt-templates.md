@@ -41,9 +41,12 @@
 - check-capacity
 
 ## Confirmation Strings
-- `delete-web-acl`:    `confirm=DELETE_WEB_ACL <name>`
-- `delete-rule-group`: `confirm=DELETE_RULE_GROUP <name>`
-- `delete-ip-set`:     `confirm=DELETE_IP_SET <name>`
+
+| Operation | Confirmation token |
+|---|---|
+| `delete-web-acl` | `confirm=DELETE_WEB_ACL <name>` |
+| `delete-rule-group` | `confirm=DELETE_RULE_GROUP <name>` |
+| `delete-ip-set` | `confirm=DELETE_IP_SET <name>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -72,6 +75,7 @@
 ## Changelog
 | Version | Date | Change |
 |---|---|---|
+| 1.2.0 | 2026-07-31 | Converted Confirmation Strings bullets to markdown table (ec2 pattern). |
 | 1.1.0 | 2026-06-27 | Added `## Confirmation Strings` section (gcl-spec v1.12.0 §11.7 pattern); added `{{output.requested_region}}` and `{{output.safety_confirm_token}}` for rule A7 + Safety gate alignment (v1.12.0 §7.1). |
 | 1.0.0 | 2026-06-04 | Initial GCL prompt templates for `aws-waf-ops` |
 
