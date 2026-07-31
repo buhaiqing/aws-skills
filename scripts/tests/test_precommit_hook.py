@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -29,6 +30,7 @@ def _init_tmp_repo(tmp_path: Path) -> Path:
 
 def _run_hook_in(repo_path: Path, repo_root: Path | None = None) -> subprocess.CompletedProcess:
     env = os.environ.copy()
+    env["PYTHON_BIN"] = sys.executable
     if repo_root is not None:
         env["REPO_ROOT"] = str(repo_root)
     return subprocess.run(

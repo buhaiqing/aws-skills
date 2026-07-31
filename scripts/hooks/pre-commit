@@ -57,24 +57,36 @@ check_skill_md() {
     fi
 }
 
+# Prefer the Python that owns installed tooling (CI/venv). Tests set PYTHON_BIN
+# to sys.executable so hermetic hook runs see the same interpreter as pytest.
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
 # Lint gate: fail-closed ruff on full repo (all .py files, independent of staged files).
 # Catches context-breaking lint slips anywhere in the repo, not just in scripts/.
 # ponytail: --config pins rule set to the hook repo's ruff.toml so REPO_ROOT
 # hermetic tests (cwd in a tmp git tree) do not skip E7 via missing local config.
+# Prefer `$PYTHON_BIN -m ruff` so console-script PATH gaps do not false-fail.
 TOOLING_ROOT="$(dirname "$SCRIPTS_DIR")"
 RUFF_CFG="$TOOLING_ROOT/ruff.toml"
-if command -v ruff >/dev/null 2>&1; then
+RUFF_CMD=()
+if "$PYTHON_BIN" -m ruff --version >/dev/null 2>&1; then
+    if [ -f "$RUFF_CFG" ]; then
+        RUFF_CMD=("$PYTHON_BIN" -m ruff check --config "$RUFF_CFG" "$REPO")
+    else
+        RUFF_CMD=("$PYTHON_BIN" -m ruff check "$REPO")
+    fi
+elif command -v ruff >/dev/null 2>&1; then
     if [ -f "$RUFF_CFG" ]; then
         RUFF_CMD=(ruff check --config "$RUFF_CFG" "$REPO")
     else
         RUFF_CMD=(ruff check "$REPO")
     fi
-    if ! "${RUFF_CMD[@]}" >/dev/null 2>&1; then
-        FAIL_REASONS+=("ruff check . failed — fix before committing (ruff check --fix .)")
-        FAIL=1
-    fi
-else
+fi
+if [ "${#RUFF_CMD[@]}" -eq 0 ]; then
     FAIL_REASONS+=("ruff not installed — cannot run lint gate (pip install ruff)")
+    FAIL=1
+elif ! "${RUFF_CMD[@]}" >/dev/null 2>&1; then
+    FAIL_REASONS+=("ruff check . failed — fix before committing (ruff check --fix .)")
     FAIL=1
 fi
 
@@ -82,7 +94,7 @@ fi
 # passes. Do not condition this on changed file types; governance changes can
 # affect any runtime path and a green partial suite is insufficient evidence.
 if [ -d "$REPO/scripts/tests" ]; then
-    if ! pytest -p no:rerunfailures "$REPO/scripts/tests/" -q; then
+    if ! "$PYTHON_BIN" -m pytest -p no:rerunfailures "$REPO/scripts/tests/" -q; then
         FAIL_REASONS+=("pytest -p no:rerunfailures scripts/tests/ -q failed — fix tests before committing")
         FAIL=1
     fi
