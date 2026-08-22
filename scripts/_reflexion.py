@@ -146,6 +146,21 @@ def append_or_increment(path: Path, pattern: FailurePattern) -> str:
     Increments (returns 'incremented') when a row with the same
     `error_signature` already exists.
     """
+    if path.suffix == ".jsonl":
+        import failure_kb
+
+        rec = failure_kb.FailureRecord(
+            skill=pattern.skill,
+            command=pattern.command,
+            error=pattern.error,
+            error_signature=pattern.error_signature,
+            root_cause=pattern.root_cause,
+            fix=pattern.fix,
+            count=int(pattern.count) if str(pattern.count).isdigit() else 1,
+            last_seen=pattern.timestamp,
+            first_seen=pattern.timestamp,
+        )
+        return failure_kb.append_or_increment(rec, path)
     if not path.exists():
         _atomic_write(path, _FRESH_HEADER + _format_row(pattern) + "\n")
         return "appended"

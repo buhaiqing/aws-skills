@@ -197,6 +197,22 @@ def _row_to_pattern(cols: list[str]) -> dict | None:
 
 def load_failure_patterns(path: Path) -> list[dict]:
     """Parse a markdown table of failure patterns into a list of dicts."""
+    if path.suffix == ".jsonl":
+        import failure_kb
+
+        recs = failure_kb.load_jsonl(path)
+        return [
+            {
+                "skill": r.skill,
+                "command": r.command,
+                "error": r.error,
+                "root_cause": r.root_cause,
+                "fix": r.fix,
+                "count": str(r.count),
+                "timestamp": r.last_seen or r.first_seen,
+            }
+            for r in recs
+        ]
     patterns: list[dict] = []
     text = path.read_text(encoding="utf-8")
     in_table = False
