@@ -21,6 +21,17 @@ SCRIPTS_DIR="$(dirname "$HOOK_DIR")"
 # used by tests. The hook's own tooling always lives next to the hook script.
 REPO="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
+# Parse --no-codegraph flag (Fix #4 / spec §4.4): missing-binary envs can opt
+# out without bypassing the entire hook via git commit --no-verify.
+SKIP_CODEGRAPH=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-codegraph)
+            SKIP_CODEGRAPH=1
+            ;;
+    esac
+done
+
 CHANGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
 FAIL=0
 FAIL_REASONS=()
@@ -130,15 +141,19 @@ for f in $CHANGED; do
             fi
             ;;
         *.py|*.ts|*.go|*.rs|*.js|*.java)
-            # A3: when codegraph is installed, sync must succeed (hard).
-            # When missing: skip with stderr warn (CI / machines without binary).
-            if command -v codegraph >/dev/null 2>&1; then
+            # A3 + Fix #4 (spec §4.4): codegraph is a hard gate by default.
+            # Missing binary → FAIL (install or use --no-codegraph /
+            # `git commit --no-verify`). Present binary → run sync, propagate exit.
+            if [ "$SKIP_CODEGRAPH" -eq 1 ]; then
+                printf 'pre-commit warn: --no-codegraph set; skipping codegraph sync\n' >&2
+            elif command -v codegraph >/dev/null 2>&1; then
                 if ! codegraph sync . >/dev/null 2>&1; then
                     FAIL_REASONS+=("codegraph sync . failed — refresh index before commit")
                     FAIL=1
                 fi
             else
-                printf 'pre-commit warn: codegraph not on PATH; skipping sync\n' >&2
+                FAIL_REASONS+=("codegraph not installed; install or use --no-codegraph / git commit --no-verify")
+                FAIL=1
             fi
             ;;
     esac
