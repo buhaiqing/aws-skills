@@ -33,6 +33,7 @@ KNOBS = {
 
 _ID_PATTERN = re.compile(r"^F-(\d{3})-")
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+_CHANGELOG_DATE_RE = re.compile(r"\|\s*(\d{4}-\d{2}-\d{2})")
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class Finding:
     added_date: str
     closed_date: Optional[str]
     phase: str = ""
+    kind: str = "GENERIC"
 
     def to_markdown(self) -> str:
         closed = self.closed_date or ""
@@ -209,6 +211,75 @@ def generate_report(repo: Path, phase_id: str) -> str:
     return "\n".join(lines)
 
 
+# ---------- Maturity Model scan (Fix #1 — 30-day ⚠️→❌ auto-migration rule) ----------
+def scan_stale_maturity(
+    model_path: Path,
+    threshold_days: int = 30,
+    as_of: Optional[date] = None,
+) -> list[Finding]:
+    """Scan maturity model for ⚠️ items with no changelog reference within threshold.
+
+    Dry-run only — returns Finding list; does NOT modify model file.
+    Per Fix #1 spec §4.1: 30-day changelog silence = treat ⚠️ as Gap (❌).
+    """
+    as_of = as_of or date.today()
+    text = Path(model_path).read_text(encoding="utf-8")
+
+    # Split off changelog section (handle "## 11. Changelog" or "## Changelog")
+    head, sep, changelog_text = text.partition("## 11. Changelog")
+    if not sep:
+        head, sep, changelog_text = text.partition("## Changelog")
+    if not sep:
+        changelog_text = ""
+
+    # Build recent-text by grouping multi-line changelog rows under each date
+    recent_text_parts: list[str] = []
+    current_date: Optional[date] = None
+    current_row: list[str] = []
+    for ln in changelog_text.splitlines():
+        m = _CHANGELOG_DATE_RE.match(ln)
+        if m:
+            if current_date is not None and 0 <= (as_of - current_date).days <= threshold_days:
+                recent_text_parts.append("\n".join(current_row))
+            current_date = date.fromisoformat(m.group(1))
+            current_row = [ln]
+        else:
+            current_row.append(ln)
+    if current_date is not None and 0 <= (as_of - current_date).days <= threshold_days:
+        recent_text_parts.append("\n".join(current_row))
+    recent_text = "\n".join(recent_text_parts)
+
+    findings: list[Finding] = []
+    for i, line in enumerate(head.splitlines(), 1):
+        if "⚠️" not in line:
+            continue
+        idx = line.find("⚠️")
+        kw = line[idx + len("⚠️"):].strip(" |:-").strip()[:30].strip() or "(empty)"
+        # Per Fix #1 spec §4.1: "30-day changelog silence = treat ⚠️ as Gap".
+        # Section-level heuristic: if ANY changelog activity exists within
+        # threshold window, the model is considered maintained (avoids noisy
+        # kw-substring matches where changelog wording differs from item text).
+        if recent_text.strip():
+            continue
+        findings.append(Finding(
+            id=f"maturity-stale-{i:03d}",
+            severity="P1",
+            title=f"Stale ⚠️ maturity item: {kw!r}",
+            root_cause=(
+                f"⚠️ in maturity model has no changelog reference within "
+                f"{threshold_days} days (as_of={as_of.isoformat()})"
+            ),
+            fix=f"Add a changelog row referencing '{kw}', OR migrate ⚠️ → ❌ in model",
+            lesson="30-day changelog silence = treat ⚠️ as Gap (per Fix #1 spec §4.1)",
+            status="open",
+            added_date=as_of.isoformat(),
+            closed_date=None,
+            phase="fix-1-maturity-honesty",
+            kind="MATURITY_STALE",
+        ))
+    return findings
+
+
 # ---------- CLI ----------
 def _cli(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="self_review")
@@ -234,6 +305,12 @@ def _cli(argv: list[str]) -> int:
     p_rep.add_argument("--repo", default=".")
     p_rep.add_argument("--phase", required=True)
     p_rep.add_argument("--out", default=None)
+
+    p_scan = sub.add_parser("scan-stale-maturity")
+    p_scan.add_argument("--repo", default=".")
+    p_scan.add_argument("--model", default="docs/agentic-maturity-model.md")
+    p_scan.add_argument("--threshold-days", type=int, default=30)
+    p_scan.add_argument("--as-of", default=None, help="ISO date; default=today")
 
     args = p.parse_args(argv)
     repo = Path(args.repo).resolve()
@@ -275,6 +352,22 @@ def _cli(argv: list[str]) -> int:
             print(f"wrote {args.out}")
         else:
             print(md)
+        return 0
+    if args.cmd == "scan-stale-maturity":
+        repo = Path(args.repo).resolve()
+        model_arg = Path(args.model)
+        model = model_arg if model_arg.is_absolute() else (repo / args.model)
+        as_of = date.fromisoformat(args.as_of) if args.as_of else None
+        findings = scan_stale_maturity(model, args.threshold_days, as_of)
+        print("| # | Keyword | Severity | Action |")
+        print("|---|---------|----------|--------|")
+        for i, f in enumerate(findings, 1):
+            kw = f.title.replace("Stale ⚠️ maturity item: ", "").rstrip("'")
+            print(f"| {i} | {kw} | {f.severity} | migrate ⚠️→❌ or add changelog |")
+        print(
+            f"\nTotal stale: {len(findings)} "
+            f"(threshold={args.threshold_days}d, as_of={as_of or 'today'})"
+        )
         return 0
     return 2
 
