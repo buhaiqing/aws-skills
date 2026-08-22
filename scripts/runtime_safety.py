@@ -52,7 +52,16 @@ def _load_reflexion() -> Optional[object]:
     try:
         ns: dict[str, object] = {"__name__": "_reflexion"}
         ns.update(globals())
+        # Restore __name__ AFTER globals update so _reflexion.py's
+        # `if __name__ == "__main__":` CLI block does NOT fire when exec'd
+        # from runtime_safety.py's __main__ context.
+        ns["__name__"] = "_reflexion"
         rx_code = rx_path.read_text(encoding="utf-8")
+        # Register in sys.modules BEFORE exec so @dataclass's module lookup
+        # via sys.modules.get(cls.__module__).__dict__ works correctly.
+        import sys as _sys
+        _rx_module = _stdlib_types.ModuleType("_reflexion")
+        _sys.modules["_reflexion"] = _rx_module
         exec(rx_code, ns)
         _REFLEXION = _stdlib_types.SimpleNamespace(
             FailurePattern=ns.get("FailurePattern"),

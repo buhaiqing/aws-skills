@@ -24,6 +24,7 @@ import argparse
 import json
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 try:
     import yaml as _yaml  # noqa: F401
@@ -292,8 +293,27 @@ def run_scenarios(
     skill: str,
     gcl_runner_path: Path = GCL_RUNNER,
 ) -> list[ScenarioResult]:
-    """Run all scenarios; return one ScenarioResult per scenario (in order)."""
-    return [run_scenario(s, skill, gcl_runner_path) for s in scenarios]
+    """Run all scenarios in parallel; return one ScenarioResult per scenario (in order)."""
+    if not scenarios:
+        return []
+    results: dict[int, ScenarioResult] = {}
+    with ProcessPoolExecutor(max_workers=min(len(scenarios), 8)) as exc:
+        futures = {
+            exc.submit(run_scenario, s, skill, gcl_runner_path): i
+            for i, s in enumerate(scenarios)
+        }
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                results[idx] = future.result()
+            except Exception as exc_:  # pragma: no cover
+                results[idx] = ScenarioResult(
+                    scenario=asdict(scenarios[idx]),
+                    matched_status=False,
+                    raw_output={"error": str(exc_)},
+                    score_deltas={},
+                )
+    return [results[i] for i in sorted(results)]
 
 
 # ---------------------------------------------------------------------------

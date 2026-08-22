@@ -54,6 +54,35 @@ class ExecutionDAG:
     verify: list[str] = field(default_factory=list)
     dag_hash: str = ""  # filled by compute_dag_hash; excluded from digest
 
+# Module-level cache: dag_id -> topological order list (per-instance, never collides)
+_topological_cache: dict[str, list[str]] = {}
+
+
+def _topological_order_impl(dag: ExecutionDAG) -> list[str]:
+    """Uncached Kahn's algorithm — extracted for clarity."""
+    indeg: dict[str, int] = {nid: 0 for nid in dag.nodes}
+    adj: dict[str, list[str]] = {nid: [] for nid in dag.nodes}
+    for a, b in dag.edges:
+        if a not in indeg or b not in indeg:
+            raise ValueError(f"edge references missing node: {(a, b)}")
+        adj[a].append(b)
+        indeg[b] += 1
+
+    # Stable: process ready set in sorted id order.
+    ready = sorted(nid for nid, d in indeg.items() if d == 0)
+    order: list[str] = []
+    while ready:
+        nid = ready.pop(0)
+        order.append(nid)
+        for nxt in sorted(adj[nid]):
+            indeg[nxt] -= 1
+            if indeg[nxt] == 0:
+                ready.append(nxt)
+                ready.sort()
+
+    if len(order) != len(dag.nodes):
+        raise ValueError("dag contains a cycle")
+    return order
 
 def _node_canonical(node: ExecutionNode) -> dict[str, Any]:
     plan = node.plan
@@ -132,29 +161,14 @@ def validate_dag(dag: ExecutionDAG) -> list[str]:
 
 
 def topological_order(dag: ExecutionDAG) -> list[str]:
-    """Kahn topological sort; raises ValueError on cycles or missing nodes."""
-    indeg: dict[str, int] = {nid: 0 for nid in dag.nodes}
-    adj: dict[str, list[str]] = {nid: [] for nid in dag.nodes}
-    for a, b in dag.edges:
-        if a not in indeg or b not in indeg:
-            raise ValueError(f"edge references missing node: {(a, b)}")
-        adj[a].append(b)
-        indeg[b] += 1
-
-    # Stable: process ready set in sorted id order.
-    ready = sorted(nid for nid, d in indeg.items() if d == 0)
-    order: list[str] = []
-    while ready:
-        nid = ready.pop(0)
-        order.append(nid)
-        for nxt in sorted(adj[nid]):
-            indeg[nxt] -= 1
-            if indeg[nxt] == 0:
-                ready.append(nxt)
-                ready.sort()
-
-    if len(order) != len(dag.nodes):
-        raise ValueError("dag contains a cycle")
+    """Kahn topological sort; raises ValueError on cycles or missing nodes.
+    Results are cached by dag_id (instance-unique, no collisions)."""
+    if not dag.dag_hash:
+        compute_dag_hash(dag)
+    if dag.dag_id in _topological_cache:
+        return _topological_cache[dag.dag_id]
+    order = _topological_order_impl(dag)
+    _topological_cache[dag.dag_id] = order
     return order
 
 

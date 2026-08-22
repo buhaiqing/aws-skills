@@ -26,6 +26,7 @@ machine-checked here — see AGENTS.md §14.2.
 """
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 MAX_SKILL_LINES = 120
@@ -126,8 +127,6 @@ def gate_skill(skill_dir: Path) -> dict:
         "G4": check_g4(skill_dir),
     }
     return results
-
-
 def main(argv: list[str]) -> int:
     args = argv[1:]
     if not args or args[0] in ("-h", "--help"):
@@ -149,12 +148,30 @@ def main(argv: list[str]) -> int:
         print("ERROR: pass a skill dir, --all, or --help", file=sys.stderr)
         return 2
 
+    def _gate(skill_dir: Path) -> tuple[Path, dict]:
+        return skill_dir, gate_skill(skill_dir)
+
     all_pass = True
-    for t in targets:
-        r = gate_skill(t)
-        print(f"\n=== {r['skill']} ===")
+    skill_results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=8) as exc:
+        futures = {exc.submit(_gate, t): t for t in targets}
+        for future in as_completed(futures):
+            try:
+                skill_dir, r = future.result()
+                skill_results[skill_dir.name] = r
+            except Exception as exc_:  # pragma: no cover
+                skill_dir = futures[future]
+                skill_results[skill_dir.name] = {
+                    "skill": skill_dir.name,
+                    "error": str(exc_),
+                }
+                all_pass = False
+
+    for skill_dir in targets:
+        r = skill_results.get(skill_dir.name, gate_skill(skill_dir))
+        print(f"\n=== {r.get('skill', skill_dir.name)} ===")
         for gate in ("G1", "G3", "G4"):
-            ok, msg = r[gate]
+            ok, msg = r.get(gate, (False, "no result"))
             status = "PASS" if ok else "FAIL"
             print(f"  [{status}] {gate}: {msg}")
             all_pass = all_pass and ok

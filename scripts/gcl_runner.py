@@ -42,6 +42,7 @@ import signal
 import subprocess
 import sys
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -227,9 +228,10 @@ def _load_yaml_frontmatter(path: Path) -> dict[str, Any]:
 
 
 
-
+@lru_cache(maxsize=32)
 def load_skill(skill_name: str) -> dict[str, Any]:
-    """Load SKILL.md + rubric.md + prompt-templates.md into one dict."""
+    """Load SKILL.md + rubric.md + prompt-templates.md into one dict.
+    Results cached by skill_name for the lifetime of the process."""
     skill_dir = REPO / skill_name
     if not (skill_dir / "SKILL.md").is_file():
         raise SystemExit(f"skill not found: {skill_dir / 'SKILL.md'}")
