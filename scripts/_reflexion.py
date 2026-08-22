@@ -8,7 +8,7 @@ Atomic write: tmp → rename.
 """
 from __future__ import annotations
 
-from bisect import bisect_right, insort_right
+from bisect import bisect_right, insort_right  # noqa: F401
 import re as _re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -147,7 +147,24 @@ def append_or_increment(path: Path, pattern: FailurePattern) -> str:
       - file empty / no parseable header (F-23 silent-data-loss guard)
     Increments (returns 'incremented') when a row with the same
     `error_signature` already exists.
+
+    JSONL paths route to failure_kb.append_or_increment for unified
+    storage format compatibility.
     """
+    if path.suffix.lower() == ".jsonl":
+        import failure_kb
+        rec = failure_kb.FailureRecord(
+            skill=pattern.skill,
+            command=pattern.command,
+            error=pattern.error,
+            error_signature=pattern.error_signature,
+            root_cause=pattern.root_cause,
+            fix=pattern.fix,
+            count=pattern.count,
+            first_seen=pattern.timestamp,
+            last_seen=pattern.timestamp,
+        )
+        return failure_kb.append_or_increment(rec, path)
     if not path.exists():
         _atomic_write(path, _FRESH_HEADER + _format_row(pattern) + "\n")
         return "appended"
