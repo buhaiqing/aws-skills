@@ -43,6 +43,15 @@
 | 📋 | **Planned** | 设计已定稿, 排期但未开工 |
 | ❌ | **Gap** | 未实现, **当前 L4 关键缺口** |
 
+### 状态迁移规则
+
+**`⚠️` → `❌` 自动迁移（30 天阈值）**：
+- `scripts/self_review.py::scan_stale_maturity(model_path, threshold_days=30, as_of=today)` 扫描所有 ⚠️ 项
+- 若 ⚠️ 项所在 section 在 changelog §11 最近 `threshold_days` 天内**无任何 changelog 条目**，标记为 stale（视为 ❌ Gap）
+- 触发：`python3 scripts/self_review.py scan-stale-maturity --model docs/agentic-maturity-model.md --as-of 2026-08-22`
+- 行为：**dry-run only**（不自动改文件）— 由用户在 changelog 加引用或手动 ⚠️→❌
+- 阈值可调：`--threshold-days 7/30/90` 用于更激进/更宽松的扫描
+
 ---
 
 ## 3. L1 — Foundational（基础脚手架）
@@ -332,6 +341,7 @@ L4 █████████████████████  ~99% ✅ Ada
 | 2026-07-31 (v28) | **ADR-0001 M3 Transactional 工程闭环**: DAG + compensation + 3×3 chains; next = M4 Governed Learning | 主 Agent |
 | 2026-07-31 (v29) | **ADR-0001 M4 Governed Learning 工程闭环**: harvest/eval/approve; dup 8%; auto_promo=0%; next = M1 满窗 | 主 Agent |
 | 2026-08-01 (v30) | **O10 Auto Skill Generation MVP (D1–D3)**: `skill_scaffold.py` + `skill_gen_gate.py` + pytest；scaffold+gate DONE；LLM fill 仍为 agent；auto merge rate 0% | 主 Agent |
+| 2026-08-22 (v32) | **Fix #1 — Maturity Honesty Debt**: §2 加 ⚠️→❌ 30 天自动迁移规则 + `scripts/self_review.py scan-stale-maturity` dry-run 报告; AC-1/AC-2/AC-7/AC-8 verified; Spec `docs/superpowers/specs/2026-08-22-maturity-honesty-debt-design.md` §4.1 + Plan T1 | 主 Agent |
 
 ---
 
