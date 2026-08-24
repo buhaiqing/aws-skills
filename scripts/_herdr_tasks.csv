@@ -1,3 +1,0 @@
-# pane_label,task_prompt,result_file
-g2,"Read .github/workflows/golden-regression.yml and verify the YAML is valid. Report: (1) whether the file exists, (2) whether it parses as valid YAML, (3) whether it has 'on: pull_request' trigger.",/tmp/herdr-g2-result.md
-g4,"Read .github/workflows/ab-gate.yml and verify: (1) file exists, (2) valid YAML, (3) triggers on 'evals/' or '.deepeval/' paths. Report pass/fail for each.",/tmp/herdr-g4-result.md
