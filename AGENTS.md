@@ -5,22 +5,22 @@ Repo-specific guidance. Read `CLAUDE.md` first for shared baseline
 recovery table). **Detailed protocol sections (§11–§21) live in
 `AGENTS.references/`** to keep this file under the 80-line guard.
 
-## Reference index (§11–§21)
-
+## Reference index (§11–§23)
 | § | Topic | File |
 |---|---|---|
 | 11 | Generator-Critic-Loop (GCL) | `AGENTS.references/s11-gcl-spec.md` |
-| 12 | CodeGraph + Pre-commit Hard Gate | `AGENTS.references/s12-codegraph.md` |
-| 13 | Compound-Asset Distillation (CADL) | `AGENTS.references/s13-cadl.md` |
+| 12 | CodeGraph Integration | `AGENTS.references/s12-codegraph.md` |
+| 13 | Compound-Asset Distillation Loop (CADL) | `AGENTS.references/s13-cadl.md` |
 | 14 | Token Efficiency Hard Gate | `AGENTS.references/s14-te-hard-gate.md` |
 | 15 | Runtime Safety Hook | `AGENTS.references/s15-runtime-safety.md` |
-| 16 | Eval-Driven Dev | `AGENTS.references/s16-eval-driven-dev.md` |
+| 16 | Eval-Driven Dev Protocol | `AGENTS.references/s16-eval-driven-dev.md` |
 | 17 | Telemetry Dashboard | `AGENTS.references/s17-telemetry.md` |
-| 18 | A/B Hard Gate | `AGENTS.references/s18-ab-gate.md` |
+| 18 | A/B Test Hard Gate | `AGENTS.references/s18-ab-gate.md` |
 | 19 | Cross-Session Memory | `AGENTS.references/s19-session-memory.md` |
 | 20 | Cross-Runtime Portability | `AGENTS.references/s20-cross-runtime.md` |
-| 21 | Self-Reflection Protocol | `AGENTS.references/s21-self-review.md` |
-
+| 21 | Changelog | `AGENTS.references/s21-self-review.md` |
+| 22 | Testability Discipline | `AGENTS.references/s22-testability.md` |
+| 23 | Edit Surgery Discipline | `AGENTS.references/s23-edit-surgery.md` |
 ## Cardinal Policy (CP-1..6, single source = user-level)
 
 Authority lives at user-level `~/.pi/agent/AGENTS.md`; this repo only

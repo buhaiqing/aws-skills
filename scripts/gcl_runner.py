@@ -45,6 +45,7 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from dataclasses import dataclass, field
 
 REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = REPO / "audit-results"
@@ -55,6 +56,139 @@ _RUBRIC_DIMENSIONS = (
 VALID_OUTCOMES = frozenset({
     "PASS", "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATED",
 })
+
+# ---------------------------------------------------------------------------
+# Structured output schemas (L1 agentic maturity: contract validation)
+# ---------------------------------------------------------------------------
+
+# Re-export status constants for consumers
+PASS = "PASS"
+MAX_ITER = "MAX_ITER"
+SAFETY_FAIL = "SAFETY_FAIL"
+
+
+@dataclass
+class GeneratorOutput:
+    """Contract: what a Generator callable must return."""
+    command: str
+    args: dict
+    exit_code: int
+    result_excerpt: str
+    safety_confirm_token: str = ""
+    operation_risk: str = ""  # "" = unknown, "destructive" = destructive
+
+    def __post_init__(self):
+        if not isinstance(self.command, str):
+            raise CommandContractError(f"Generator.command must be str, got {type(self.command).__name__}")
+        if not isinstance(self.args, dict):
+            raise CommandContractError(f"Generator.args must be dict, got {type(self.args).__name__}")
+        if not isinstance(self.exit_code, int):
+            raise CommandContractError(f"Generator.exit_code must be int, got {type(self.exit_code).__name__}")
+        if not isinstance(self.result_excerpt, str):
+            raise CommandContractError(f"Generator.result_excerpt must be str, got {type(self.result_excerpt).__name__}")
+
+
+@dataclass
+class CriticScores:
+    """Contract: 5-dimension rubric scores."""
+    correctness: float
+    safety: float
+    idempotency: float
+    traceability: float
+    spec_compliance: float
+
+    def __post_init__(self):
+        for dim, score in [("correctness", self.correctness), ("safety", self.safety),
+                            ("idempotency", self.idempotency), ("traceability", self.traceability),
+                            ("spec_compliance", self.spec_compliance)]:
+            if score not in (0, 0.5, 1):
+                raise CommandContractError(f"Critic score [{dim}] must be 0|0.5|1, got {score}")
+
+
+@dataclass
+class CriticOutput:
+    """Contract: what a Critic callable must return."""
+    scores: CriticScores
+    suggestions: list[str] = field(default_factory=list)
+    blocking: bool = False
+
+    def __post_init__(self):
+        if isinstance(self.scores, dict):
+            self.scores = CriticScores(**self.scores)
+        if not isinstance(self.scores, CriticScores):
+            raise CommandContractError(f"Critic.scores must be CriticScores, got {type(self.scores).__name__}")
+        if not isinstance(self.suggestions, list):
+            raise CommandContractError(f"Critic.suggestions must be list, got {type(self.suggestions).__name__}")
+        if len(self.suggestions) > 3:
+            raise CommandContractError(f"Critic.suggestions max 3 items, got {len(self.suggestions)}")
+        if not all(isinstance(s, str) for s in self.suggestions):
+            raise CommandContractError("Critic.suggestions must contain only strings")
+        if not isinstance(self.blocking, bool):
+            raise CommandContractError(f"Critic.blocking must be bool, got {type(self.blocking).__name__}")
+
+
+def validate_generator_output(result: dict) -> GeneratorOutput:
+    """Validate Generator output contract. Only rejects type errors; missing optional fields use defaults.
+
+    Required: command (str), args (dict), exit_code (int).
+    Optional with defaults: result_excerpt (str), safety_confirm_token (str), operation_risk (str).
+    Matches original _validate_generator contract exactly.
+    """
+    if not isinstance(result, dict):
+        raise CommandContractError("Generator output must be an object")
+    for fname, expected in [("command", str), ("args", dict), ("exit_code", int)]:
+        val = result.get(fname)
+        if not isinstance(val, expected):
+            raise CommandContractError(f"Generator.{fname} must be {expected.__name__}, got {type(val).__name__ if val is not None else 'None'}")
+    defaults = {"result_excerpt": "", "safety_confirm_token": "", "operation_risk": ""}
+    merged = {**defaults, **{k: v for k, v in result.items()}}
+    return GeneratorOutput(
+        command=merged["command"],
+        args=merged["args"],
+        exit_code=merged["exit_code"],
+        result_excerpt=merged["result_excerpt"],
+        safety_confirm_token=merged["safety_confirm_token"],
+        operation_risk=merged["operation_risk"],
+    )
+
+
+def validate_critic_output(result: dict) -> CriticOutput:
+    """Validate Critic output contract. Only rejects type errors; missing optional fields use defaults.
+
+    Required: scores (dict with 5 rubric dimensions, each 0|0.5|1).
+    Optional with defaults: suggestions (list[str], max 3), blocking (bool).
+    """
+    if not isinstance(result, dict):
+        raise CommandContractError("Critic output must be an object")
+    scores_raw = result.get("scores", {})
+    if not isinstance(scores_raw, dict):
+        raise CommandContractError(f"Critic.scores must be dict, got {type(scores_raw).__name__}")
+    for dim in ("correctness", "safety", "idempotency", "traceability", "spec_compliance"):
+        score = scores_raw.get(dim)
+        if score not in (0, 0.5, 1):
+            raise CommandContractError(f"Critic.scores[{dim}] must be 0|0.5|1, got {score}")
+    suggestions = result.get("suggestions", [])
+    if not isinstance(suggestions, list):
+        raise CommandContractError(f"Critic.suggestions must be list, got {type(suggestions).__name__}")
+    if len(suggestions) > 3:
+        raise CommandContractError(f"Critic.suggestions max 3 items, got {len(suggestions)}")
+    for s in suggestions:
+        if not isinstance(s, str):
+            raise CommandContractError(f"Critic.suggestions must contain strings, got {type(s).__name__}")
+    blocking = result.get("blocking", False)
+    if not isinstance(blocking, bool):
+        raise CommandContractError(f"Critic.blocking must be bool, got {type(blocking).__name__}")
+    # Build validated struct
+    scores = CriticScores(
+        correctness=scores_raw.get("correctness", 1),
+        safety=scores_raw.get("safety", 1),
+        idempotency=scores_raw.get("idempotency", 1),
+        traceability=scores_raw.get("traceability", 1),
+        spec_compliance=scores_raw.get("spec_compliance", 1),
+    )
+    return CriticOutput(scores=scores, suggestions=list(suggestions), blocking=blocking)
+
+
 
 
 def normalize_outcome(status: str) -> str:
@@ -179,32 +313,18 @@ def critic_environment() -> dict[str, str]:
 
 
 def _validate_generator(result: dict[str, Any]) -> dict[str, Any]:
+    """Validate Generator contract. Returns validated dict for backward compat."""
     if not isinstance(result, dict):
         raise CommandContractError("Generator output must be an object")
-    if not isinstance(result.get("command", ""), str):
-        raise CommandContractError("Generator command must be a string")
-    if not isinstance(result.get("args", {}), dict):
-        raise CommandContractError("Generator args must be an object")
-    if not isinstance(result.get("exit_code", 0), int):
-        raise CommandContractError("Generator exit_code must be an integer")
+    validate_generator_output(result)
     return result
 
 
 def _validate_critic(result: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(result, dict) or not isinstance(result.get("scores"), dict):
-        raise CommandContractError("Critic output must contain scores object")
-    scores = result["scores"]
-    if set(scores) != set(_RUBRIC_DIMENSIONS):
-        raise CommandContractError("Critic scores must contain exactly five rubric dimensions")
-    if any(isinstance(score, bool) or score not in (0, 0.5, 1) for score in scores.values()):
-        raise CommandContractError("Critic scores must use 0, 0.5, or 1")
-    suggestions = result.get("suggestions", [])
-    if not isinstance(suggestions, list) or not all(isinstance(item, str) for item in suggestions):
-        raise CommandContractError("Critic suggestions must be a string list")
-    if len(suggestions) > 3:
-        raise CommandContractError("Critic suggestions must contain at most three items")
-    if not isinstance(result.get("blocking", False), bool):
-        raise CommandContractError("Critic blocking must be boolean")
+    """Validate Critic contract. Raises CommandContractError on violation."""
+    if not isinstance(result, dict):
+        raise CommandContractError("Critic output must be an object")
+    validate_critic_output(result)
     return result
 
 
