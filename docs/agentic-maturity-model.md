@@ -217,7 +217,7 @@
 | **ADR-0001 M2 Shadow Execution（工程交付）** | ✅ | `execution_plan` / `shadow_exec` / plan-bound token / proxy hard gate / `shadow_coverage` 27/27 + CI |
 | **ADR-0001 M3 Transactional Orchestration（工程交付）** | ✅ | `execution_dag` / `compensation_runner` / `chain_fixtures` 3×3；恢复率 100%；non_compensable → MANUAL |
 | **ADR-0001 M4 Governed Learning** | ✅ | `governed_learning.py` harvest/evaluate/approve；dup 8%；auto_promo=0%；CI 已接入 |
-| **自动 skill 生成**（generator 自动跑, 人工仅审批） | ✅ Partial | `skill_scaffold.py` + `skill_gen_gate.py`（MVP scaffold+gate；**LLM fill 仍为 agent**）；auto merge rate 0%；spec/plan D0–D3 DONE |
+| 自动 skill 生成（generator 自动跑, 人工仅审批） | ✅ | `skill_scaffold.py` + `skill_gen_gate.py` + `_llm_rubric_fill.py` + `--llm-fill` flag；scaffold+gate+LLM_fill 全链路 DONE；auto merge rate 0% |
 
 ### 6.4 剩余缺口（2026-07-31 对齐实现后）
 
@@ -342,7 +342,7 @@ L4 █████████████████████  ~99% ✅ Ada
 | 2026-08-01 (v30) | **O10 Auto Skill Generation MVP (D1–D3)**: `skill_scaffold.py` + `skill_gen_gate.py` + pytest；scaffold+gate DONE；LLM fill 仍为 agent；auto merge rate 0% | 主 Agent |
 | 2026-08-22 (v32) | **Fix #1 — Maturity Honesty Debt**: §2 加 ⚠️→❌ 30 天自动迁移规则 + `scripts/self_review.py scan-stale-maturity` dry-run 报告; AC-1/AC-2/AC-7/AC-8 verified; Spec `docs/superpowers/specs/2026-08-22-maturity-honesty-debt-design.md` §4.1 + Plan T1 | 主 Agent |
 
-| 2026-08-25 (v33) | **Gap #1 fixed — Pre-change CodeGraph Sync ⚠️→✅**: pre-commit hard gate lines 143–157（无 `|| true`）; `--no-codegraph` opt-out; §5.5 行 + §5 L3 缺口修正 | 主 Agent |
+| 2026-08-25 (v37) | **O10 D4 closed — LLM Fill 闭环**: `_llm_rubric_fill.py` + `--llm-fill` flag; scaffold+gate+LLM_fill 全链路 DONE; DashScope API; graceful fallback; 45/45 tests pass; §6.3 O10: Partial→✅ | 主 Agent |
 ---
 
 ## 12. 引用 / 关联
