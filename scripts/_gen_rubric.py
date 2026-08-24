@@ -36,10 +36,12 @@ TEMPLATE = '''# {service} Ops Rubric (GCL)
 
 ## Operation-specific overrides
 
+<!-- LLM_FILL: Operation-specific overrides (auto-generated) -->
 <!-- TODO: list every operation in this skill and its required-dimensions=1.0 cells. -->
 
 ## Safety special cases (auto-fail)
 
+<!-- LLM_FILL: Safety special cases (auto-generated) -->
 <!-- TODO: list every AWS-API silent-failure / data-loss pattern this service can hit. -->
 
 ## Loop parameters
@@ -58,14 +60,7 @@ TEMPLATE = '''# {service} Ops Rubric (GCL)
 '''
 
 
-def main():
-    if len(sys.argv) != 3:
-        print(__doc__)
-        sys.exit(1)
-    skill_dir, service = sys.argv[1:2] + [sys.argv[2]]
-    # crude mapping
-    aws_cli_svc = skill_dir.replace('aws-', '').replace('-ops', '')
-    # ec2 / iam / kms / s3 special -> their actual service name
+def _aws_cli_svc(skill_dir: str) -> str:
     overrides = {
         'aws-ec2-ops': 'ec2',
         'aws-iam-ops': 'iam',
@@ -90,17 +85,53 @@ def main():
         'aws-cloudwatch-ops': 'cloudwatch',
         'aws-cloudtrail-ops': 'cloudtrail',
     }
-    aws_cli_svc = overrides.get(skill_dir, aws_cli_svc)
-    max_iter = 3 if 'recommended' in sys.argv else 2
+    base = skill_dir.replace('aws-', '').replace('-ops', '')
+    return overrides.get(skill_dir, base)
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="Generate rubric.md for an AWS skill")
+    ap.add_argument("skill_dir", help="Skill directory, e.g. aws-lambda-ops")
+    ap.add_argument("service", help="Human-readable service name, e.g. AWS Lambda")
+    ap.add_argument("--docs-url", default="", help="Official AWS docs URL")
+    ap.add_argument("--llm-fill", action="store_true",
+                    help="Call DashScope LLM to fill Operation-specific overrides + Safety special cases")
+    ap.add_argument("--recommended", action="store_true",
+                    help="Use max_iterations=3 instead of 2")
+    args = ap.parse_args()
+
+    skill_dir = args.skill_dir
+    service = args.service
+    docs_url = args.docs_url
+    aws_cli_svc = _aws_cli_svc(skill_dir)
+    max_iter = 3 if args.recommended else 2
     out = Path(skill_dir) / 'references' / 'rubric.md'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(TEMPLATE.format(
+
+    rubric = TEMPLATE.format(
         skill=skill_dir,
         service=service,
         aws_cli_svc=aws_cli_svc,
         max_iter=max_iter,
-    ))
-    print(f'OK  wrote {out} (TODO: fill in overrides + safety special cases)')
+    )
+
+    if args.llm_fill:
+        try:
+            from _llm_rubric_fill import fill_rubric as _llm_fill
+            extra = _llm_fill(skill_dir, service, docs_url, aws_cli_svc)
+            if extra:
+                # Replace the LLM_FILL marker with the generated content
+                rubric = rubric.replace("<!-- LLM_FILL: Operation-specific overrides (auto-generated) -->", extra)
+                print(f"LLM filled rubric sections ({len(extra)} chars)", file=sys.stderr)
+            else:
+                print("WARNING: LLM fill returned empty (check OPENAI_API_KEY)", file=sys.stderr)
+        except Exception as e:
+            print(f"WARNING: LLM fill skipped ({e})", file=sys.stderr)
+
+    out.write_text(rubric)
+    note = " (LLM-filled)" if args.llm_fill else " (TODO: fill overrides + safety special cases)"
+    print(f"OK  wrote {out}{note}")
 
 
 if __name__ == '__main__':
