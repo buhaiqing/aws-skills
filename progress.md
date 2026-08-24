@@ -3,23 +3,18 @@
 ## Status
 Completed
 
-## Sprint C — M1 满窗 / Golden Eval Baselines (2026-08-25)
+## Sprint D — TE 回扫 (2026-08-25)
 
-**Goal**: 建立真实 PASS traces 作为 golden baseline，为 governed_learning eval loop 提供 seed 基线。
+**Goal**: 验证压缩后 37/37 skills 仍 pass te_gate --strict。上次全面回扫：2026-07-28（v24 P0-B closure）。
 
-**Deliverable**: 5 个高风险 skill 的 baseline JSON + diff 验证 0 regression
+**Result**: `python3 scripts/te_gate.py --all --strict`
 
-**Evidence**:
-| Skill | Scenarios | Result | Regressions |
-|---|---|---|---|
-| aws-ec2-ops | 14 | all expected | 0 |
-| aws-s3-ops | 13 | all PASS | 0 |
-| aws-iam-ops | 11 | all expected | 0 |
-| aws-rds-ops | 10 | all expected | 0 |
-| aws-kms-ops | 10 | all PASS | 0 |
-| **Total** | **58** | | **0** |
+| Category | Count | Status |
+|---|---|---|
+| Real production skills | 37 | ✅ all PASS |
+| Test/dummy skills | 3 | aws-toolong-ops FAIL (expected), bogus/valid PASS |
+| Total | 40 | |
 
-**Files**:
-- Baseline: `audit-results/golden/<skill>-baseline.json` (committed)
-- Current:  `audit-results/golden/<skill>-current.json`
-- Diff: 0 regressions across all 5 skills (verified via `golden_eval.py diff`)
+**Gates verified**: G1 (≤120 lines), G3 (JSON paths unique), G4 (no GCL body duplication)
+
+**Conclusion**: 37/37 production skills maintain PASS status; no regression since v24 P0-B closure. TE quality gates intact.
