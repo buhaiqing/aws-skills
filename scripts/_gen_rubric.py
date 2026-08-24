@@ -36,15 +36,14 @@ TEMPLATE = '''# {service} Ops Rubric (GCL)
 
 ## Operation-specific overrides
 
-<!-- LLM_FILL: Operation-specific overrides (auto-generated) -->
-<!-- TODO: list every operation in this skill and its required-dimensions=1.0 cells. -->
+<!-- LLM_FILL_OPS -->
+
+<!-- LLM_FILL_OPS is replaced with the ops table content from LLM.
+     The LLM output must include the second section heading to enable splitting. -->
 
 ## Safety special cases (auto-fail)
 
-<!-- LLM_FILL: Safety special cases (auto-generated) -->
-<!-- TODO: list every AWS-API silent-failure / data-loss pattern this service can hit. -->
-
-## Loop parameters
+<!-- LLM_FILL_SAFETY -->
 
 | Parameter | Value | Source |
 |---|---|---|
@@ -121,11 +120,29 @@ def main():
             from _llm_rubric_fill import fill_rubric as _llm_fill
             extra = _llm_fill(skill_dir, service, docs_url, aws_cli_svc)
             if extra:
-                # Replace the LLM_FILL marker with the generated content
-                rubric = rubric.replace("<!-- LLM_FILL: Operation-specific overrides (auto-generated) -->", extra)
-                print(f"LLM filled rubric sections ({len(extra)} chars)", file=sys.stderr)
+                # LLM returns "## Operation-specific overrides\n...\n## Safety special cases (auto-fail)\n..."
+                # Split at the second heading and replace each marker
+                safety_idx = extra.find("## Safety special cases (auto-fail)")
+                if safety_idx > 0:
+                    ops_content = extra[:safety_idx].rstrip()
+                    safety_content = extra[safety_idx:].rstrip()
+                    # Template declares both section headings. Strip LLM's heading
+                    # lines so only the template's pre-declared headings remain.
+                    if ops_content.startswith("## "):
+                        ops_content = ops_content.split("\n\n", 1)[-1].strip()
+                    if safety_content.startswith("## "):
+                        safety_content = safety_content.split("\n\n", 1)[-1].strip()
+                    rubric = rubric.replace("<!-- LLM_FILL_OPS -->", ops_content)
+                    rubric = rubric.replace("<!-- LLM_FILL_SAFETY -->", safety_content)
+                    total = len(ops_content) + len(safety_content)
+                    print(f"LLM filled rubric sections ({total} chars)", file=sys.stderr)
+                else:
+                    # Fallback: whole thing in ops slot
+                    rubric = rubric.replace("<!-- LLM_FILL_OPS -->", extra)
+                    rubric = rubric.replace("<!-- LLM_FILL_SAFETY -->", "")
+                    print(f"LLM filled ops section only ({len(extra)} chars)", file=sys.stderr)
             else:
-                print("WARNING: LLM fill returned empty (check OPENAI_API_KEY)", file=sys.stderr)
+                print("WARNING: LLM fill returned empty (check API key)", file=sys.stderr)
         except Exception as e:
             print(f"WARNING: LLM fill skipped ({e})", file=sys.stderr)
 

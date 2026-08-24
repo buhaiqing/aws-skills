@@ -342,7 +342,7 @@ L4 █████████████████████  ~99% ✅ Ada
 | 2026-08-01 (v30) | **O10 Auto Skill Generation MVP (D1–D3)**: `skill_scaffold.py` + `skill_gen_gate.py` + pytest；scaffold+gate DONE；LLM fill 仍为 agent；auto merge rate 0% | 主 Agent |
 | 2026-08-22 (v32) | **Fix #1 — Maturity Honesty Debt**: §2 加 ⚠️→❌ 30 天自动迁移规则 + `scripts/self_review.py scan-stale-maturity` dry-run 报告; AC-1/AC-2/AC-7/AC-8 verified; Spec `docs/superpowers/specs/2026-08-22-maturity-honesty-debt-design.md` §4.1 + Plan T1 | 主 Agent |
 
-| 2026-08-25 (v37) | **O10 D4 closed — LLM Fill 闭环**: `_llm_rubric_fill.py` + `--llm-fill` flag; scaffold+gate+LLM_fill 全链路 DONE; DashScope API; graceful fallback; 45/45 tests pass; §6.3 O10: Partial→✅ | 主 Agent |
+| 2026-08-25 (v37) | **O10 D4 closed — LLM Fill 闭环**: `_llm_rubric_fill.py` + `--llm-fill` flag; scaffold+gate+LLM_fill 全链路 DONE; DashScope→Moonshot fallback API; **53/53 tests pass**; §6.3 O10: Partial→✅ | 主 Agent |
 ---
 
 ## 12. 引用 / 关联

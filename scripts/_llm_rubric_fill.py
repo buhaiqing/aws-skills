@@ -25,7 +25,12 @@ EC2_RUBRIC = REPO / "aws-ec2-ops" / "references" / "rubric.md"
 
 
 def call_llm(messages: list[dict]) -> str:
-    """POST to DashScope OpenAI-compatible API. Returns response text or ''."""
+    """POST to DashScope (OpenAI compat) or Moonshot (Anthropic compat).
+
+    Tries DashScope first; falls back to Moonshot /v1/messages on 401/403.
+    Returns response text or ''.
+    """
+    # --- Try DashScope (OpenAI-compatible) ---
     api_key = os.environ.get("OPENAI_API_KEY", "")
     base_url = os.environ.get(
         "OPENAI_BASE_URL",
@@ -33,32 +38,75 @@ def call_llm(messages: list[dict]) -> str:
     )
     model = os.environ.get("OPENAI_MODEL", "qwen3-coder-plus")
 
-    if not api_key:
+    if api_key:
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 2048,
+        }
+        try:
+            import requests
+
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            if resp.status_code == 429:
+                time.sleep(5)
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            # 401/403 → try Moonshot fallback
+            if resp.status_code not in (401, 403):
+                return ""
+        except Exception:
+            pass
+
+    # --- Fallback: Moonshot (Anthropic-compatible /v1/messages) ---
+    mo_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    mo_base = os.environ.get(
+        "ANTHROPIC_BASE_URL",
+        "https://api.moonshot.cn/anthropic",
+    )
+    if not mo_key:
         return ""
 
-    url = f"{base_url.rstrip('/')}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
+    mo_url = f"{mo_base.rstrip('/')}/v1/messages"
+    mo_model = "moonshot-v1-8k"
+    mo_headers = {
+        "Authorization": f"Bearer {mo_key}",
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.3,
+    # Convert OpenAI-style messages to Anthropic format
+    system_msg = next((m["content"] for m in messages if m["role"] == "system"), None)
+    user_msgs = [m["content"] for m in messages if m["role"] == "user"]
+    anthropic_messages = []
+    if system_msg:
+        anthropic_messages.append({"role": "user", "content": system_msg})
+    for content in user_msgs:
+        anthropic_messages.append({"role": "user", "content": content})
+
+    mo_payload = {
+        "model": mo_model,
+        "messages": anthropic_messages,
         "max_tokens": 2048,
     }
-
     try:
         import requests
 
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp = requests.post(mo_url, headers=mo_headers, json=mo_payload, timeout=30)
         if resp.status_code == 429:
             time.sleep(5)
-            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            resp = requests.post(mo_url, headers=mo_headers, json=mo_payload, timeout=30)
         if resp.status_code != 200:
             return ""
         data = resp.json()
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return data.get("content", [{}])[0].get("text", "")
     except Exception:
         return ""
 
