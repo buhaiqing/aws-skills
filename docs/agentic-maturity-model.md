@@ -158,7 +158,7 @@
 | **Spec + Plan Before Implement**（>5 行代码改动必写） | ✅ | `AGENTS.md` §Operational Guidelines; 17 个 specs + 17 个 plans |
 | **superpowers 模板化**（固定格式） | ✅ | `docs/superpowers/specs/2026-07-11-level3-coverage-design.md` 是 canonical 模板 |
 | **设计纪律的自我 dogfooding**（写 spec 的 commit 必须引用 spec） | ✅ | `AGENTS.md` §14 "Compound asset example" |
-| **Pre-change CodeGraph Sync**（改代码前 `codegraph sync .`） | ⚠️ | `AGENTS.md` §12 强制; `scripts/hooks/pre-commit` 已对 code 文件调用 `codegraph sync .`，但 **soft-fail**（`|| true`，未安装 codegraph 时静默跳过）; 仍需本地安装 codegraph |
+| **Pre-change CodeGraph Sync**（改代码前 `codegraph sync .`） | ✅ | `AGENTS.md` §12 强制; `scripts/hooks/pre-commit` lines 143–157 硬失败; `--no-codegraph` flag 支持无 codegraph 环境 opt-out 而非 `--no-verify` |
 | **CodeGraph 跨 agent MCP 集成**（OpenCode / Cursor / Claude / Codex / Hermes） | ✅ | `AGENTS.md` §12; `.mcp.json` 声明; `codegraph install -t all` |
 | **A/B 数据驱动决策**（工具选择硬门禁） | ✅ | `2026-07-19-codegraph-ab-experiment-design.md`; `AGENTS.md` §12 Mandatory Split Gate |
 | **CADL（Compound-Asset Distillation Loop）** | ✅ | `AGENTS.md` §13 |
@@ -174,8 +174,7 @@
 | **健康 overlay 测试** | ✅ | `test_health_overlay.py` |
 | **Confirmation Strings 规范表**（`| Operation | Confirmation token |` canonical） | ✅ | `references/prompt-templates.md`; commit f215a6a 统一 list/3-col 形式; 含 CS 的 base skill 已清齐 |
 
-**L3 关键缺口**: 
-- ⚠️ Pre-change CodeGraph Sync **pre-commit 已接入但 soft-fail**（需 codegraph 安装 + 硬失败待补）→ 见 ADR-0001
+**L3 关键缺口**: 无。
 
 ---
 
@@ -343,6 +342,7 @@ L4 █████████████████████  ~99% ✅ Ada
 | 2026-08-01 (v30) | **O10 Auto Skill Generation MVP (D1–D3)**: `skill_scaffold.py` + `skill_gen_gate.py` + pytest；scaffold+gate DONE；LLM fill 仍为 agent；auto merge rate 0% | 主 Agent |
 | 2026-08-22 (v32) | **Fix #1 — Maturity Honesty Debt**: §2 加 ⚠️→❌ 30 天自动迁移规则 + `scripts/self_review.py scan-stale-maturity` dry-run 报告; AC-1/AC-2/AC-7/AC-8 verified; Spec `docs/superpowers/specs/2026-08-22-maturity-honesty-debt-design.md` §4.1 + Plan T1 | 主 Agent |
 
+| 2026-08-25 (v33) | **Gap #1 fixed — Pre-change CodeGraph Sync ⚠️→✅**: pre-commit hard gate lines 143–157（无 `|| true`）; `--no-codegraph` opt-out; §5.5 行 + §5 L3 缺口修正 | 主 Agent |
 ---
 
 ## 12. 引用 / 关联
