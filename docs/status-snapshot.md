@@ -1,6 +1,6 @@
 # Harness Health Snapshot (auto-generated)
 
-> Generated: **2026-07-27** · 🟢 ALL GREEN
+> Generated: **2026-08-25** · 🟢 ALL GREEN
 > This file is produced by `make snapshot` (`scripts/status_snapshot.py`).
 > Do not edit by hand — it is overwritten on every run.
 
@@ -8,7 +8,7 @@
 
 | Gate | Result |
 |------|--------|
-| pytest | 123 passed, 0 failed, 0 error (OK) |
+| pytest | 343 passed, 0 failed, 0 error (OK) |
 | ruff | 0 error(s) (OK) |
 | composite_lint | OK |
 | self_review verify | stale P0 = 0 (OK) |
