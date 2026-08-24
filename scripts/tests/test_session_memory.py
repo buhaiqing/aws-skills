@@ -138,3 +138,59 @@ def test_cli_query_subprocess_finds_match(tmp_path):
     assert proc.returncode == 0
     assert "Runtime safety" in proc.stdout
     assert "mem-x" in proc.stdout
+
+
+def test_verify_startup_current_session(tmp_path, monkeypatch):
+    """File exists with current session marker → exit 0."""
+    target = tmp_path / "conventions.json"
+    rec = MemoryRecord(id="mem-001", timestamp="2026-07-25T00:00:00+00:00",
+                       scope="convention", summary="Test fact", detail="",
+                       confidence=1.0, source_session="current-session", tags=[])
+    save_memory([rec], target)
+    monkeypatch.setenv("OMC_SESSION_ID", "current-session")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "session_memory.py"),
+         "verify-startup", "--path", str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 0
+
+
+def test_verify_startup_stale_session(tmp_path, monkeypatch):
+    """File exists but session is stale → exit 1."""
+    target = tmp_path / "conventions.json"
+    rec = MemoryRecord(id="mem-001", timestamp="2026-07-25T00:00:00+00:00",
+                       scope="convention", summary="Test fact", detail="",
+                       confidence=1.0, source_session="old-session", tags=[])
+    save_memory([rec], target)
+    monkeypatch.setenv("OMC_SESSION_ID", "different-session")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "session_memory.py"),
+         "verify-startup", "--path", str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 1
+
+
+def test_verify_startup_missing_file_no_required(tmp_path, monkeypatch):
+    """File missing, no --required flag → exit 1."""
+    target = tmp_path / "nonexistent.json"
+    monkeypatch.setenv("OMC_SESSION_ID", "any-session")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "session_memory.py"),
+         "verify-startup", "--path", str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 1
+
+
+def test_verify_startup_missing_file_required(tmp_path, monkeypatch):
+    """File missing with --required flag → exit 2."""
+    target = tmp_path / "nonexistent.json"
+    monkeypatch.setenv("OMC_SESSION_ID", "any-session")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "session_memory.py"),
+         "verify-startup", "--path", str(target), "--required"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 2

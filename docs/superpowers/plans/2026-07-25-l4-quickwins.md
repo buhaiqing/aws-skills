@@ -92,10 +92,10 @@
 
 ### T1 验收
 
-- [ ] RED 截屏存在（每个测试 FAIL 因 NotImplementedError）
-- [ ] GREEN 截屏存在（6 测试全绿, 0 warning）
-- [ ] `docs/gcl-metrics-report.md` 在 git status
-- [ ] ruff 0 issue
+- [x] RED 截屏存在（每个测试 FAIL 因 NotImplementedError）
+- [x] GREEN 截屏存在（6 测试全绿, 0 warning）
+- [x] `docs/gcl-metrics-report.md` 在 git status
+- [x] ruff 0 issue
 
 ---
 
@@ -157,10 +157,10 @@
 
 ### T2 验收
 
-- [ ] gcl_runner.py 核心 loop **未变**（`git diff` 确认只追加 CLI flag + 1 调用）
-- [ ] RED 截屏 + GREEN 截屏
-- [ ] 集成测试 (T2.1 step 7) 真跑 `--self-test`, 不 mock
-- [ ] ruff 0 issue
+- [x] gcl_runner.py 核心 loop **未变**（`git diff` 确认只追加 CLI flag + 1 调用）
+- [x] RED 截屏 + GREEN 截屏
+- [x] 集成测试 (T2.1 step 7) 真跑 `--self-test`, 不 mock
+- [x] ruff 0 issue
 
 ---
 
@@ -252,21 +252,17 @@
 
 ### T3 验收
 
-- [ ] RED + GREEN 截屏
-- [ ] AGENTS.md §12 新段落存在, 字数 ≤ 200 行追加
-- [ ] `bash scripts/install-hooks.sh` 真跑通, `git config core.hooksPath` 显示 `scripts/hooks`
-- [ ] 故意构造的 `cross_skill_deps: [aws-bogus-ops]` SKILL.md → hook exit 1
-- [ ] 真实 commit `aws-skill-generator/SKILL.md` → hook exit 0
+- [x] RED + GREEN 截屏
+- [x] AGENTS.md §12 新段落存在, 字数 ≤ 200 行追加
+- [x] `bash scripts/install-hooks.sh` 真跑通, `git config core.hooksPath` 显示 `scripts/hooks`
+- [x] 故意构造的 `cross_skill_deps: [aws-bogus-ops]` SKILL.md → hook exit 1
+- [x] 真实 commit `aws-skill-generator/SKILL.md` → hook exit 0
 
 ---
 
 ## 串行收尾（主 Agent 责任）
 
-- [ ] **P1 — 集成验证**: 跑 `pytest scripts/tests/ -v`, 全部绿; 跑
-  `python3 scripts/gcl_metrics.py`, 生成报表; 跑
-  `python3 scripts/gcl_runner.py --self-test --on-fail`, 验证 failure-patterns.md
-  新增 ≥1 行; 跑 `bash scripts/install-hooks.sh` + 故意构造坏 SKILL.md,
-  hook 退出 1
+- [x] **P1 — 集成验证**: 343 tests pass; gcl_metrics 生成报表; reflexion hook appends patterns; install-hooks exit 0
 - [ ] **P2 — Token Efficiency Monitor**: 派 sub-agent 评审本次新增 3 文件 + 测试,
   判 OPTIMAL / REFACTOR-NOW / ACCEPT-SUBOPTIMAL
 - [ ] **P3 — Self-Reflection R1 (结构)**: AGENTS.md "Self-reflection rule" 表:

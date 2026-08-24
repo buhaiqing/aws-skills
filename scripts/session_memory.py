@@ -22,6 +22,7 @@ import argparse
 import json
 import re
 import sys
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -262,7 +263,11 @@ def main(argv: list[str] | None = None) -> int:
     render_p = sub.add_parser("render",
                               help="Render as prompt-injectable text.")
     render_p.add_argument("--path", default=".omc/conventions.json")
-    render_p.add_argument("--max-chars", type=int, default=2000)
+    vs_p = sub.add_parser("verify-startup",
+                           help="Check if conventions.json is from current session.")
+    vs_p.add_argument("--path", default=".omc/conventions.json")
+    vs_p.add_argument("--required", action="store_true",
+                      help="Exit 2 if file is missing entirely (hard requirement).")
 
     args = ap.parse_args(argv)
 
@@ -296,7 +301,24 @@ def main(argv: list[str] | None = None) -> int:
         for h in records:
             print(f"[{h.scope}] {h.id} {h.summary}")
         return 0
-
+    if args.cmd == "verify-startup":
+        p = Path(args.path)
+        current_session = os.environ.get("OMC_SESSION_ID", "")
+        if not current_session:
+            last_session_file = Path(".omc/.last_session")
+            if last_session_file.exists():
+                current_session = last_session_file.read_text().strip()
+        if not p.exists():
+            if args.required:
+                return 2
+            return 1
+        records = load_memory(p)
+        if not records:
+            return 1
+        for rec in records:
+            if rec.source_session == current_session:
+                return 0
+        return 1
     if args.cmd == "render":
         records = load_memory(Path(args.path))
         sys.stdout.write(format_for_prompt(records, max_chars=args.max_chars))

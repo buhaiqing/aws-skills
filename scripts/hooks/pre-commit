@@ -8,8 +8,8 @@
 #   4. scripts/links_lint.py → --all --strict
 #   5. Every commit → complete unit-test suite (fail-closed)
 #   6. *.py|*.ts|*.go|*.rs|*.js|*.java → codegraph sync .
-#   7. All .py files staged for commit → ruff check "$REPO" (full repo, fail-closed)
-#
+#   8. scripts/*.py changes → grep for leftover DEBUG prints (no commit residue)
+
 # REPO_ROOT env var overrides auto-detection (for testability).
 
 set -uo pipefail
@@ -124,6 +124,14 @@ for f in $CHANGED; do
                 fi
             fi
             ;;
+        scripts/parallel_gcl_runner.py)
+            if [ -f "$SCRIPTS_DIR/parallel_gcl_runner.py" ]; then
+                if ! python3 "$SCRIPTS_DIR/parallel_gcl_runner.py" --self-test >/dev/null 2>&1; then
+                    FAIL_REASONS+=("parallel_gcl_runner.py --self-test failed")
+                    FAIL=1
+                fi
+            fi
+            ;;
         scripts/te_gate.py)
             if [ -f "$SCRIPTS_DIR/te_gate.py" ]; then
                 if ! python3 "$SCRIPTS_DIR/te_gate.py" --all --strict >/dev/null 2>&1; then
@@ -141,7 +149,18 @@ for f in $CHANGED; do
             fi
             ;;
         *.py|*.ts|*.go|*.rs|*.js|*.java)
+            # §22.9: scripts/*.py staged → no leftover DEBUG prints.
+            # Tests legitimately print; only production scripts are scanned.
+            case "$f" in
+                scripts/*.py)
+                    if grep -nE 'print\([^)]*DEBUG\s' "$REPO/$f" >/dev/null 2>&1; then
+                        FAIL_REASONS+=("$f contains DEBUG print (remove before commit, §22.9)")
+                        FAIL=1
+                    fi
+                    ;;
+            esac
             # A3 + Fix #4 (spec §4.4): codegraph is a hard gate by default.
+
             # Missing binary → FAIL (install or use --no-codegraph /
             # `git commit --no-verify`). Present binary → run sync, propagate exit.
             if [ "$SKIP_CODEGRAPH" -eq 1 ]; then
@@ -154,6 +173,15 @@ for f in $CHANGED; do
             else
                 FAIL_REASONS+=("codegraph not installed; install or use --no-codegraph / git commit --no-verify")
                 FAIL=1
+            fi
+            ;;
+        AGENTS.md)
+            # §19: AGENTS.md change → verify cross-session memory was injected
+            if [ -f "$SCRIPTS_DIR/session_memory.py" ]; then
+                if ! python3 "$SCRIPTS_DIR/session_memory.py" verify-startup --required >/dev/null 2>&1; then
+                    FAIL_REASONS+=("session_memory verify-startup failed — run python3 scripts/session_memory.py render at startup")
+                    FAIL=1
+                fi
             fi
             ;;
     esac

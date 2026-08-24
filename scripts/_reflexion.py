@@ -164,7 +164,22 @@ def append_or_increment(path: Path, pattern: FailurePattern) -> str:
             first_seen=pattern.timestamp,
             last_seen=pattern.timestamp,
         )
-        return failure_kb.append_or_increment(rec, path)
+        result = failure_kb.append_or_increment(rec, path)
+        # Re-render MD from the updated JSONL (backward-compat: skip if renderer absent)
+        try:
+            import subprocess
+            import sys as _sys
+            render_script = Path(__file__).parent / "_render_failure_patterns.py"
+            if render_script.exists():
+                subprocess.run(
+                    [_sys.executable, str(render_script),
+                     "--jsonl", str(path),
+                     "--md", str(path.with_suffix(".md"))],
+                    capture_output=True, timeout=30,
+                )
+        except Exception:
+            pass  # Never let render failure block pattern persistence
+        return result
     if not path.exists():
         _atomic_write(path, _FRESH_HEADER + _format_row(pattern) + "\n")
         return "appended"

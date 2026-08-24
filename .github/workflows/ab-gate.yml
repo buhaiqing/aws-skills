@@ -1,0 +1,64 @@
+name: A/B Gate
+
+on:
+  pull_request:
+    paths:
+      - 'evals/**'
+      - '.deepeval/**'
+      - 'audit-results/golden/**'
+      - 'audit-results/baseline/**'
+
+jobs:
+  ab-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine changed eval files
+        id: changed-evals
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.base_ref }} HEAD --diff-filter=ACM 2>/dev/null | tr '\n' ' ')
+          echo "changed_files=$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+
+          # Extract skill names from audit-results/golden/ or .deepeval/ paths
+          SKILLS=""
+          for f in $CHANGED_FILES; do
+            case "$f" in
+              audit-results/golden/aws-*-ops.json|.deepeval/**/aws-*-ops.json)
+                SKILL=$(echo "$f" | sed -E 's/.*\/aws-([^/]+)-ops\.json.*/\1/')
+                SKILLS="$SKILLS $SKILL"
+                ;;
+            esac
+          done
+          echo "skills=$SKILLS" >> "$GITHUB_OUTPUT"
+
+      - name: Run A/B gate
+        if: steps.changed-evals.outputs.skills != ''
+        run: |
+          FAILED=0
+          for SKILL in ${{ steps.changed-evals.outputs.skills }}; do
+            BASELINE="audit-results/baseline/$SKILL.json"
+            CANDIDATE="audit-results/golden/$SKILL.json"
+
+            if [ ! -f "$BASELINE" ]; then
+              echo "No baseline for $SKILL, skipping ab_gate"
+              continue
+            fi
+            if [ ! -f "$CANDIDATE" ]; then
+              echo "No candidate for $SKILL, skipping ab_gate"
+              continue
+            fi
+
+            echo "Running ab_gate for $SKILL..."
+            python3 scripts/ab_gate.py gate --baseline "$BASELINE" --candidate "$CANDIDATE" || FAILED=1
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "A/B gate FAILED — regression detected"
+            exit 1
+          fi
+          echo "A/B gate PASSED"

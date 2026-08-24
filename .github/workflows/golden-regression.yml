@@ -1,0 +1,58 @@
+name: Golden Regression
+
+on:
+  pull_request:
+    paths:
+      - 'aws-*-ops/SKILL.md'
+      - 'aws-*-ops/references/**'
+      - 'aws-*-ops/golden-scenarios.yaml'
+
+jobs:
+  golden-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pyyaml
+        run: pip install pyyaml
+
+      - name: Detect changed skills
+        id: changed-skills
+        run: |
+          # Extract skill names from changed files
+          skills=$(git diff --name-only ${{ github.base_ref }} HEAD \
+            | grep -E '^aws-[^/]+-ops/' \
+            | sed -E 's|^aws-([^/]+)-ops/.*|\1|' \
+            | sort -u \
+            | tr '\n' ' ' \
+            | sed 's/ $//')
+          echo "skills=$skills" >> $GITHUB_OUTPUT
+          echo "Count=$(echo $skills | wc -w)" >> $GITHUB_OUTPUT
+
+      - name: Run golden diff (no regressions)
+        if: steps.changed-skills.outputs.count != '0'
+        run: |
+          FAILED=0
+          for skill in ${{ steps.changed-skills.outputs.skills }}; do
+            current="audit-results/golden/${skill}.json"
+            baseline="audit-results/golden/${skill}-baseline.json"
+            if [[ -f "$current" && -f "$baseline" ]]; then
+              echo "::group::golden_eval diff $skill"
+              python3 scripts/golden_eval.py diff --current "$current" --baseline "$baseline" || FAILED=1
+              echo "::endgroup::"
+            else
+              echo "Skipping $skill: baseline or current result missing"
+            fi
+          done
+          if [[ $FAILED -ne 0 ]]; then
+            echo "Regressions detected — blocking merge"
+            exit 1
+          fi
+
+      - name: No skills changed
+        if: steps.changed-skills.outputs.count == '0'
+        run: echo "No skill files changed — nothing to regress"

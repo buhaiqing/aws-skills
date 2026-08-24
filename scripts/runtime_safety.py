@@ -205,13 +205,29 @@ def _row_to_pattern(cols: list[str]) -> dict | None:
 
 
 def load_failure_patterns(path: Path) -> list[dict]:
-    """Parse a markdown table of failure patterns into a list of dicts."""
+    """Parse failure patterns from JSONL (canonical) or markdown (fallback).
+
+    For JSONL: aggregates count across duplicate error_signatures at runtime.
+    For markdown: parses table rows directly (count stored per-row, no aggregation).
+    """
     if path.suffix == ".jsonl":
         import failure_kb
 
         recs = failure_kb.load_jsonl(path)
-        return [
-            {
+        if not recs:
+            # Fallback: try MD if jsonl is empty/missing
+            md_path = path.with_suffix(".md")
+            if md_path.exists():
+                return load_failure_patterns(md_path)
+            return []
+
+        # Runtime aggregation: sum counts for duplicate error_signatures.
+        # Entry format: count is pre-aggregated in jsonl; merging handles
+        # cases where the same pattern appears on multiple jsonl lines.
+        by_sig: dict[str, dict] = {}
+        for r in recs:
+            key = r.error_signature or f"{r.skill}|{r.command}|{r.error[:50]}"
+            entry = {
                 "skill": r.skill,
                 "command": r.command,
                 "error": r.error,
@@ -219,9 +235,22 @@ def load_failure_patterns(path: Path) -> list[dict]:
                 "fix": r.fix,
                 "count": str(r.count),
                 "timestamp": r.last_seen or r.first_seen,
+                "category": getattr(r, "category", ""),
             }
-            for r in recs
-        ]
+            if key in by_sig:
+                # Aggregate: sum counts, keep most recent timestamp
+                prev_count = int(by_sig[key]["count"])
+                by_sig[key]["count"] = str(prev_count + r.count)
+                if r.last_seen and (
+                    not by_sig[key]["timestamp"]
+                    or r.last_seen > by_sig[key]["timestamp"]
+                ):
+                    by_sig[key]["timestamp"] = r.last_seen
+            else:
+                by_sig[key] = entry
+        return list(by_sig.values())
+
+    # Markdown fallback (backward compat)
     patterns: list[dict] = []
     text = path.read_text(encoding="utf-8")
     in_table = False
