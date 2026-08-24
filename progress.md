@@ -7,14 +7,15 @@ Completed
 
 **Goal**: 实现 O10 D4 — `_gen_rubric.py --llm-fill` 自动生成 rubric.md 的 Operation-specific overrides + Safety special cases。
 
-**Result**: `scripts/_llm_rubric_fill.py` (156 行) + `_gen_rubric.py` 新增 `--llm-fill` / `--docs-url` / `--recommended` flags。
+**Result**: `scripts/_llm_rubric_fill.py` (204 行) + `_gen_rubric.py` 新增 `--llm-fill` / `--docs-url` / `--recommended` flags + `scripts/tests/test_llm_rubric_fill.py` (8 tests)。
 
 | 文件 | 变更 |
 |---|---|
-| `scripts/_llm_rubric_fill.py` | `call_llm()` + `fill_rubric()` + `_extract_section()` + `_build_examples()`; DashScope OpenAI-compatible API; 429 → sleep 5s → retry once; 不可用时返回 `''` |
-| `scripts/_gen_rubric.py` | argparse CLI; `--llm-fill` flag 调用 LLM 填充; `<!-- LLM_FILL -->` 标记替换; graceful fallback |
+| `scripts/_llm_rubric_fill.py` | `call_llm()` + `fill_rubric()` + `_extract_section()` + `_build_examples()`; DashScope→Moonshot API fallback (Moonshot 用 `/v1/messages` Anthropic 格式); 429 → sleep 5s → retry once; graceful `''` on error |
+| `scripts/_gen_rubric.py` | argparse CLI; `--llm-fill` flag 调用 LLM 填充; split on `## Safety special cases (auto-fail)` 完整 heading 避免部分匹配 bug; strip heading+blank line from LLM output (template pre-declares headings); graceful fallback |
+| `scripts/tests/test_llm_rubric_fill.py` | 8 mock tests: extract_section / build_examples / fill_rubric patching / split replacement / graceful fallback |
 
-**验证**: ruff clean, 45/45 tests pass.
+**验证**: ruff clean, **53/53 tests pass** (45 gcl + 8 llm_rubric_fill)。
 
 **限制**: DashScope (`OPENAI_API_KEY`) 和 Moonshot (`ANTHROPIC_API_KEY`) 均因账户余额不足返回 429 — API key 格式有效但账户欠费。充值后 LLM fill 即插即用。
 
