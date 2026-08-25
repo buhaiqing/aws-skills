@@ -49,6 +49,10 @@ from dataclasses import dataclass, field
 
 REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = REPO / "audit-results"
+REFLEXION_PATTERNS_PATH = REPO / "docs" / "failure-patterns.md"
+
+# Global state — lazily populated by _load_reflexion()
+_REFLEXION = None
 DEFAULT_COMMAND_TIMEOUT = 60.0
 _RUBRIC_DIMENSIONS = (
     "correctness", "safety", "idempotency", "traceability", "spec_compliance",
@@ -484,6 +488,65 @@ def _invoke_critic(
     return invoke_json_command(cmd, ctx, env=critic_environment())
 
 
+def _load_reflexion():
+    """Lazily load _reflexion.py from the scripts/ directory via exec().
+
+    Mirrors runtime_safety._load_reflexion(): direct execution so no
+    __init__.py is required; None when absent or unimportable.
+    """
+    global _REFLEXION
+    if _REFLEXION is not None:
+        return _REFLEXION
+    rx_path = Path(__file__).parent / "_reflexion.py"
+    if not rx_path.exists():
+        return None
+    try:
+        import sys as _sys
+        import types as _types
+
+        ns: dict[str, object] = {"__name__": "_reflexion"}
+        ns.update(globals())
+        ns["__name__"] = "_reflexion"
+        rx_code = rx_path.read_text(encoding="utf-8")
+        _rx_module = _types.ModuleType("_reflexion")
+        _sys.modules["_reflexion"] = _rx_module
+        exec(rx_code, ns)
+        # Expose the executed namespace on the registered module so later
+        # `from _reflexion import X` in the same process resolves attributes
+        # instead of hitting an empty module shell.
+        _rx_module.__dict__.update(ns)
+        _REFLEXION = _types.SimpleNamespace(
+            FailurePattern=ns.get("FailurePattern"),
+            derive_from_error=ns.get("derive_from_error"),
+            append_or_increment=ns.get("append_or_increment"),
+        )
+    except Exception:  # pragma: no cover
+        return None
+    return _REFLEXION
+
+
+def _reflect_error(
+    skill_name: str, command: str, exc: Exception, request: str,
+) -> None:
+    """L4 #3 全覆盖: persist non-GCL execution failures into failure-patterns.md.
+
+    Never masks the original error — every reflexion failure is swallowed.
+    """
+    try:
+        rx = _load_reflexion()
+        if rx is None:
+            return
+        pattern = rx.derive_from_error(
+            skill=skill_name,
+            command=command,
+            error=redact_sensitive(str(exc), request),
+            source="gcl-runner",
+        )
+        rx.append_or_increment(REFLEXION_PATTERNS_PATH, pattern)
+    except Exception:  # pragma: no cover — reflexion must never mask original
+        pass
+
+
 def _run_loop(
     skill_name: str,
     request: str,
@@ -540,6 +603,7 @@ def _run_loop(
             }
             crit_result = _validate_critic(critic(crit_ctx))
         except (CommandTimeout, CommandContractError, RuntimeError) as exc:
+            _reflect_error(skill_name, "gcl-loop", exc, request)
             trace["final"] = {
                 "status": "SAFETY_FAIL", "iter": it, "output": None,
                 "reason": redact_sensitive(f"trust boundary failure: {exc}", request),
@@ -711,6 +775,28 @@ def main(argv: list[str] | None = None) -> int:
             for pat in derive_from_trace(trace):
                 result = append_or_increment(Path(args.failure_patterns), pat)
                 print(f"reflexion: {result} {pat.skill} | {pat.error}")
+
+    # Governed Learning auto-promote hook (ADR-0001 M4)
+    if args.on_fail and trace["final"]["status"] in ("SAFETY_FAIL", "MAX_ITER"):
+        try:
+            from governed_learning import (
+                harvest_from_trace as _gl_harvest,
+                evaluate_candidate as _gl_eval,
+                auto_promote as _gl_promote,
+            )
+        except Exception as e:
+            print(f"governed-learning: skipped ({e})", file=sys.stderr)
+        else:
+            fp = Path(args.failure_patterns)
+            _gl_cands = _gl_harvest(trace, source=str(out_path))
+            if _gl_cands:
+                _gl_cands = [_gl_eval(c, patterns_path=fp) for c in _gl_cands]
+                _gl_promoted = _gl_promote(_gl_cands, patterns_path=fp)
+                if _gl_promoted:
+                    for c in _gl_promoted:
+                        print(f"governed-learning: auto-promoted {c.id} | {c.signature}")
+                else:
+                    print(f"governed-learning: {len(_gl_cands)} candidate(s) evaluated, 0 promoted")
 
     print(f"status: {trace['final']['status']}  iter: {trace['final']['iter']}")
     print(f"trace:  {out_path.relative_to(REPO)}")

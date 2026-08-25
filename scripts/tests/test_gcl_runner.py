@@ -11,6 +11,13 @@ import pytest
 import gcl_runner
 
 
+@pytest.fixture(autouse=True)
+def _isolate_reflexion(tmp_path, monkeypatch):
+    """Keep reflexion writes out of the real docs/failure-patterns.md."""
+    monkeypatch.setattr(
+        gcl_runner, "REFLEXION_PATTERNS_PATH", tmp_path / "failure-patterns.md",
+    )
+
 def test_normalize_outcome_accepts_five_statuses():
     """ADR M1 unified enum: PASS, SAFETY_FAIL, MAX_ITER, BLOCKED, COMPENSATED."""
     for status in ("PASS", "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATED"):
@@ -288,3 +295,49 @@ def test_critic_invocation_uses_restricted_environment(monkeypatch) -> None:
     gcl_runner._invoke_critic({}, ["critic"], "rubric")
 
     assert captured["AWS_EC2_METADATA_DISABLED"] == "true"
+
+
+def test_trust_boundary_error_records_failure_pattern(tmp_path, monkeypatch) -> None:
+    """L4 #3 全覆盖: non-GCL execution failure lands in failure-patterns.md."""
+    target = tmp_path / "failure-patterns.md"
+    monkeypatch.setattr(gcl_runner, "REFLEXION_PATTERNS_PATH", target)
+
+    def generator(ctx: dict) -> dict:
+        raise RuntimeError("botocore NoCredentialError")
+
+    def critic(ctx: dict) -> dict:
+        raise AssertionError("critic must not run")
+
+    result = gcl_runner.run_with_callables(
+        "aws-s3-ops", "list buckets", "us-east-1", generator, critic,
+    )
+
+    assert result["final"]["status"] == "SAFETY_FAIL"
+    assert target.exists(), "reflexion row not written"
+    text = target.read_text()
+    assert "aws-s3-ops" in text
+    assert "NoCredentialError" in text
+
+
+def test_reflexion_failure_does_not_mask_original_error(tmp_path, monkeypatch) -> None:
+    """Reflexion breaking must never swallow the original trust-boundary error."""
+    target = tmp_path / "failure-patterns.md"
+    monkeypatch.setattr(gcl_runner, "REFLEXION_PATTERNS_PATH", target)
+
+    def generator(ctx: dict) -> dict:
+        raise RuntimeError("original boom")
+
+    def critic(ctx: dict) -> dict:
+        raise AssertionError("critic must not run")
+
+    def _broken_loader():
+        raise RuntimeError("reflexion broken")
+
+    monkeypatch.setattr(gcl_runner, "_load_reflexion", _broken_loader)
+
+    result = gcl_runner.run_with_callables(
+        "aws-s3-ops", "list buckets", "us-east-1", generator, critic,
+    )
+
+    assert result["final"]["status"] == "SAFETY_FAIL"
+    assert "original boom" in result["final"]["reason"]

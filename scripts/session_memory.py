@@ -263,6 +263,17 @@ def main(argv: list[str] | None = None) -> int:
     render_p = sub.add_parser("render",
                               help="Render as prompt-injectable text.")
     render_p.add_argument("--path", default=".omc/conventions.json")
+    ev_p = sub.add_parser("memory-eval",
+                           help="Evaluate retrieval quality (GCL-gated confidence decay/promote).")
+    ev_p.add_argument("--path", default=".omc/conventions.json")
+    ev_p.add_argument("--top-k", type=int, default=3)
+    ev_p.add_argument("--decay", action="store_true",
+                      help="Apply confidence decay/promote to memory file")
+    ev_p.add_argument("--decay-rate", type=float, default=0.1)
+    ev_p.add_argument("--promote-boost", type=float, default=0.05)
+    ev_p.add_argument("--cases", default=None,
+                      help="Path to eval-cases.json")
+
     vs_p = sub.add_parser("verify-startup",
                            help="Check if conventions.json is from current session.")
     vs_p.add_argument("--path", default=".omc/conventions.json")
@@ -324,7 +335,21 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(format_for_prompt(records, max_chars=args.max_chars))
         return 0
 
+    if args.cmd == "memory-eval":
+        import memory_eval
+        mem_eval_args = ["eval",
+                         "--memory", str(Path(args.path).resolve()),
+                         "--top-k", str(args.top_k),
+                         "--decay-rate", str(args.decay_rate),
+                         "--promote-boost", str(args.promote_boost)]
+        if args.decay:
+            mem_eval_args.append("--decay")
+        if args.cases:
+            mem_eval_args.extend(["--cases", args.cases])
+        return memory_eval.main(mem_eval_args)
+
     ap.error(f"unknown command: {args.cmd}")
+
     return 2
 
 

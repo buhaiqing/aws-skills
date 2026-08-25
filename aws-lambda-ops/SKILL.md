@@ -34,6 +34,14 @@ metadata:
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
+  cross_skill_deps:
+    - aws-iam-ops
+    - aws-sqs-ops
+    - aws-sns-ops
+    - aws-cloudwatch-ops
+    - aws-cloudtrail-ops
+    - aws-dynamodb-ops
+    - aws-s3-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:

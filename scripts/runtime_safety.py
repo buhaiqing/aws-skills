@@ -63,6 +63,10 @@ def _load_reflexion() -> Optional[object]:
         _rx_module = _stdlib_types.ModuleType("_reflexion")
         _sys.modules["_reflexion"] = _rx_module
         exec(rx_code, ns)
+        # Expose the executed namespace on the registered module so later
+        # `from _reflexion import X` in the same process resolves attributes
+        # instead of hitting an empty module shell.
+        _rx_module.__dict__.update(ns)
         _REFLEXION = _stdlib_types.SimpleNamespace(
             FailurePattern=ns.get("FailurePattern"),
             append_or_increment=ns.get("append_or_increment"),
@@ -427,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--reflect-on-block", action="store_true",
-        help="L4 #6+#3闭环: reflexion-append to failure-patterns.md on BLOCK.",
+        help="L4 #6+#3闭环: reflexion-append to failure-patterns.md on BLOCK/WARN.",
     )
     args = parser.parse_args(argv)
 
@@ -450,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
     patterns = _read_patterns_arg([Path(p) for p in args.patterns])
     result = check_tool_call(call, patterns)
     _emit(result)
-    if args.reflect_on_block and result.decision == "BLOCK":
+    if args.reflect_on_block and result.decision in ("BLOCK", "WARN"):
         _reflect_block(Path(args.patterns[0]), call, result.matched_patterns)
     return _decision_exit_code(result.decision)
 

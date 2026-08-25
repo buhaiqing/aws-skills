@@ -9,6 +9,7 @@ Atomic write: tmp → rename.
 from __future__ import annotations
 
 from bisect import bisect_right, insort_right  # noqa: F401
+import json
 import re as _re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -343,23 +344,74 @@ def maintain(
     }
 
 
+
+
+def derive_from_error(
+    *,
+    skill: str,
+    command: str,
+    error: str,
+    root_cause: str = "",
+    fix: str = "",
+    source: str = "external",
+) -> FailurePattern:
+    """Create a FailurePattern from an error without requiring a GCL trace.
+
+    Used by runtime_safety (WARN/BLOCK), golden_eval, and any other
+    execution path that encounters a failure outside the GCL loop.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    return FailurePattern(
+        skill=skill,
+        command=command,
+        error=error,
+        root_cause=root_cause or f"recorded from {source}",
+        fix=fix or "Inspect failure-patterns.md for remediation",
+        timestamp=now,
+    )
+
 def _cli_main(argv: list[str] | None = None) -> int:
-    """CLI entry: `python3 scripts/_reflexion.py maintain [--dry-run] [PATH]`."""
+    """CLI entry: maintain or record-failure."""
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", choices=["maintain"])
+    ap.add_argument("command", choices=["maintain", "record-failure"])
     ap.add_argument("path", nargs="?", default=None,
                     help="Path to failure-patterns.md (default: REPO/docs/failure-patterns.md)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--skill", default="", help="AWS skill name (record-failure)")
+    ap.add_argument("--cmd", default="", help="Command that failed (record-failure)")
+    ap.add_argument("--error", default="", help="Error message (record-failure)")
+    ap.add_argument("--root-cause", default="", help="Root cause (record-failure)")
+    ap.add_argument("--fix", default="", help="Suggested fix (record-failure)")
+    ap.add_argument("--source", default="", help="Source: runtime_safety|gcl|golden_eval (record-failure)")
     args = ap.parse_args(argv)
     target = Path(args.path) if args.path else Path(__file__).resolve().parent.parent / "docs" / "failure-patterns.md"
+
+    if args.command == "record-failure":
+        if not args.skill or not args.error:
+            ap.error("record-failure requires --skill and --error")
+        now = datetime.now(timezone.utc).isoformat()
+        pat = FailurePattern(
+            skill=args.skill,
+            command=args.cmd or "(unknown)",
+            error=args.error,
+            root_cause=args.root_cause or f"recorded from {args.source or 'external'}",
+            fix=args.fix or "Inspect failure-patterns.md for remediation",
+            timestamp=now,
+        )
+        if args.dry_run:
+            print(f"DRY-RUN: would record {pat.error_signature}")
+            return 0
+        result = append_or_increment(target, pat)
+        print(json.dumps({"action": result, "signature": pat.error_signature}))
+        return 0
+
     if args.dry_run:
         text = target.read_text(encoding="utf-8") if target.exists() else ""
         print(f"DRY-RUN: would maintain {target} ({len(text.splitlines())} lines)")
         return 0
     result = maintain(target)
-    import json as _json
-    print(_json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

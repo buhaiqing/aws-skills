@@ -24,6 +24,9 @@ metadata:
   gcl: {enabled: true, class: required, max_iter: 2, rubric_ref: references/rubric.md, prompts_ref: references/prompt-templates.md, pilot: true}
   destructive_ops_require_confirm: true
   environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]
+  cross_skill_deps:
+    - aws-cloudtrail-ops
+    - aws-kms-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:

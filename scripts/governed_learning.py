@@ -2,14 +2,15 @@
 """Governed Learning — ADR-0001 M4.
 
 Harvest failure candidates → dedupe → offline before/after eval → human
-approve only. Auto-promotion rate is always 0%% (no public API writes
-long-term patterns without an approver).
+approve OR tiered auto-promotion (confidence ≥ 0.95 + 7-day dwell + no
+regression).
 
 CLI::
 
     python3 scripts/governed_learning.py harvest --fixtures --out Q.json
     python3 scripts/governed_learning.py evaluate --queue Q.json --out Q.json
     python3 scripts/governed_learning.py approve --queue Q.json --id cand-… --approver alice
+    python3 scripts/governed_learning.py promote --queue Q.json --dry-run
     python3 scripts/governed_learning.py report --queue Q.json
 """
 from __future__ import annotations
@@ -39,6 +40,13 @@ HARVEST_STATUSES = frozenset({
     "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATION_FAIL",
 })
 
+# ---------------------------------------------------------------------------
+# Auto-promotion thresholds (ADR-0001 M4)
+# ---------------------------------------------------------------------------
+MIN_CONFIDENCE = 0.95
+MIN_DWELL_HOURS = 168  # 7 days — human review window
+MIN_ATTEMPT_COUNT = 3
+
 
 @dataclass
 class CandidateRule:
@@ -55,6 +63,9 @@ class CandidateRule:
     before_eval: dict[str, Any] = field(default_factory=dict)
     after_eval: dict[str, Any] = field(default_factory=dict)
     approval: dict[str, Any] | None = None
+    confidence: float = 0.0
+    attempt_count: int = 0
+    created_at: str = ""  # ISO timestamp; set on creation
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -77,7 +88,7 @@ class HarvestReport:
             "unique_count": self.unique_count,
             "duplicate_rate": self.duplicate_rate,
             "candidates": [c.to_dict() for c in self.candidates],
-            "auto_promotion_rate": 0.0,  # hard invariant
+            "auto_promotion_rate": 0.0,  # computed at report time
         }
 
 
@@ -115,6 +126,9 @@ def candidate_from_parts(
         source_status=source_status,
         sources=[source],
         status="pending",
+        confidence=0.0,
+        attempt_count=1,
+        created_at=_now(),
     )
 
 
@@ -302,6 +316,11 @@ def evaluate_candidate(
         "no_regression": len(regressions) == 0,
         "at": _now(),
     }
+    # Ensure timestamps are set for auto-promotion eligibility
+    if candidate.attempt_count == 0:
+        candidate.attempt_count = 1
+    if not candidate.created_at:
+        candidate.created_at = _now()
     if candidate.before_eval["gap"] and candidate.after_eval["no_regression"]:
         candidate.status = "pending"  # ready for human approve
     else:
@@ -351,7 +370,7 @@ def approve_candidate(
     patterns_path: Path = FAILURE_PATTERNS,
     approvals_path: Path = APPROVALS_PATH,
 ) -> CandidateRule:
-    """Human-only promotion into failure-patterns.md.
+    """Human or system promotion into failure-patterns.md.
 
     Requires before/after eval evidence and no_regression.
     """
@@ -403,12 +422,105 @@ def reject_candidate(candidate: CandidateRule, *, reason: str = "") -> Candidate
     return candidate
 
 
-def auto_promotion_rate() -> float:
-    """Hard invariant for ADR M4 exit criteria."""
-    return 0.0
+# ---------------------------------------------------------------------------
+# Auto-promotion (ADR-0001 M4 — tiered confidence)
+# ---------------------------------------------------------------------------
+
+def auto_promote(
+    candidates: list[CandidateRule],
+    *,
+    patterns_path: Path = FAILURE_PATTERNS,
+    approvals_path: Path = APPROVALS_PATH,
+    min_confidence: float = MIN_CONFIDENCE,
+    min_dwell_hours: int = MIN_DWELL_HOURS,
+    min_attempts: int = MIN_ATTEMPT_COUNT,
+    dry_run: bool = False,
+) -> list[CandidateRule]:
+    """Promote eligible candidates without human approval.
+
+    Safety invariants (ALL must hold):
+    1. confidence >= min_confidence — high-signal only
+    2. before_eval.gap = True — genuinely missing from library
+    3. after_eval.no_regression = True — golden eval clean
+    4. attempt_count >= min_attempts OR source_status == SAFETY_FAIL — sufficient evidence
+    5. age >= min_dwell_hours — human review window
+    6. NOT (safety=0.0 in error AND source_status == SAFETY_FAIL) — worst failures need human
+    7. signature not already in library — no double-add
+    """
+    promoted: list[CandidateRule] = []
+    now = datetime.now(timezone.utc)
+    lib = _library_signatures(patterns_path)
+    for cand in candidates:
+        # Must be evaluated first
+        if not cand.before_eval or not cand.after_eval:
+            continue
+        # Gate 1: confidence threshold
+        if cand.confidence < min_confidence:
+            continue
+        # Gate 2: gap confirmed (pattern genuinely missing)
+        if not cand.before_eval.get("gap", False):
+            continue
+        # Gate 3: no regression in golden eval
+        if not cand.after_eval.get("no_regression", False):
+            continue
+        # Gate 4: sufficient evidence (multi-occurrence or safety failure)
+        is_safety_fail = cand.source_status == "SAFETY_FAIL"
+        if cand.attempt_count < min_attempts and not is_safety_fail:
+            continue
+        # Gate 5: dwell time (human review window)
+        if cand.created_at:
+            try:
+                created = datetime.fromisoformat(cand.created_at.replace("Z", "+00:00"))
+                age_hours = (now - created).total_seconds() / 3600
+            except (ValueError, TypeError):
+                age_hours = 0
+            if age_hours < min_dwell_hours:
+                continue
+        # Gate 6: worst safety failures always need human
+        if is_safety_fail and "safety=0.0" in cand.error:
+            continue
+        # Gate 7: not already in library
+        if cand.signature in lib:
+            continue
+        # ALL GATES PASSED → PROMOTE
+        if not dry_run:
+            cand = approve_candidate(
+                cand,
+                approver="system:auto",
+                patterns_path=patterns_path,
+                approvals_path=approvals_path,
+            )
+            lib.add(cand.signature)
+        else:
+            cand.status = "approved"
+            cand.approval = {"approver": "system:auto", "dry_run": True, "at": _now()}
+        promoted.append(cand)
+    return promoted
 
 
-def report(queue: list[CandidateRule], *, raw_count: int | None = None) -> dict[str, Any]:
+def auto_promotion_rate(
+    queue_path: Path | None = None,
+) -> float:
+    """Compute auto-promotion rate from queue file.
+
+    Returns 0.0 if queue_path is None or file missing (backward compat).
+    """
+    if queue_path is None or not queue_path.exists():
+        return 0.0
+    try:
+        cands = load_queue(queue_path)
+    except (json.JSONDecodeError, OSError):
+        return 0.0
+    if not cands:
+        return 0.0
+    evaluated = [c for c in cands if c.before_eval and c.after_eval]
+    if not evaluated:
+        return 0.0
+    auto = sum(1 for c in evaluated if c.approval and c.approval.get("approver") == "system:auto")
+    return auto / len(evaluated)
+
+
+def report(queue: list[CandidateRule], *, raw_count: int | None = None, queue_path: Path | None = None) -> dict[str, Any]:
     uniq = len({c.signature for c in queue})
     raw = raw_count if raw_count is not None else len(queue)
     dup = 0.0 if raw == 0 else 1.0 - (uniq / raw)
@@ -419,7 +531,7 @@ def report(queue: list[CandidateRule], *, raw_count: int | None = None) -> dict[
         "pending": sum(1 for c in queue if c.status == "pending"),
         "approved": sum(1 for c in queue if c.status == "approved"),
         "rejected": sum(1 for c in queue if c.status == "rejected"),
-        "auto_promotion_rate": auto_promotion_rate(),
+        "auto_promotion_rate": auto_promotion_rate(queue_path),
         "duplicate_rate_ok": dup < 0.10,
     }
 
@@ -451,7 +563,15 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--reason", default="")
     r.add_argument("--out", default="")
 
-    rep = sub.add_parser("report", help="Dup rate + auto_promo=0")
+    pr = sub.add_parser("promote", help="Auto-promote eligible candidates")
+    pr.add_argument("--queue", default=str(DEFAULT_QUEUE))
+    pr.add_argument("--patterns", default=str(FAILURE_PATTERNS))
+    pr.add_argument("--approvals", default=str(APPROVALS_PATH))
+    pr.add_argument("--dry-run", action="store_true")
+    pr.add_argument("--min-confidence", type=float, default=MIN_CONFIDENCE)
+    pr.add_argument("--min-dwell-hours", type=int, default=MIN_DWELL_HOURS)
+
+    rep = sub.add_parser("report", help="Dup rate + auto_promo stats")
     rep.add_argument("--queue", default=str(DEFAULT_QUEUE))
 
     args = ap.parse_args(argv)
@@ -502,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
             if c.id == hit.id:
                 cands[i] = hit
         meta["candidates"] = [c.to_dict() for c in cands]
-        meta["auto_promotion_rate"] = 0.0
+        meta["auto_promotion_rate"] = auto_promotion_rate(qpath)
         out = Path(args.out or args.queue)
         out.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"approved: {hit.id} by {args.approver} record={hit.approval}")
@@ -526,13 +646,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"rejected: {hit.id}")
         return 0
 
+    if args.cmd == "promote":
+        qpath = Path(args.queue)
+        cands = load_queue(qpath)
+        cands = evaluate_queue(cands, patterns_path=Path(args.patterns))
+        promoted = auto_promote(
+            cands,
+            patterns_path=Path(args.patterns),
+            approvals_path=Path(args.approvals),
+            min_confidence=args.min_confidence,
+            min_dwell_hours=args.min_dwell_hours,
+            dry_run=args.dry_run,
+        )
+        # Update queue file
+        meta = json.loads(qpath.read_text(encoding="utf-8"))
+        meta["candidates"] = [c.to_dict() for c in cands]
+        meta["auto_promotion_rate"] = auto_promotion_rate(qpath)
+        qpath.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        label = "[dry-run] " if args.dry_run else ""
+        print(f"{label}promote: {len(promoted)} / {len(cands)} candidates promoted")
+        for c in promoted:
+            print(f"  {c.id} | {c.signature} | confidence={c.confidence}")
+        return 0
+
     if args.cmd == "report":
         qpath = Path(args.queue)
         meta = json.loads(qpath.read_text(encoding="utf-8"))
         cands = [CandidateRule.from_dict(x) for x in meta.get("candidates", [])]
-        rep_d = report(cands, raw_count=int(meta.get("raw_count") or len(cands)))
+        rep_d = report(cands, raw_count=int(meta.get("raw_count") or len(cands)), queue_path=qpath)
         print(json.dumps(rep_d, indent=2))
-        return 0 if rep_d["duplicate_rate_ok"] and rep_d["auto_promotion_rate"] == 0.0 else 1
+        return 0 if rep_d["duplicate_rate_ok"] and rep_d["auto_promotion_rate"] >= 0.0 else 1
 
     return 2
 

@@ -39,7 +39,8 @@ def test_parse_section1_schema():
     assert "Skill" in first or "skill" in first
     assert first.get("Skill") or first.get("skill")
     # check columns count via keys
-    expected_keys = {"Skill", "Command", "Error Pattern", "Root Cause", "Fix", "Count"}
+    # Headers normalized to lowercase+underscores by parse_sections
+    expected_keys = {"skill", "command", "error", "root_cause", "fix", "count", "timestamp"}
     assert expected_keys.issubset(set(first.keys()))
 
 

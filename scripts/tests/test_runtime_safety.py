@@ -20,6 +20,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from runtime_safety import (  # noqa: E402
     ToolCall,
+    _reflect_block,
     build_confirmation_token,
     build_plan_bound_token,
     load_failure_patterns,
@@ -351,6 +352,31 @@ def test_reflect_block_appends_to_failure_patterns_md(tmp_path):
     assert "BLOCK: high-freq pattern matched" in new_content
 
 
+
+
+def test_reflect_warn_appends_to_failure_patterns_md(tmp_path):
+    """WARN decision with --reflect-on-block also triggers reflexion."""
+    fp = tmp_path / "failure-patterns.md"
+    fp.write_text(
+        "## Low-frequency failure patterns (auto-harvested)\n\n"
+        "| skill | command | error | root_cause | fix | count | timestamp |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| aws-ec2-ops | aws ec2 terminate-instances | RequestLimitExceeded | rate limit | add backoff | 1 | 2026-07-25T00:00:00+00:00 |\n"
+    )
+    call = ToolCall(
+        tool_name="aws ec2 terminate-instances",
+        args={"instance-ids": ["i-xxx"]},
+        is_destructive=True,
+    )
+    call.safety_confirm = build_confirmation_token(call)
+    patterns = load_failure_patterns(fp)
+    result = check_tool_call(call, patterns)
+    assert result.decision == "WARN"
+
+    _reflect_block(fp, call, result.matched_patterns)
+    new_content = fp.read_text()
+    assert "RequestLimitExceeded" in new_content
+    assert "count" in new_content.lower()
 def test_reflect_block_increments_existing_row(tmp_path):
     """Second BLOCK for same command increments the count (dedup by skill+command+error)."""
     fp = tmp_path / "failure-patterns.md"

@@ -93,7 +93,8 @@ def parse_sections(text: str) -> dict[str, list[dict]]:
                     # pad if fewer cells than headers
                     if len(cells) < len(mapped_headers):
                         cells += [""] * (len(mapped_headers) - len(cells))
-                    row = {mapped_headers[j]: cells[j] for j in range(len(mapped_headers))}
+                    # Normalize: lowercase + spaces to underscores for format compatibility
+                    row = {mapped_headers[j].lower().replace(" ", "_"): _clean_cell(cells[j]) for j in range(len(mapped_headers))}
                     sections[current].append(row)
             continue
         i += 1
@@ -176,10 +177,10 @@ def normalize_to_records(sections: dict[str, list[dict]]) -> list[FailureRecord]
                 last_seen = today
                 error_sig = f"{category}|{issue_type}".lower().replace(" ", "-")[:120]
             elif sec_id == "3":
-                src = _clean_cell(_get("Source Skill", "source_skill", "source skill"))
-                tgt = _clean_cell(_get("Target Skill", "target_skill", "target skill"))
+                src = _clean_cell(_get("Source Skill", "source_skill", "source skill", "skill"))
+                tgt = _clean_cell(_get("Target Skill", "target_skill", "target skill", "command"))
                 failure = _clean_cell(_get("Failure Pattern", "Failure", "failure", "failure pattern"))
-                resolution = _clean_cell(_get("Resolution", "resolution"))
+                resolution = _clean_cell(_get("Resolution", "resolution", "fix"))
                 count = _parse_count(_get("Count", "count"))
                 skill = src
                 command = tgt

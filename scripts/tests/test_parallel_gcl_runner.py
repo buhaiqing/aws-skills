@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 import yaml
 
+import gcl_runner
 import parallel_gcl_runner as pgr
 from parallel_gcl_runner import (
     _build_parallel_trace,
@@ -27,6 +28,19 @@ from parallel_gcl_runner import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _isolate_reflexion(tmp_path, monkeypatch):
+    """Keep reflexion writes out of the real docs/failure-patterns.md.
+
+    parallel_gcl_runner calls gcl_runner._run_loop in-process; any
+    trust-boundary failure would otherwise append (and via _needs_fresh_init
+    potentially rewrite) the real docs/failure-patterns.md.
+    """
+    monkeypatch.setattr(
+        gcl_runner, "REFLEXION_PATTERNS_PATH", tmp_path / "failure-patterns.md",
+    )
+
 
 @pytest.fixture
 def temp_dir():

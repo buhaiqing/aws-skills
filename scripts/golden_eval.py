@@ -523,6 +523,12 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Run all high-risk skills: {', '.join(HIGH_RISK_SKILLS)}",
     )
     run_p.add_argument("--gcl-runner", default=str(GCL_RUNNER))
+    run_p.add_argument(
+        "--auto-promote",
+        action="store_true",
+        default=False,
+        help="After run, auto-promote eligible candidates via governed_learning",
+    )
 
     diff_p = sub.add_parser("diff",
                             help="Compare current vs baseline run JSON.")
@@ -547,6 +553,36 @@ def main(argv: list[str] | None = None) -> int:
                                 gcl_runner_path=gcl_path)
         save_results(results, Path(args.out), skill=args.skill)
         print(f"saved: {args.out}")
+
+        # Auto-promote hook (ADR-0001 M4)
+        if getattr(args, 'auto_promote', False) and results:
+            try:
+                from governed_learning import (
+                    candidate_from_parts as _cfp,
+                    evaluate_candidate as _gl_eval,
+                    auto_promote as _gl_promote,
+                )
+                fp = REPO / "docs" / "failure-patterns.md"
+                _gl_cands = []
+                for r in results:
+                    if not r.matched_status and r.scenario.get("expected_status") in ("SAFETY_FAIL", "MAX_ITER"):
+                        _gl_cands.append(_cfp(
+                            skill=args.skill,
+                            command=r.scenario.get("request", "")[:80],
+                            error=f"golden_eval_{r.scenario.get('expected_status', 'UNKNOWN')}",
+                            root_cause=f"Golden eval regression: {r.scenario.get('id', '?')}",
+                            fix="Review golden scenario and skill SKILL.md",
+                            source_status=r.scenario.get("expected_status", "MAX_ITER"),
+                            source=f"golden_eval:{r.scenario.get('id', '?')}",
+                        ))
+                if _gl_cands:
+                    _gl_cands = [_gl_eval(c, patterns_path=fp) for c in _gl_cands]
+                    _gl_promoted = _gl_promote(_gl_cands, patterns_path=fp)
+                    if _gl_promoted:
+                        print(f"auto-promote: {len(_gl_promoted)} candidate(s) promoted from golden eval")
+            except Exception:
+                pass  # non-fatal
+
         return _emit_run_summary(results)
 
     if args.cmd == "diff":

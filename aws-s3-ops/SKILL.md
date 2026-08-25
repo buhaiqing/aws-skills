@@ -33,6 +33,11 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
+  cross_skill_deps:
+    - aws-iam-ops
+    - aws-cloudtrail-ops
+    - aws-kms-ops
+    - aws-cloudwatch-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:

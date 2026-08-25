@@ -32,6 +32,11 @@ metadata:
     rubric_ref: references/rubric.md
     prompts_ref: references/prompt-templates.md
     pilot: false
+  cross_skill_deps:
+    - aws-kms-ops
+    - aws-iam-ops
+    - aws-cloudtrail-ops
+    - aws-lambda-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:

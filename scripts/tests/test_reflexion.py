@@ -10,12 +10,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from hypothesis import given, settings, HealthCheck
+from hypothesis import strategies as st
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from _reflexion import (  # noqa: E402
     FailurePattern,
+    derive_from_error,
     derive_from_trace,
     append_or_increment,
     prune_low_frequency,
@@ -196,3 +200,179 @@ def test_append_or_increment_recovers_from_corrupted_no_header_file(tmp_path):
     # New row must be present; fix rebuilds from scratch (replaces file)
     assert "aws s3 rm" in text, "new row missing"
     assert p.stat().st_size > 0, "file should not be empty"
+
+
+
+# ---------------------------------------------------------------------------
+# derive_from_error tests
+# ---------------------------------------------------------------------------
+
+
+
+def test_derive_from_error_basic():
+    """derive_from_error creates a FailurePattern from keyword args."""
+    pat = derive_from_error(
+        skill="aws-ec2-ops",
+        command="aws ec2 terminate-instances",
+        error="MissingParameter",
+        root_cause="no instance ids",
+        fix="pass --instance-ids",
+        source="runtime_safety",
+    )
+    assert pat.skill == "aws-ec2-ops"
+    assert pat.error == "MissingParameter"
+    assert pat.root_cause == "no instance ids"
+    assert pat.fix == "pass --instance-ids"
+    assert "aws-ec2-ops|aws ec2 terminate-instances|MissingParameter" == pat.error_signature
+    # timestamp is ISO 8601
+    from datetime import datetime
+    ts = datetime.fromisoformat(pat.timestamp)
+    assert ts.tzinfo is not None
+
+
+def test_derive_from_error_defaults():
+    """derive_from_error fills defaults when root_cause/fix are empty."""
+    pat = derive_from_error(
+        skill="aws-s3-ops",
+        command="aws s3 rm",
+        error="AccessDenied",
+    )
+    assert "external" in pat.root_cause
+    assert "Inspect failure-patterns.md" in pat.fix
+
+
+def test_derive_from_error_appends_to_file(tmp_path):
+    """derive_from_error + append_or_increment writes to file."""
+    from _reflexion import append_or_increment
+    target = tmp_path / "failure-patterns.md"
+    pat = derive_from_error(
+        skill="aws-test-ops",
+        command="aws test delete-thing",
+        error="ThrottlingException",
+        root_cause="API rate limit exceeded",
+        fix="Add retry with backoff",
+        source="test",
+    )
+    result = append_or_increment(target, pat)
+    assert result == "appended"
+    text = target.read_text()
+    assert "aws-test-ops" in text
+    assert "ThrottlingException" in text
+
+
+def test_derive_from_error_dedup_increments(tmp_path):
+    """Same error twice → incremented, not appended."""
+    from _reflexion import append_or_increment
+    target = tmp_path / "failure-patterns.md"
+    for _ in range(3):
+        pat = derive_from_error(
+            skill="aws-test-ops",
+            command="aws test",
+            error="timeout",
+            source="test",
+        )
+        append_or_increment(target, pat)
+    text = target.read_text()
+    # Should have count=3
+    assert "| 3 |" in text
+
+
+# ---------------------------------------------------------------------------
+# Hypothesis property tests for derive_from_error
+# ---------------------------------------------------------------------------
+
+
+
+@settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    skill=st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=('L', 'N'), whitelist_characters='-')),
+    command=st.text(min_size=1, max_size=80),
+    error=st.text(min_size=1, max_size=100),
+)
+def test_derive_from_error_always_returns_valid_pattern(skill, command, error):
+    """Property: derive_from_error always returns a valid FailurePattern."""
+    pat = derive_from_error(skill=skill, command=command, error=error)
+    assert isinstance(pat, FailurePattern)
+    assert pat.skill == skill
+    assert pat.command == command
+    assert pat.error == error
+    assert pat.error_signature == f"{skill}|{command}|{error[:50]}"
+    assert pat.timestamp  # non-empty
+    # timestamp is parseable ISO 8601
+    from datetime import datetime
+    ts = datetime.fromisoformat(pat.timestamp)
+    assert ts.tzinfo is not None
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    skill=st.text(min_size=1, max_size=20, alphabet=st.characters(whitelist_categories=('L',), whitelist_characters='-')),
+    error=st.text(min_size=1, max_size=200),
+)
+def test_derive_from_error_signature_deterministic(skill, error):
+    """Property: same inputs → same error_signature (deterministic dedup)."""
+    p1 = derive_from_error(skill=skill, command="cmd", error=error)
+    p2 = derive_from_error(skill=skill, command="cmd", error=error)
+    assert p1.error_signature == p2.error_signature
+
+
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(error=st.text(min_size=51, max_size=200, alphabet=st.characters(whitelist_categories=('L', 'N'), whitelist_characters=' -_.')))
+def test_derive_from_error_signature_truncates_error(error):
+    """Property: error_signature uses error[:50], not full error."""
+    pat = derive_from_error(skill="s", command="c", error=error)
+    # error_signature format: "skill|command|error[:50]"
+    sig_parts = pat.error_signature.split("|")
+    assert len(sig_parts) == 3
+    assert len(sig_parts[2]) == 50
+
+
+# ---------------------------------------------------------------------------
+# record-failure CLI tests
+# ---------------------------------------------------------------------------
+
+def test_record_failure_cli_dry_run(tmp_path):
+    """record-failure --dry-run prints but does not write."""
+    from _reflexion import FailurePattern as FP
+    target = tmp_path / "failure-patterns.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "_reflexion.py"),
+         "record-failure", str(target), "--dry-run",
+         "--skill", "aws-test-ops", "--cmd", "aws test delete",
+         "--error", "AccessDenied"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 0
+    assert "DRY-RUN" in result.stdout
+    assert not target.exists() or target.read_text() == ""
+
+
+def test_record_failure_cli_real(tmp_path):
+    """record-failure writes to file."""
+    target = tmp_path / "failure-patterns.md"
+    # _reflexion.py CLI: first positional arg is command, second is path
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "_reflexion.py"),
+         "record-failure", str(target),
+         "--skill", "aws-test-ops", "--cmd", "aws test delete",
+         "--error", "ThrottlingException",
+         "--root-cause", "rate limit", "--fix", "add backoff",
+         "--source", "test"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 0, f"stderr={result.stderr} stdout={result.stdout}"
+    assert target.exists(), f"file not created. stdout={result.stdout} stderr={result.stderr}"
+    text = target.read_text()
+    assert "aws-test-ops" in text
+    assert "ThrottlingException" in text
+
+
+def test_record_failure_cli_requires_skill_and_error(tmp_path):
+    """record-failure without --skill or --error exits with error."""
+    target = tmp_path / "failure-patterns.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "_reflexion.py"),
+         "record-failure", str(target)],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode != 0

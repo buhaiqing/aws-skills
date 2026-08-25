@@ -15,14 +15,14 @@
 > Extracted from GCL traces. High-frequency patterns first.
 
 
-| Skill | Command | Error Pattern | Root Cause | Fix | Count |
-|-------|---------|---------------|------------|-----|-------|
-| ec2-ops | terminate-instances | MissingParameter | Missing `--instance-ids | --instance-ids i-xxx | 4x |
-| ec2-ops | run-instances | InvalidParameterValue | SecurityGroupIds format | --security-group-ids sg-xxx | 3x |
-| rds-ops | delete-db-instance | MissingParameter | Missing `--db-instance-identifier | --db-instance-identifier mydb | 3x |
-| s3-ops | delete-bucket | NoSuchBucket | Bucket doesn't exist or wrong region | Verify bucket exists first | 2x |
-| iam-ops | delete-user | NoSuchEntity | User doesn't exist | Check `list-users` first | 2x |
-| lambda-ops | delete-function | ResourceNotFoundException | Function name wrong | Verify with `list-functions | 2x |
+| skill | command | error | root_cause | fix | count | timestamp |
+|-------|---------|-------|------------|-----|-------|-----------|
+| aws-ec2-ops | aws ec2 terminate-instances | MissingParameter | Missing --instance-ids | --instance-ids i-xxx | 4 | 2026-07-25T00:00:00+00:00 |
+| aws-ec2-ops | aws ec2 run-instances | InvalidParameterValue | SecurityGroupIds format | --security-group-ids sg-xxx | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-rds-ops | aws rds delete-db-instance | MissingParameter | Missing --db-instance-identifier | --db-instance-identifier mydb | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-s3-ops | aws s3 rb | NoSuchBucket | Bucket doesn't exist or wrong region | Verify bucket exists first | 2 | 2026-07-25T00:00:00+00:00 |
+| aws-iam-ops | aws iam delete-user | NoSuchEntity | User doesn't exist | Check list-users first | 2 | 2026-07-25T00:00:00+00:00 |
+| aws-lambda-ops | aws lambda delete-function | ResourceNotFoundException | Function name wrong | Verify with list-functions | 2 | 2026-07-25T00:00:00+00:00 |
 
 
 ## 1.5. Query / Search Silent Miss（烂查询 > 错工具）
@@ -57,12 +57,12 @@
 > Failure patterns in cross-skill orchestration chains.
 
 
-| Source Skill | Target Skill | Failure Pattern | Resolution | Count |
-|--------------|--------------|-----------------|------------|-------|
-| elb-ops | ec2-ops | Target re-registration fails with special chars in user data | Use base64 encoding | 3x |
-| rds-ops | ec2-ops | Timeout on large SQL file via SSM | Split SQL into chunks < 10KB | 2x |
-| aurora-ops | rds-ops | Failover blocked by pending changes | Wait for modification to complete first | 2x |
-| cloudwatch-ops | ec2-ops | Alarm query returns empty for new alarm | Wait 60s after PutMetricAlarm before querying | 2x |
+| skill | command | error | root_cause | fix | count | timestamp |
+|-------|---------|-------|------------|-----|-------|-----------|
+| aws-elb-ops | aws elb register-targets | Target re-registration fails | Special chars in user data | Use base64 encoding | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-rds-ops | aws rds execute-sql | Timeout on large SQL | Large payload | Split SQL into chunks | 2 | 2026-07-25T00:00:00+00:00 |
+| aws-aurora-ops | aws rds failover-db-cluster | Failover blocked | Pending modifications | Wait for modification to complete | 2 | 2026-07-25T00:00:00+00:00 |
+| aws-cloudwatch-ops | aws cloudwatch get-metric-data | Alarm query empty | New alarm not yet propagated | Wait 60s after PutMetricAlarm | 2 | 2026-07-25T00:00:00+00:00 |
 
 
 ## 4. Runtime Execution Patterns
@@ -70,12 +70,12 @@
 > Runtime failure patterns discovered during GCL execution.
 
 
-| Skill | Operation | Failure Pattern | Root Cause | Prevention |
-|-------|-----------|-----------------|------------|------------|
-| ec2-ops | stop-instances | Instance stuck in Stopping state | Dependent services not stopped | Check running processes before stop |
-| rds-ops | create-db-instance | Quota exceeded error | Account-level instance limit | Query quota before creation |
-| s3-ops | delete-bucket | Bucket not empty (versioning enabled) | Versioned objects remain | Delete all versions first |
-| elb-ops | deregister-targets | Targets still in service | Deregistration delay | Wait for DRAINING state |
+| skill | command | error | root_cause | fix | count | timestamp |
+|-------|---------|-------|------------|-----|-------|-----------|
+| aws-ec2-ops | aws ec2 stop-instances | Instance stuck in Stopping | Dependent services not stopped | Check running processes before stop | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-rds-ops | aws rds create-db-instance | QuotaExceeded | Account-level instance limit | Query quota before creation | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-s3-ops | aws s3 rb | BucketNotEmpty | Versioned objects remain | Delete all versions first | 3 | 2026-07-25T00:00:00+00:00 |
+| aws-elb-ops | aws elb deregister-targets | TargetsStillInService | Deregistration delay | Wait for DRAINING state | 3 | 2026-07-25T00:00:00+00:00 |
 
 
 ## 5. Token Efficiency Violations

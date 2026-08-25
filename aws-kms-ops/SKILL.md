@@ -39,6 +39,10 @@ metadata:
     - AWS_SESSION_TOKEN
     - AWS_PROFILE
     - AWS_ACCOUNT_ID
+  cross_skill_deps:
+    - aws-cloudtrail-ops
+    - aws-iam-ops
+    - aws-cloudwatch-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:

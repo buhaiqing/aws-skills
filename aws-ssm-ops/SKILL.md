@@ -28,6 +28,11 @@ metadata:
     rubric_ref: references/rubric.md
     prompts_ref: references/prompt-templates.md
     pilot: false
+  cross_skill_deps:
+    - aws-ec2-ops
+    - aws-iam-ops
+    - aws-cloudwatch-ops
+    - aws-cloudtrail-ops
   orchestrator_aware: true
   orchestrator_compat: ">=0.10"
   delegate:
