@@ -17,6 +17,13 @@ HOOK = REPO / "scripts" / "hooks" / "pre-commit"
 INSTALL_HOOKS = REPO / "scripts" / "install-hooks.sh"
 AGENTS_MD = REPO / "AGENTS.md"
 
+# Hermetic: when git runs the real pre-commit hook it exports GIT_DIR,
+# GIT_INDEX_FILE and GIT_PREFIX. Inherited, `git init` / `git add` in tmp_path
+# resolve to the OUTER repo, so staged files land in the wrong index and the
+# gates under test see an empty tree (false failures on every commit).
+for _key in [k for k in os.environ if k.startswith("GIT_")]:
+    os.environ.pop(_key)
+
 
 def _init_tmp_repo(tmp_path: Path) -> Path:
     """Initialize a fresh git repo at tmp_path; return it."""
