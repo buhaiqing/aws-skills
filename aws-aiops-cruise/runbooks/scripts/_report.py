@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
+
+from _inference import build_inference_latency_table
 
 
 def build_aiops_context(
@@ -82,6 +85,7 @@ def render_markdown_report(
     inference_lines: list[str],
     run_id: str,
     topology_dir: str = "",
+    signals: dict | None = None,
 ) -> str:
     lines = [
         f"# AWS Health Cruise — {customer}",
@@ -103,6 +107,11 @@ def render_markdown_report(
                 "",
             ]
         )
+    # Inference Latency SLA section (spec 2026-09-06-infer-latency-sla-design §S3)
+    if signals and signals.get("XRay"):
+        sla_ms = float(os.environ.get("INFER_P95_SLA_MS", "1500"))
+        lines.append(build_inference_latency_table(signals, sla_ms=sla_ms))
+        lines.append("")
     lines.append("## Inventory")
     lines.append("")
     for k, v in sorted(inventory.items()):

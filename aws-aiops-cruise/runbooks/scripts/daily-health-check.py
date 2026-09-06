@@ -79,7 +79,7 @@ def patrol_region(
     run_id: str,
     customer: str,
     args: argparse.Namespace,
-) -> tuple[list[dict], dict, dict, list[dict], list[str]]:
+) -> tuple[list[dict], dict, dict, list[dict], list[str], dict]:
     incidents: list[dict] = []
     inventory: dict = {}
     signals: dict = {}
@@ -131,7 +131,7 @@ def patrol_region(
     )
     inference_lines.extend(native_lines)
 
-    return incidents, inventory, native_meta, risk_evidence, inference_lines
+    return incidents, inventory, native_meta, risk_evidence, inference_lines, signals
 
 
 def main() -> int:
@@ -214,15 +214,20 @@ def main() -> int:
     all_risk: list[dict] = []
     all_inference: list[str] = []
     native_collectors: list[dict] = []
+    combined_signals: dict = {}
 
     for region in regions:
         log("INFO", f"Patrol region: {region}")
-        inc, inv, nmeta, risk, inf = patrol_region(region, scope_ids, run_id, customer, args)
+        inc, inv, nmeta, risk, inf, sigs = patrol_region(
+            region, scope_ids, run_id, customer, args
+        )
         all_incidents.extend(inc)
         for k, v in inv.items():
             inventory[k] = inventory.get(k, 0) + v
         all_risk.extend(risk)
         all_inference.extend(inf)
+        for layer, resources in sigs.items():
+            combined_signals.setdefault(layer, {}).update(resources)
         native_collectors.append({"region": region, **nmeta})
 
     overall = grade(all_incidents)
@@ -291,6 +296,7 @@ def main() -> int:
             inference_lines=all_inference,
             run_id=run_id,
             topology_dir=topo_dir,
+            signals=combined_signals,
         )
     )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from _shared import make_incident, resource_in_scope, run_aws, get_metric_data_batch
+from _inference import extract_xray_latency_signals
 
 from collectors._time import json_time
 
@@ -140,8 +141,14 @@ def audit_autoscaling_headroom(region: str, scope_ids: set[str], run_id: str, cu
             )
     return incidents
 
-def audit_xray_service_graph(region: str, scope_ids: set[str], run_id: str, customer: str) -> list[dict]:
-    """X-Ray service graph — fault/error hotspots (read-only, last 1h)."""
+def audit_xray_service_graph(region: str, scope_ids: set[str], run_id: str, customer: str) -> tuple[list[dict], dict[str, dict[str, dict[str, float | None]]]]:
+    """X-Ray service graph — fault/error hotspots + inference latency percentiles.
+
+    Returns ``(incidents, {"XRay": {node_name: {p50, p95, p99, n, fault_rate}}})``.
+    The signals dict is consumed by ``_inference.infer_latency_p95_rule``.
+
+    Spec: 2026-09-06-infer-latency-sla-design §S1 (wire X-Ray percentiles into signals).
+    """
     incidents: list[dict] = []
     end = datetime.now(UTC)
     start = end - timedelta(hours=1)
@@ -158,7 +165,7 @@ def audit_xray_service_graph(region: str, scope_ids: set[str], run_id: str, cust
         region,
     )
     if not data:
-        return incidents
+        return incidents, {"XRay": {}}
     for svc in data.get("Services", []):
         name = svc.get("Name", "")
         if scope_ids and name and not any(
@@ -192,6 +199,8 @@ def audit_xray_service_graph(region: str, scope_ids: set[str], run_id: str, cust
                     recommendation="Trace downstream from this node; correlate ALB/Lambda/RDS in same window",
                 )
             )
-    # Store graph snippet in meta for orchestrator (optional enrichment)
-    return incidents
+    # Always emit latency signals (even for low-traffic endpoints) so the
+    # percentile renderer can show "no data" rows instead of missing nodes.
+    latency_signals = extract_xray_latency_signals(data)
+    return incidents, {"XRay": latency_signals}
 

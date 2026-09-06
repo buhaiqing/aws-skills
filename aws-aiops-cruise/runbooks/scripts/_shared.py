@@ -597,6 +597,52 @@ def get_metric_data_batch(
     return results
 
 
+def percentile_from_buckets(
+    buckets: list[dict] | None,
+    p: float,
+) -> float | None:
+    """Compute a percentile (0 < p <= 1) from an X-Ray / histogram bucket list.
+
+    Buckets format (X-Ray ``Histogram`` / ``EdgeStatistics.ResponseTimeHistogram``):
+        [{"Key": "<upper_bound_seconds_float>", "Value": <count_int>}, ...]
+
+    Linear interpolation within the bucket containing the percentile rank.
+    Returns ``None`` for empty input, zero total count, or p outside (0, 1].
+
+    Spec: 2026-09-06-infer-latency-sla-design §S1 (ID-2, ID-3).
+    """
+    if not buckets or not (0 < p <= 1):
+        return None
+    rows: list[tuple[float, int]] = []
+    for b in buckets:
+        key = b.get("Key")
+        cnt = b.get("Value")
+        if key is None or cnt is None:
+            continue
+        try:
+            rows.append((float(key), int(cnt)))
+        except (TypeError, ValueError):
+            continue
+    if not rows:
+        return None
+    rows.sort(key=lambda r: r[0])
+    total = sum(c for _, c in rows)
+    if total <= 0:
+        return None
+    rank = p * total
+    cumulative = 0
+    prev_upper = 0.0
+    for upper, count in rows:
+        if cumulative + count >= rank:
+            if count <= 0:
+                return upper
+            frac = (rank - cumulative) / count
+            return prev_upper + (upper - prev_upper) * frac
+        cumulative += count
+        prev_upper = upper
+    return rows[-1][0]
+
+
 def get_wow_change(
     region: str,
     namespace: str,

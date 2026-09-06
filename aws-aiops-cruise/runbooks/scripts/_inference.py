@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from _shared import make_incident
+from _shared import make_incident, percentile_from_buckets
 
 # Signals: resource_type -> resource_id -> metric -> value
 Signals = dict[str, dict[str, dict[str, float | None]]]
@@ -382,6 +382,19 @@ def apply_chain_inference(
                         recommendation="Open X-Ray trace map for cold start / downstream timeout",
                     )
                 )
+
+    # INFER-LAT-P95-01 — inference endpoint P95 latency SLA breach
+    # Spec 2026-09-06-infer-latency-sla-design §S2
+    if "INFER-LAT-P95-01" not in existing_rule_ids:
+        for inc in infer_latency_p95_rule(
+            signals, run_id=run_id, customer=customer, region=region
+        ):
+            incidents.append(inc)
+            lines.append(
+                f"- **{inc['rule_id']}**: {inc['resource_id']} P95 "
+                f"{inc['current_value']:.0f}ms > SLA {inc['threshold_warning']:.0f}ms "
+                f"({inc['level']})"
+            )
 
     # EKS nodegroup scaling inference rules (EKS-NG-02)
     for ng_id, metrics in signals.get("EKS", {}).items():
@@ -1883,3 +1896,243 @@ def build_risk_evidence(
         "ml_shadow_result": None if ml_mode == "off" else {"mode": ml_mode, "skipped": True},
         "detection_methods": ["static_threshold", "wow"] if wow_pct else ["static_threshold"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Inference Latency SLA — spec 2026-09-06-infer-latency-sla-design §S1-S3
+# Extends aws-aiops-cruise with P50/P95/P99 percentile + composite rule.
+# ---------------------------------------------------------------------------
+
+# Heuristic: X-Ray service names that indicate an ML inference endpoint.
+_INFERENCE_NAME_HINTS = (
+    "sagemaker",
+    "inference",
+    "model",
+    "llm",
+    "embedding",
+    "predict",
+)
+
+
+def _is_inference_endpoint(name: str) -> bool:
+    """Heuristic check — real signal is X-Ray node type, but name is reliable
+    fallback when node_type is absent (older X-Ray service maps)."""
+    if not name:
+        return False
+    n = name.lower()
+    return any(hint in n for hint in _INFERENCE_NAME_HINTS)
+
+
+def extract_xray_latency_signals(
+    data: dict | None,
+) -> dict[str, dict[str, float | None]]:
+    """Convert X-Ray ``get-service-graph`` response into latency percentile signals.
+
+    Returns ``{node_name: {p50, p95, p99, n, fault_rate}}`` where percentile
+    values are in **milliseconds** (X-Ray returns seconds).
+
+    Spec: 2026-09-06-infer-latency-sla-design §S1.
+    """
+    if not data or not isinstance(data, dict):
+        return {}
+    services = data.get("Services") or []
+    out: dict[str, dict[str, float | None]] = {}
+    for svc in services:
+        name = svc.get("Name", "")
+        if not name:
+            continue
+        summary = svc.get("SummaryStatistics") or {}
+        total = int(summary.get("TotalCount") or 0)
+        faults = int(summary.get("FaultCount") or 0)
+        errors = int(summary.get("ErrorCount") or 0)
+        fault_rate = (faults + errors) / total * 100 if total else 0.0
+
+        # Find the response-time histogram. X-Ray service graph returns
+        # ``EdgeStatistics`` as a list; each edge has ``ResponseTimeHistogram``.
+        # Some SDK versions expose the histogram directly on the service.
+        histogram: list[dict] = []
+        for edge in svc.get("EdgeStatistics") or []:
+            h = edge.get("ResponseTimeHistogram")
+            if h:
+                histogram = h
+                break
+        if not histogram:
+            h = svc.get("ResponseTimeHistogram")
+            if h:
+                histogram = h
+
+        # Default signal bucket so downstream rule sees consistent schema.
+        sig: dict[str, float | None] = {
+            "p50": None,
+            "p95": None,
+            "p99": None,
+            "n": float(total) if total else 0.0,
+            "fault_rate": fault_rate,
+        }
+        if histogram and total > 0:
+            # X-Ray returns seconds; convert to ms (1 decimal for readability).
+            for p_attr, p_val in (("p50", 0.50), ("p95", 0.95), ("p99", 0.99)):
+                v = percentile_from_buckets(histogram, p_val)
+                sig[p_attr] = round(v * 1000, 1) if v is not None else None
+        out[name] = sig
+    return out
+
+
+def infer_latency_p95_rule(
+    signals: dict,
+    *,
+    run_id: str,
+    customer: str,
+    region: str,
+) -> list[dict]:
+    """Emit ``INFER-LAT-P95-01`` incidents when any X-Ray service P95 exceeds SLA.
+
+    SLA default 1500 ms; override via env ``INFER_P95_SLA_MS``.
+
+    Spec: 2026-09-06-infer-latency-sla-design §S2.
+    """
+    import os
+
+    sla_ms = float(os.environ.get("INFER_P95_SLA_MS", "1500"))
+    if sla_ms <= 0:
+        sla_ms = 1500.0
+    critical_ms = sla_ms * 1.5
+    xray = signals.get("XRay") or {}
+    incidents: list[dict] = []
+    for node, metrics in xray.items():
+        p95 = metrics.get("p95") if isinstance(metrics, dict) else None
+        n = metrics.get("n", 0) if isinstance(metrics, dict) else 0
+        if p95 is None or n is None or n < 10:
+            continue
+        if p95 < sla_ms:
+            continue
+        level = "WARNING" if p95 < critical_ms else "CRITICAL"
+        incidents.append(
+            make_incident(
+                run_id=run_id,
+                customer=customer,
+                region=region,
+                resource_type="XRay",
+                resource_id=node,
+                rule_id="INFER-LAT-P95-01",
+                title=f"Inference P95 latency {p95:.0f}ms exceeds SLA {sla_ms:.0f}ms",
+                level=level,
+                metric="P95LatencyMs",
+                current_value=p95,
+                threshold_warning=sla_ms,
+                threshold_critical=critical_ms,
+                recommendation=(
+                    "Open X-Ray trace map for this node; check model server "
+                    "CPU/memory, batch size, and provisioned concurrency. "
+                    "If SageMaker, review ModelLatency vs OverheadLatency."
+                ),
+            )
+        )
+    return incidents
+
+
+def build_inference_latency_table(
+    signals: dict,
+    *,
+    sla_ms: float = 1500.0,
+) -> str:
+    """Render Markdown table of inference endpoint P50/P95/P99.
+
+    Spec: 2026-09-06-infer-latency-sla-design §S3.
+    """
+    xray = signals.get("XRay") or {}
+    # Only show endpoints that have at least one percentile computed.
+    rows: list[tuple[str, dict]] = [
+        (name, m) for name, m in xray.items()
+        if isinstance(m, dict) and m.get("p95") is not None
+    ]
+    if not rows:
+        return "## Inference Latency SLA\n\n_No inference endpoints detected._\n"
+
+    critical_ms = sla_ms * 1.5
+    lines = [
+        "## Inference Latency SLA",
+        "",
+        f"_SLA threshold: P95 < {sla_ms:.0f}ms (CRITICAL ≥ {critical_ms:.0f}ms)_",
+        "",
+        "| Endpoint | P50 | P95 | P99 | Samples | SLA | Status |",
+        "|----------|----:|----:|----:|--------:|----:|--------|",
+    ]
+    for name, m in sorted(rows):
+        p50 = m.get("p50")
+        p95 = m.get("p95")
+        p99 = m.get("p99")
+        n = int(m.get("n", 0) or 0)
+        if p95 >= critical_ms:
+            status = "🔴 CRITICAL"
+        elif p95 >= sla_ms:
+            status = "⚠️ WARNING"
+        else:
+            status = "✅ PASS"
+        lines.append(
+            f"| `{name}` | {p50:.0f}ms | {p95:.0f}ms | {p99:.0f}ms | "
+            f"{n:,} | {sla_ms:.0f}ms | {status} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def infer_p95_wow_change(
+    region: str,
+    *,
+    wow_threshold_pct: float = 30.0,
+) -> list[dict[str, Any]]:
+    """Week-over-week P95 latency drift for inference endpoints (decay view).
+
+    Calls X-Ray ``get-service-graph`` twice (now and 7 days ago) and returns
+    only endpoints whose P95 changed by more than ``wow_threshold_pct``.
+
+    Spec: 2026-09-06-infer-latency-sla-design §S4. Reuses the WoW pattern
+    from ``_shared.get_wow_change`` (same 6h window, 7d offset).
+    """
+    from datetime import UTC, datetime, timedelta
+    from _shared import run_aws
+    from collectors._time import json_time
+    now = datetime.now(UTC)
+    end_cur = now
+    start_cur = end_cur - timedelta(hours=6)
+    end_old = end_cur - timedelta(days=7)
+    start_old = end_old - timedelta(hours=6)
+
+    def _fetch(start: datetime, end: datetime) -> dict:
+        return run_aws(
+            [
+                "aws",
+                "xray",
+                "get-service-graph",
+                "--start-time",
+                json_time(start),
+                "--end-time",
+                json_time(end),
+            ],
+            region,
+        ) or {}
+
+    cur_data = _fetch(start_cur, end_cur)
+    old_data = _fetch(start_old, end_old)
+    cur_signals = extract_xray_latency_signals(cur_data)
+    old_signals = extract_xray_latency_signals(old_data)
+    out: list[dict[str, Any]] = []
+    for name, cur in cur_signals.items():
+        if not cur.get("p95") or cur.get("n", 0) < 10:
+            continue
+        old = old_signals.get(name, {})
+        old_p95 = old.get("p95")
+        if not old_p95 or old_p95 <= 0:
+            continue
+        wow_pct = (cur["p95"] - old_p95) / old_p95 * 100
+        if abs(wow_pct) >= wow_threshold_pct:
+            out.append(
+                {
+                    "endpoint": name,
+                    "current_p95_ms": cur["p95"],
+                    "week_ago_p95_ms": old_p95,
+                    "wow_pct": round(wow_pct, 1),
+                }
+            )
+    return out
+
