@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 
 from _report import build_aiops_context
+from _inference import infer_p95_wow_change
 from _shared import (
     COMMAND_TRACE,
     PRODUCTS,
@@ -116,6 +117,14 @@ def main() -> int:
         "WARNING" if at_risk else "PASS"
     )
 
+    # Inference latency WoW decay (spec 2026-09-06-infer-latency-sla-design §S4)
+    # Best-effort: if X-Ray API fails, the helper returns [] and we just skip.
+    try:
+        inference_wow = infer_p95_wow_change(region)
+    except Exception as e:  # noqa: BLE001
+        log("WARN", f"infer_p95_wow_change failed: {e}")
+        inference_wow = []
+
     report = {
         "run_id": run_id,
         "scenario": "capacity_planning",
@@ -125,6 +134,7 @@ def main() -> int:
         "overall_grade": overall,
         "trends": trends,
         "at_risk": at_risk,
+        "inference_p95_wow": inference_wow,
         "aiops_context": build_aiops_context(
             run_id=run_id,
             trace_id=run_id[:12],
