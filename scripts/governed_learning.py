@@ -43,7 +43,7 @@ CANDIDATE_STATE_PATH = REPO / "docs" / "governed-learning" / "candidate-state.js
 # to failure_kb.SOURCES "governed_learning"; passing "governed_learning" itself
 # misses that map and falls through to _DEFAULT_KB_SOURCE="runtime_block",
 # mis-attributing every governed-learning promotion to a runtime block.
-KB_SOURCE_TOKEN = "golden_eval"
+KB_SOURCE_TOKEN = "governed_learning"
 
 SourceStatus = Literal[
     "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATION_FAIL",
