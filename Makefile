@@ -1,7 +1,7 @@
 # aws-skills Makefile
 # Standard targets for local dev + CI parity.
 
-.PHONY: help setup test lint verify composite-lint cross-runtime-lint status snapshot clean
+.PHONY: help setup test lint verify composite-lint cross-runtime-lint status snapshot metrics clean
 
 help:           ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -30,6 +30,9 @@ status:         ## Show live harness health snapshot (JSON + Markdown to stdout)
 
 snapshot:       ## Regenerate docs/status-snapshot.md (machine evidence for maturity doc)
 	python3 scripts/status_snapshot.py --out docs/status-snapshot.md
+
+metrics:       ## Append today's per-skill GCL metrics to docs/metrics/timeseries.csv
+	python3 scripts/gcl_metrics.py --days 30 --timeseries docs/metrics/timeseries.csv
 
 # snapshot runs first as a recorder so docs/status-snapshot.md is always fresh,
 # even on a red tree; the "-" prefix keeps it non-blocking so lint/test remain

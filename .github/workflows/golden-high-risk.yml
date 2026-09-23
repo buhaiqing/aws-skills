@@ -23,6 +23,11 @@ jobs:
             --window-days 30 \
             --out audit-results/telemetry/dashboard.md
       - run: python3 scripts/telemetry_dashboard.py alert --audit-dir audit-results/ --drop-threshold 0.05
+      # Append-only metrics timeseries for artifact retention. Never git-commit
+      # here: this workflow is `on: [push, pull_request]` (commit = trigger loop).
+      - run: |
+          mkdir -p audit-results/metrics
+          python3 scripts/gcl_metrics.py --days 30 --timeseries audit-results/metrics/timeseries.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:

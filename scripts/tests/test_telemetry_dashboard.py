@@ -6,6 +6,7 @@ audit-results/ directory.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -15,9 +16,11 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+from gcl_metrics import append_timeseries, collect_traces  # noqa: E402
 from telemetry_dashboard import (  # noqa: E402
     SignalSlice,
     load_signals,
+    load_prior_from_timeseries,
     compute_dashboard,
     detect_regressions,
     render_markdown,
@@ -127,6 +130,69 @@ def test_render_markdown_contains_required_sections():
     assert "pass_rate" in md.lower() or "pass" in md.lower()
     # fail-mode table heading
     assert "fail" in md.lower()
+
+
+def test_no_prior_data_is_not_rendered_as_flat():
+    """No prior window → delta None, rendered `n/a`; must never look like 0.00."""
+    signals = [_make_signal("aws-n", "PASS", 1), _make_signal("aws-n", "SAFETY_FAIL", 2)]
+    dash = compute_dashboard(signals, window_days=30)
+    n = next(m for m in dash.by_skill if m.skill == "aws-n")
+
+    assert n.prior_pass_rate is None
+    assert n.delta is None
+    assert n.regression is False
+    row = [ln for ln in render_markdown(dash).splitlines() if "aws-n" in ln and ln.startswith("|")]
+    assert len(row) == 1
+    cells = [c.strip() for c in row[0].strip("|").split("|")]
+    # columns: Skill | Pass | Fail | Total | Pass-rate | Prior | Δ | Regression
+    assert cells[5] == "n/a" and cells[6] == "n/a"
+    assert detect_regressions(dash, drop_threshold=0.05) == []
+
+
+def test_real_prior_produces_real_delta():
+    """Prior 1.0 → current 0.5 renders Δ -0.50 (contrast with the n/a case)."""
+    signals = [
+        _make_signal("aws-a", "PASS", 1),
+        _make_signal("aws-a", "SAFETY_FAIL", 2),
+        _make_signal("aws-a", "PASS", 40),
+    ]
+    dash = compute_dashboard(signals, window_days=30, prior_window_days=30)
+    md = render_markdown(dash)
+    row = [ln for ln in md.splitlines() if "aws-a" in ln and ln.startswith("|")][0]
+    cells = [c.strip() for c in row.strip("|").split("|")]
+
+    assert cells[5] == "1.00"
+    assert cells[6] == "-0.50"
+    assert cells[7] == "🚩"
+
+
+def test_timeseries_csv_is_prior_source_of_truth(tmp_path):
+    """CSV written by gcl_metrics drives prior; a skill absent there → n/a."""
+    csv_path = tmp_path / "timeseries.csv"
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "gcl-traces"
+    trace_rows = collect_traces(fixtures, days=365)
+    append_timeseries(csv_path, trace_rows, window_days=365, day="2026-09-01")
+
+    prior = load_prior_from_timeseries(
+        csv_path, datetime(2026, 9, 24, tzinfo=timezone.utc),
+    )
+    assert prior == {"aws-s3-ops": 0.0}
+
+    current = [_make_signal("aws-s3-ops", "PASS", 1)]
+    dash = compute_dashboard(
+        current, window_days=30, now=datetime(2026, 9, 24, tzinfo=timezone.utc),
+        timeseries_prior=prior,
+    )
+    row = [ln for ln in render_markdown(dash).splitlines()
+           if "aws-s3-ops" in ln and ln.startswith("|")][0]
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert cells[4] == "1.00"   # current window: all PASS
+    assert cells[5] == "0.00"   # prior from CSV
+    assert cells[6] == "+1.00"
+
+    # rows dated inside the current window are not priors
+    assert load_prior_from_timeseries(
+        csv_path, datetime(2026, 8, 1, tzinfo=timezone.utc)) == {}
 
 
 def test_cli_alert_subprocess_exit_code():

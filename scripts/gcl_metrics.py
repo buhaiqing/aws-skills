@@ -11,19 +11,26 @@ Usage:
     python3 scripts/gcl_metrics.py --days 7              # window adjustable
     python3 scripts/gcl_metrics.py --json                # machine-readable
     python3 scripts/gcl_metrics.py --out PATH            # write Markdown to file
+    python3 scripts/gcl_metrics.py --timeseries docs/metrics/timeseries.csv
+    python3 scripts/gcl_metrics.py --staleness-check --max-age-days 7
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import os
 import sys
+import tempfile
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = REPO / "audit-results"
+DEFAULT_TIMESERIES = REPO / "docs" / "metrics" / "timeseries.csv"
+TIMESERIES_SCHEMA = ("timestamp", "window_days", "skill", "total", "pass", "fail", "pass_rate")
 
 Status = Literal["PASS", "SAFETY_FAIL", "MAX_ITER", "OTHER"]
 
@@ -138,6 +145,98 @@ def render_markdown(rows: list[TraceRow]) -> str:
     return "\n".join(md)
 
 
+# ---------------------------------------------------------------------------
+# Append-only timeseries (P0-1 persistence)
+# ---------------------------------------------------------------------------
+
+def utc_today() -> str:
+    """UTC date (YYYY-MM-DD); the idempotency key for timeseries rows."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def read_timeseries(path: Path) -> list[dict[str, str]]:
+    """Parse a timeseries CSV into dict rows. Missing file → []."""
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as fh:
+        return [r for r in csv.DictReader(fh) if r.get("timestamp") and r.get("skill")]
+
+
+def build_timeseries_rows(rows: list[TraceRow], window_days: int, day: str) -> list[dict[str, str]]:
+    """One CSV data row per skill that has ≥1 trace in the window."""
+    agg = aggregate(rows)
+    return [
+        {
+            "timestamp": day,
+            "window_days": str(window_days),
+            "skill": skill,
+            "total": str(s["TOTAL"]),
+            "pass": str(s["PASS"]),
+            "fail": str(s["FAIL"]),
+            "pass_rate": f"{s['PASS'] / s['TOTAL']:.4f}",
+        }
+        for skill, s in sorted(agg["by_skill"].items())
+        if s["TOTAL"]
+    ]
+
+
+def append_timeseries(
+    path: Path, rows: list[TraceRow], window_days: int, day: str | None = None,
+) -> int:
+    """Upsert per-skill rows into the append-only CSV.
+
+    Same (timestamp, skill) replaces the stored row, so re-running inside one
+    UTC day never duplicates data. Returns the number of rows written.
+
+    Writes via a temp file + os.replace so an interrupted run leaves the previous
+    CSV intact instead of a truncated one.
+    """
+    day = day or utc_today()
+    new_rows = build_timeseries_rows(rows, window_days, day)
+    new_keys = {(r["timestamp"], r["skill"]) for r in new_rows}
+    kept = [r for r in read_timeseries(path) if (r["timestamp"], r["skill"]) not in new_keys]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(TIMESERIES_SCHEMA))
+            writer.writeheader()
+            writer.writerows(kept + new_rows)
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+    return len(new_rows)
+
+
+def parse_timeseries_day(value: str) -> date | None:
+    """Parse a YYYY-MM-DD cell; None when the row is dirty (never raise)."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def latest_timeseries_day(path: Path) -> date | None:
+    """Most recent parseable date in the CSV; None when there is no usable row."""
+    days = [d for d in (parse_timeseries_day(r["timestamp"]) for r in read_timeseries(path)) if d]
+    return max(days) if days else None
+
+
+def staleness_check(
+    path: Path, max_age_days: int, today: date | None = None,
+) -> tuple[bool, str]:
+    """(ok, message): ok when the newest timeseries entry is within max_age_days."""
+    today = today or datetime.now(timezone.utc).date()
+    if (latest := latest_timeseries_day(path)) is None:
+        return False, f"metrics stale: no data rows in {path}"
+    age = (today - latest).days
+    if age > max_age_days:
+        return False, (f"metrics stale: latest entry {latest} is {age}d old "
+                       f"(max {max_age_days}d)")
+    return True, f"metrics fresh: latest entry {latest} ({age}d old, max {max_age_days}d)"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="GCL metrics dashboard")
     ap.add_argument("--days", type=int, default=30)
@@ -149,8 +248,30 @@ def main(argv: list[str] | None = None) -> int:
         default=AUDIT_DIR,
         help="directory of gcl-trace-*.json (default: repo audit-results/)",
     )
+    ap.add_argument(
+        "--timeseries",
+        type=Path,
+        default=None,
+        help="append-only CSV to upsert per-skill metrics into",
+    )
+    ap.add_argument(
+        "--staleness-check",
+        action="store_true",
+        help="exit 1 when the timeseries has no data or is older than --max-age-days",
+    )
+    ap.add_argument("--max-age-days", type=int, default=7)
     args = ap.parse_args(argv)
+
+    if args.staleness_check:
+        ts_path = args.timeseries or DEFAULT_TIMESERIES
+        ok, msg = staleness_check(ts_path, args.max_age_days)
+        print(msg)
+        return 0 if ok else 1
+
     rows = collect_traces(args.audit_dir, days=args.days)
+    if args.timeseries:
+        written = append_timeseries(args.timeseries, rows, args.days)
+        print(f"timeseries: {written} row(s) -> {args.timeseries}", file=sys.stderr)
     if args.json:
         out = json.dumps(
             [{**asdict(r), "path": str(r.path)} for r in rows],

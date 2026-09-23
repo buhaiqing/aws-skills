@@ -13,6 +13,8 @@ CLI:
         --audit-dir audit-results/ \\
         --out docs/telemetry/dashboard.md
 
+        --timeseries docs/metrics/timeseries.csv
+
     python3 scripts/telemetry_dashboard.py alert \\
         --audit-dir audit-results/ \\
         --drop-threshold 0.05
@@ -27,8 +29,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from gcl_metrics import read_timeseries
+
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_AUDIT_DIR = REPO / "audit-results"
+DEFAULT_TIMESERIES = REPO / "docs" / "metrics" / "timeseries.csv"
 
 _VALID_TRACE_STATUSES = {"PASS", "SAFETY_FAIL", "MAX_ITER"}
 
@@ -54,8 +59,10 @@ class SkillMetric:
     fail_count: int
     total: int
     pass_rate: float           # 0..1
-    prior_pass_rate: float     # 0..1 (or NaN if no prior data)
-    delta: float               # pass_rate - prior_pass_rate
+    # None == no prior data. Coercing it to a number rendered every Δ as +0.00,
+    # i.e. "unknown" was displayed as "flat" (RSI P0-1).
+    prior_pass_rate: float | None = None
+    delta: float | None = None  # pass_rate - prior_pass_rate
     regression: bool = False
 
 
@@ -198,11 +205,27 @@ def load_signals(audit_dir: Path) -> list[SignalSlice]:
 # Computation
 # ---------------------------------------------------------------------------
 
+def load_prior_from_timeseries(path: Path, cutoff: datetime) -> dict[str, float]:
+    """Latest pass_rate per skill recorded strictly before `cutoff`.
+
+    The CSV is the durable prior source: audit-results/ is pruned/ephemeral,
+    so signal-derived priors silently vanish between runs.
+    """
+    priors: dict[str, tuple[str, float]] = {}
+    for r in read_timeseries(path):
+        if datetime.strptime(r["timestamp"], "%Y-%m-%d").replace(tzinfo=timezone.utc) >= cutoff:
+            continue
+        if r["skill"] not in priors or r["timestamp"] > priors[r["skill"]][0]:
+            priors[r["skill"]] = (r["timestamp"], float(r["pass_rate"]))
+    return {skill: rate for skill, (_ts, rate) in priors.items()}
+
+
 def compute_dashboard(
     signals: list[SignalSlice],
     window_days: int = 30,
     prior_window_days: int = 30,
     now: datetime | None = None,
+    timeseries_prior: dict[str, float] | None = None,
 ) -> Dashboard:
     """Aggregate signals into a Dashboard over [now-window, now] window."""
     now = now or datetime.now(timezone.utc)
@@ -245,9 +268,14 @@ def compute_dashboard(
         pp = sum(1 for s in prior if _is_pass(s))
         fp = sum(1 for s in prior if _is_fail(s))
         pt = pp + fp
-        prior_pass = (pp / pt) if pt > 0 else pass_rate  # default to current if no prior
-        delta = pass_rate - prior_pass
-        reg = delta <= -0.05
+        if timeseries_prior is not None:
+            # CSV wins when supplied: absence of a skill means "no prior", not
+            # "same as current".
+            prior_pass = timeseries_prior.get(skill)
+        else:
+            prior_pass = (pp / pt) if pt > 0 else None
+        delta = None if prior_pass is None else pass_rate - prior_pass
+        reg = bool(delta is not None and delta <= -0.05)
         skill_metrics.append(SkillMetric(
             skill=skill, pass_count=pc, fail_count=fc, total=total,
             pass_rate=pass_rate, prior_pass_rate=prior_pass,
@@ -269,7 +297,7 @@ def detect_regressions(d: Dashboard, drop_threshold: float = 0.05) -> list[str]:
     """Return skill names whose pass_rate dropped by ≥ drop_threshold vs prior."""
     flagged: list[str] = []
     for m in d.by_skill:
-        if m.total == 0:
+        if m.total == 0 or m.delta is None:
             continue
         if m.delta <= -drop_threshold:
             flagged.append(m.skill)
@@ -309,11 +337,15 @@ def render_markdown(d: Dashboard) -> str:
         if m.total == 0:
             continue
         flag = "🚩" if m.regression else ""
+        prior = f"{m.prior_pass_rate:.2f}" if m.prior_pass_rate is not None else "n/a"
+        delta = f"{m.delta:+.2f}" if m.delta is not None else "n/a"
         lines.append(
             f"| {m.skill} | {m.pass_count} | {m.fail_count} | {m.total} | "
-            f"{m.pass_rate:.2f} | {m.prior_pass_rate:.2f} | "
-            f"{m.delta:+.2f} | {flag} |"
+            f"{m.pass_rate:.2f} | {prior} | "
+            f"{delta} | {flag} |"
         )
+    lines.append("")
+    lines.append("_n/a = no prior-window data; Δ not computable._")
     lines.append("")
 
     # Fail-mode breakdown
@@ -349,7 +381,7 @@ def _emit_alert(d: Dashboard, threshold: float) -> int:
         return 0
     print(f"threshold: {threshold} (delta ≤ -{threshold})")
     for m in d.by_skill:
-        if m.skill not in flagged:
+        if m.skill not in flagged or m.delta is None:
             continue
         print(f"- **{m.skill}**: pass_rate {m.prior_pass_rate:.2f} -> {m.pass_rate:.2f} "
               f"(Δ{m.delta:+.2f})")
@@ -365,6 +397,8 @@ def main(argv: list[str] | None = None) -> int:
     dash_p.add_argument("--window-days", type=int, default=30)
     dash_p.add_argument("--out", default="-",
                         help="Output path; '-' for stdout")
+    dash_p.add_argument("--timeseries", default=None,
+                        help="CSV of historical pass-rates (prior source of truth)")
 
     alert_p = sub.add_parser("alert",
                              help="CI alert: exit 1 if any skill regressed")
@@ -372,11 +406,21 @@ def main(argv: list[str] | None = None) -> int:
     alert_p.add_argument("--window-days", type=int, default=30)
     alert_p.add_argument("--drop-threshold", type=float, default=0.05,
                          help="Pass-rate drop that triggers alert (default 0.05)")
+    alert_p.add_argument("--timeseries", default=None,
+                         help="CSV of historical pass-rates (prior source of truth)")
 
     args = ap.parse_args(argv)
     audit_dir = Path(args.audit_dir)
     signals = load_signals(audit_dir)
-    dash = compute_dashboard(signals, window_days=args.window_days)
+    now = datetime.now(timezone.utc)
+    prior = None
+    if args.timeseries:
+        prior = load_prior_from_timeseries(
+            Path(args.timeseries), now - timedelta(days=args.window_days),
+        )
+    dash = compute_dashboard(
+        signals, window_days=args.window_days, now=now, timeseries_prior=prior,
+    )
 
     if args.cmd == "dashboard":
         md = render_markdown(dash)

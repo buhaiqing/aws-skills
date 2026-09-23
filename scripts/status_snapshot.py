@@ -18,12 +18,13 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
+METRICS_MAX_AGE_DAYS = 7
 
 
 @dataclass
@@ -33,6 +34,12 @@ class Snapshot:
     ruff: dict
     composite_lint: dict
     self_review: dict
+    # Reported, but deliberately outside all_ok: the durable CSV starts with a
+    # header only, so folding this in would make the whole snapshot red until
+    # someone runs `make metrics`.
+    metrics: dict = field(default_factory=lambda: {
+        "max_age_days": METRICS_MAX_AGE_DAYS, "ok": True,
+    })
 
     @property
     def all_ok(self) -> bool:
@@ -51,6 +58,7 @@ class Snapshot:
         r = self.ruff
         c = self.composite_lint
         s = self.self_review
+        m = self.metrics
         badge = "🟢 ALL GREEN" if self.all_ok else "🔴 GATE RED"
         return (
             "# Harness Health Snapshot (auto-generated)\n\n"
@@ -64,7 +72,9 @@ class Snapshot:
             f"({'OK' if p['ok'] else 'RED'}) |\n"
             f"| ruff | {r['errors']} error(s) ({'OK' if r['ok'] else 'RED'}) |\n"
             f"| composite_lint | {'OK' if c['ok'] else 'RED'} |\n"
-            f"| self_review verify | stale P0 = {s['stale_p0']} ({'OK' if s['ok'] else 'RED'}) |\n\n"
+            f"| self_review verify | stale P0 = {s['stale_p0']} ({'OK' if s['ok'] else 'RED'}) |\n"
+            f"| metrics timeseries | {'🟢 fresh' if m['ok'] else '🔴 stale'} "
+            f"(max {m['max_age_days']}d) |\n\n"
             "## Note\n\n"
             "Capability maturity percentages (L1–L4) in `agentic-maturity-model.md` are a\n"
             "**human assessment**. This snapshot only proves the harness gates are currently\n"
@@ -123,6 +133,13 @@ def collect_self_review() -> dict:
     return {"stale_p0": stale, "ok": stale == 0}
 
 
+def collect_metrics() -> dict:
+    """Delegate to `gcl_metrics --staleness-check` (single source of freshness)."""
+    result = _run([sys.executable, str(SCRIPTS / "gcl_metrics.py"),
+                   "--staleness-check", "--max-age-days", str(METRICS_MAX_AGE_DAYS)])
+    return {"max_age_days": METRICS_MAX_AGE_DAYS, "ok": result.returncode == 0}
+
+
 def build_snapshot() -> Snapshot:
     return Snapshot(
         generated_at=date.today().isoformat(),
@@ -130,6 +147,7 @@ def build_snapshot() -> Snapshot:
         ruff=collect_ruff(),
         composite_lint=collect_composite_lint(),
         self_review=collect_self_review(),
+        metrics=collect_metrics(),
     )
 
 
