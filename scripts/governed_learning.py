@@ -12,12 +12,14 @@ CLI::
     python3 scripts/governed_learning.py approve --queue Q.json --id cand-… --approver alice
     python3 scripts/governed_learning.py promote --queue Q.json --dry-run
     python3 scripts/governed_learning.py report --queue Q.json
+    python3 scripts/governed_learning.py report --queue Q.json --dwell-stats
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -28,8 +30,20 @@ from _reflexion import FailurePattern, _parse_table_rows, append_or_increment
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_QUEUE = REPO / "audit-results" / "governed-learning" / "queue.json"
+FIXTURE_STATE_PATH = DEFAULT_QUEUE.parent / "candidate-state.json"
 APPROVALS_PATH = REPO / "audit-results" / "governed-learning" / "approvals.jsonl"
-FAILURE_PATTERNS = REPO / "docs" / "failure-patterns.md"
+FAILURE_PATTERNS = REPO / "docs" / "failure-patterns.jsonl"
+# Durable candidate store: {signature: {"first_seen": ISO8601,
+# "attempt_count": int}}. Git-tracked — the queue itself lives in
+# audit-results/ (git-ignored, pruned), so neither candidate age (Gate 5) nor
+# repeat count (Gate 4) may be derived from it. Both fields are written in one
+# atomic replace so they can never disagree.
+CANDIDATE_STATE_PATH = REPO / "docs" / "governed-learning" / "candidate-state.json"
+# Producer token for `FailurePattern.source`. `_reflexion._SOURCE_TO_KB` maps it
+# to failure_kb.SOURCES "governed_learning"; passing "governed_learning" itself
+# misses that map and falls through to _DEFAULT_KB_SOURCE="runtime_block",
+# mis-attributing every governed-learning promotion to a runtime block.
+KB_SOURCE_TOKEN = "golden_eval"
 
 SourceStatus = Literal[
     "SAFETY_FAIL", "MAX_ITER", "BLOCKED", "COMPENSATION_FAIL",
@@ -46,6 +60,25 @@ HARVEST_STATUSES = frozenset({
 MIN_CONFIDENCE = 0.95
 MIN_DWELL_HOURS = 168  # 7 days — human review window
 MIN_ATTEMPT_COUNT = 3
+
+# ---------------------------------------------------------------------------
+# Confidence model (Gate 1) — every addend maps to one real piece of evidence
+# ---------------------------------------------------------------------------
+# Repetition: a signature re-observed on separate harvests is not a one-off.
+W_REPETITION = 0.30
+MAX_REPETITION_SIGHTINGS = 3  # == MIN_ATTEMPT_COUNT → 0.90 of the 0.95 budget
+# Severity: a Critic safety verdict is far stronger evidence that a rule is
+# genuinely missing than an exhausted loop or a proxy block — the latter two
+# are frequently environmental (timeout, sandbox policy), so they weigh little.
+W_SOURCE_STATUS: dict[str, float] = {
+    "SAFETY_FAIL": 0.65,
+    "MAX_ITER": 0.10,
+    "BLOCKED": 0.05,
+    "COMPENSATION_FAIL": 0.05,
+}
+# Corroboration: independent producers (distinct trace ids) agreeing.
+W_CORROBORATION = 0.05
+MAX_CORROBORATION_SOURCES = 2
 
 
 @dataclass
@@ -104,6 +137,98 @@ def _cand_id(signature: str) -> str:
     return "cand-" + hashlib.sha256(signature.encode()).hexdigest()[:12]
 
 
+def load_candidate_state(path: Path = CANDIDATE_STATE_PATH) -> dict[str, dict[str, Any]]:
+    """Read the durable {signature: {first_seen, attempt_count}} map.
+
+    An unreadable file degrades to {} (every candidate restarts fresh).
+    Individually malformed entries are dropped rather than the whole map, so
+    one bad record cannot reset the age (Gate 5) or the evidence count
+    (Gate 4) of every other candidate.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    state: dict[str, dict[str, Any]] = {}
+    for signature, entry in payload.items():
+        if not isinstance(entry, dict):
+            continue
+        first_seen = entry.get("first_seen")
+        try:
+            attempts = int(entry.get("attempt_count", 0))
+        except (TypeError, ValueError):
+            continue
+        state[str(signature)] = {
+            "first_seen": first_seen if isinstance(first_seen, str) else "",
+            "attempt_count": max(0, attempts),
+        }
+    return state
+
+
+def save_candidate_state(
+    state: dict[str, dict[str, Any]],
+    path: Path = CANDIDATE_STATE_PATH,
+) -> None:
+    """Atomically persist first_seen + attempt_count in a single replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(tmp_path, path)
+
+
+def compute_confidence(candidate: CandidateRule) -> float:
+    """Evidence-weighted confidence in [0, 1] for a candidate rule.
+
+    Formula::
+
+        confidence = min(1.0,
+            W_REPETITION * min(attempt_count, MAX_REPETITION_SIGHTINGS)
+          + W_SOURCE_STATUS[source_status]
+          + W_CORROBORATION * min(distinct_sources - 1,
+                                  MAX_CORROBORATION_SOURCES))
+
+    Each addend is one real signal: how many separate harvests observed the
+    signature, how severe the producing failure was, and how many independent
+    producers agree.
+
+    Why this shape — Gate 1 must be reachable but never free:
+      * A single sighting of anything but SAFETY_FAIL scores <= 0.40, so one
+        flake can never reach MIN_CONFIDENCE.
+      * Reaching MIN_CONFIDENCE requires either MIN_ATTEMPT_COUNT repeat
+        sightings (aligning Gate 1 with Gate 4) or one Critic SAFETY_FAIL
+        verdict (0.95 exactly — strong, yet below a perfect 1.0, and Gate 5
+        dwell / Gate 6 human-review still apply).
+      * Corroboration across independent producers adds at most +0.10.
+    """
+    repetition = W_REPETITION * min(candidate.attempt_count, MAX_REPETITION_SIGHTINGS)
+    severity = W_SOURCE_STATUS.get(candidate.source_status, 0.0)
+    corroboration = W_CORROBORATION * min(
+        max(len(set(candidate.sources)) - 1, 0), MAX_CORROBORATION_SOURCES,
+    )
+    # Rounded so the persisted value is stable across float noise at the
+    # threshold (e.g. 0.30*3 + 0.05 would otherwise land at 0.9499999999999998).
+    return round(min(1.0, repetition + severity + corroboration), 4)
+
+
+def upsert_candidate(existing: CandidateRule, repeat: CandidateRule) -> CandidateRule:
+    """Merge a repeat sighting into `existing` (mutates and returns it).
+
+    Earliest created_at wins — never reset the dwell clock.
+    """
+    existing.attempt_count += repeat.attempt_count
+    for s in repeat.sources:
+        if s not in existing.sources:
+            existing.sources.append(s)
+    if repeat.created_at and (not existing.created_at or repeat.created_at < existing.created_at):
+        existing.created_at = repeat.created_at
+    return existing
+
+
 def candidate_from_parts(
     *,
     skill: str,
@@ -115,7 +240,7 @@ def candidate_from_parts(
     source: str,
 ) -> CandidateRule:
     sig = _signature(skill, command, error)
-    return CandidateRule(
+    candidate = CandidateRule(
         id=_cand_id(sig),
         signature=sig,
         skill=skill,
@@ -126,10 +251,11 @@ def candidate_from_parts(
         source_status=source_status,
         sources=[source],
         status="pending",
-        confidence=0.0,
         attempt_count=1,
         created_at=_now(),
     )
+    candidate.confidence = compute_confidence(candidate)
+    return candidate
 
 
 def harvest_from_trace(trace: dict[str, Any], *, source: str = "") -> list[CandidateRule]:
@@ -234,10 +360,7 @@ def dedupe_candidates(raw: list[CandidateRule]) -> HarvestReport:
     by_sig: dict[str, CandidateRule] = {}
     for c in raw:
         if c.signature in by_sig:
-            existing = by_sig[c.signature]
-            for s in c.sources:
-                if s not in existing.sources:
-                    existing.sources.append(s)
+            upsert_candidate(by_sig[c.signature], c)
         else:
             by_sig[c.signature] = c
     unique = list(by_sig.values())
@@ -258,7 +381,16 @@ def harvest(
     compensation_results: list[dict[str, Any]] | None = None,
     use_fixtures: bool = False,
     audit_dir: Path | None = None,
+    candidate_state_path: Path | None = None,
 ) -> HarvestReport:
+    """Harvest + dedupe.
+
+    `candidate_state_path` selects the durable store: candidate `created_at`
+    (earliest wins) and `attempt_count` (cumulative) come from it, and every
+    sighting is written back. None (default) = ephemeral, every candidate
+    starts its clock and its evidence count at this run only.
+    """
+    state = load_candidate_state(candidate_state_path) if candidate_state_path is not None else None
     raw: list[CandidateRule] = []
     if use_fixtures:
         traces = fixture_traces()
@@ -274,12 +406,33 @@ def harvest(
         raw.extend(harvest_from_trace(tr, source=f"trace:{i}"))
     for i, cr in enumerate(compensation_results or []):
         raw.extend(harvest_compensation_failure(cr, source=f"comp:{i}"))
-    return dedupe_candidates(raw)
+    if state is not None:
+        for c in raw:
+            entry = state.get(c.signature) or {}
+            first_seen = entry.get("first_seen") or c.created_at
+            state[c.signature] = {
+                "first_seen": first_seen,
+                "attempt_count": entry.get("attempt_count", 0) + 1,
+            }
+            c.created_at = first_seen
+        save_candidate_state(state, candidate_state_path)
+    report = dedupe_candidates(raw)
+    if state is not None:
+        # The store counted every sighting in this run, so its value is the
+        # authoritative cumulative count — not the in-memory merge.
+        for c in report.candidates:
+            c.attempt_count = state[c.signature]["attempt_count"]
+    for c in report.candidates:
+        c.confidence = compute_confidence(c)
+    return report
 
 
 def _library_signatures(patterns_path: Path) -> set[str]:
     if not patterns_path.exists():
         return set()
+    if patterns_path.suffix.lower() == ".jsonl":
+        import failure_kb
+        return {rec.error_signature for rec in failure_kb.load_jsonl(patterns_path) if rec.error_signature}
     return {r["error_signature"] for r in _parse_table_rows(patterns_path.read_text(encoding="utf-8"))}
 
 
@@ -393,6 +546,9 @@ def approve_candidate(
         timestamp=_now(),
         count=1,
         error_signature=candidate.signature,
+        # Explicit producer token — without it every promotion lands in the KB
+        # as "runtime_block", erasing where the rule actually came from.
+        source=KB_SOURCE_TOKEN,
     )
     action = append_or_increment(patterns_path, pattern)
     record_id = f"apr-{candidate.id}-{hashlib.sha256(approver.encode()).hexdigest()[:8]}"
@@ -426,6 +582,59 @@ def reject_candidate(candidate: CandidateRule, *, reason: str = "") -> Candidate
 # Auto-promotion (ADR-0001 M4 — tiered confidence)
 # ---------------------------------------------------------------------------
 
+GATE_EVALUATED = "G0_missing_eval"
+GATE_CONFIDENCE = "G1_confidence"
+GATE_GAP = "G2_no_gap"
+GATE_REGRESSION = "G3_regression"
+GATE_EVIDENCE = "G4_insufficient_evidence"
+GATE_DWELL = "G5_dwell"
+GATE_SAFETY = "G6_safety_zero"
+GATE_DUPLICATE = "G7_already_in_library"
+
+
+TERMINAL_GATES = frozenset({GATE_SAFETY, GATE_DUPLICATE})
+
+
+def _age_hours(created_at: str, now: datetime) -> float:
+    """Hours since `created_at`; 0 (i.e. never old enough) if unparseable."""
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        return (now - created).total_seconds() / 3600
+    except (ValueError, TypeError, AttributeError):
+        return 0.0
+
+
+def blocking_gate(
+    candidate: CandidateRule,
+    *,
+    lib: set[str],
+    now: datetime,
+    min_confidence: float = MIN_CONFIDENCE,
+    min_dwell_hours: int = MIN_DWELL_HOURS,
+    min_attempts: int = MIN_ATTEMPT_COUNT,
+) -> list[str]:
+    """Return every gate that blocks `candidate`, in gate order."""
+    gates: list[str] = []
+    if not candidate.before_eval or not candidate.after_eval:
+        gates.append(GATE_EVALUATED)
+    if candidate.confidence < min_confidence:
+        gates.append(GATE_CONFIDENCE)
+    if candidate.before_eval and not candidate.before_eval.get("gap", False):
+        gates.append(GATE_GAP)
+    if candidate.after_eval and not candidate.after_eval.get("no_regression", False):
+        gates.append(GATE_REGRESSION)
+    is_safety_fail = candidate.source_status == "SAFETY_FAIL"
+    if candidate.attempt_count < min_attempts and not is_safety_fail:
+        gates.append(GATE_EVIDENCE)
+    if candidate.created_at and _age_hours(candidate.created_at, now) < min_dwell_hours:
+        gates.append(GATE_DWELL)
+    if is_safety_fail and "safety=0.0" in candidate.error:
+        gates.append(GATE_SAFETY)
+    if candidate.signature in lib:
+        gates.append(GATE_DUPLICATE)
+    return gates
+
+
 def auto_promote(
     candidates: list[CandidateRule],
     *,
@@ -435,6 +644,8 @@ def auto_promote(
     min_dwell_hours: int = MIN_DWELL_HOURS,
     min_attempts: int = MIN_ATTEMPT_COUNT,
     dry_run: bool = False,
+    now: datetime | None = None,
+    blocked_by: dict[str, list[str]] | None = None,
 ) -> list[CandidateRule]:
     """Promote eligible candidates without human approval.
 
@@ -446,42 +657,27 @@ def auto_promote(
     5. age >= min_dwell_hours — human review window
     6. NOT (safety=0.0 in error AND source_status == SAFETY_FAIL) — worst failures need human
     7. signature not already in library — no double-add
+
+    `now` overrides the clock (tests); `blocked_by`, when given, is filled with
+    {candidate_id: [gate_id, ...]} for every candidate that did not pass.
     """
     promoted: list[CandidateRule] = []
-    now = datetime.now(timezone.utc)
+    now_dt = now or datetime.now(timezone.utc)
     lib = _library_signatures(patterns_path)
     for cand in candidates:
-        # Must be evaluated first
-        if not cand.before_eval or not cand.after_eval:
+        gates = blocking_gate(
+            cand,
+            lib=lib,
+            now=now_dt,
+            min_confidence=min_confidence,
+            min_dwell_hours=min_dwell_hours,
+            min_attempts=min_attempts,
+        )
+        if gates:
+            if blocked_by is not None:
+                blocked_by[cand.id] = gates
             continue
         # Gate 1: confidence threshold
-        if cand.confidence < min_confidence:
-            continue
-        # Gate 2: gap confirmed (pattern genuinely missing)
-        if not cand.before_eval.get("gap", False):
-            continue
-        # Gate 3: no regression in golden eval
-        if not cand.after_eval.get("no_regression", False):
-            continue
-        # Gate 4: sufficient evidence (multi-occurrence or safety failure)
-        is_safety_fail = cand.source_status == "SAFETY_FAIL"
-        if cand.attempt_count < min_attempts and not is_safety_fail:
-            continue
-        # Gate 5: dwell time (human review window)
-        if cand.created_at:
-            try:
-                created = datetime.fromisoformat(cand.created_at.replace("Z", "+00:00"))
-                age_hours = (now - created).total_seconds() / 3600
-            except (ValueError, TypeError):
-                age_hours = 0
-            if age_hours < min_dwell_hours:
-                continue
-        # Gate 6: worst safety failures always need human
-        if is_safety_fail and "safety=0.0" in cand.error:
-            continue
-        # Gate 7: not already in library
-        if cand.signature in lib:
-            continue
         # ALL GATES PASSED → PROMOTE
         if not dry_run:
             cand = approve_candidate(
@@ -498,6 +694,15 @@ def auto_promote(
     return promoted
 
 
+def auto_promotion_rate_of(candidates: list[CandidateRule]) -> float:
+    """Share of evaluated candidates promoted by system:auto."""
+    evaluated = [c for c in candidates if c.before_eval and c.after_eval]
+    if not evaluated:
+        return 0.0
+    auto = sum(1 for c in evaluated if c.approval and c.approval.get("approver") == "system:auto")
+    return auto / len(evaluated)
+
+
 def auto_promotion_rate(
     queue_path: Path | None = None,
 ) -> float:
@@ -511,13 +716,87 @@ def auto_promotion_rate(
         cands = load_queue(queue_path)
     except (json.JSONDecodeError, OSError):
         return 0.0
-    if not cands:
-        return 0.0
-    evaluated = [c for c in cands if c.before_eval and c.after_eval]
-    if not evaluated:
-        return 0.0
-    auto = sum(1 for c in evaluated if c.approval and c.approval.get("approver") == "system:auto")
-    return auto / len(evaluated)
+    return auto_promotion_rate_of(cands)
+
+
+AGE_BUCKET_BOUNDARIES = (24, 72, 168)  # hours → <24, 24-72, 72-168, >=168
+
+
+def _age_bucket(age_hours: float) -> str:
+    """'<24h' | '24-72h' | '72-168h' | '>=168h'."""
+    low = 0
+    for high in AGE_BUCKET_BOUNDARIES:
+        if age_hours < high:
+            return f"{low}-{high}h" if low else f"<{high}h"
+        low = high
+    return f">={AGE_BUCKET_BOUNDARIES[-1]}h"
+
+
+def dwell_stats(
+    candidates: list[CandidateRule],
+    *,
+    patterns_path: Path = FAILURE_PATTERNS,
+    min_confidence: float = MIN_CONFIDENCE,
+    min_dwell_hours: int = MIN_DWELL_HOURS,
+    min_attempts: int = MIN_ATTEMPT_COUNT,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Age histogram + blocking-gate census for still-pending candidates.
+
+    Makes the dead gate observable: which candidates sit behind Gate 5 (dwell)
+    and how long they have been waiting.
+    """
+    now_dt = now or datetime.now(timezone.utc)
+    lib = _library_signatures(patterns_path)
+    pending = [c for c in candidates if c.status == "pending"]
+    histogram: dict[str, int] = {}
+    blocked_by: dict[str, int] = {}
+    dwell_blocked: list[dict[str, Any]] = []
+    terminal_blocked: list[dict[str, Any]] = []
+    for cand in pending:
+        age_hours = _age_hours(cand.created_at, now_dt) if cand.created_at else 0.0
+        bucket = _age_bucket(age_hours)
+        histogram[bucket] = histogram.get(bucket, 0) + 1
+        gates = blocking_gate(
+            cand,
+            lib=lib,
+            now=now_dt,
+            min_confidence=min_confidence,
+            min_dwell_hours=min_dwell_hours,
+            min_attempts=min_attempts,
+        )
+        for gate in gates or ["promotable"]:
+            blocked_by[gate] = blocked_by.get(gate, 0) + 1
+        terminal_gates = [gate for gate in gates if gate in TERMINAL_GATES]
+        if GATE_DWELL in gates:
+            dwell_blocked.append({
+                "id": cand.id,
+                "signature": cand.signature,
+                "age_hours": round(age_hours, 1),
+                "hours_remaining": None if terminal_gates else round(min_dwell_hours - age_hours, 1),
+                "blocking_gates": gates,
+                "terminal_gates": terminal_gates,
+                "terminal": bool(terminal_gates),
+            })
+        if terminal_gates:
+            terminal_blocked.append({
+                "id": cand.id,
+                "signature": cand.signature,
+                "blocking_gates": gates,
+                "terminal_gates": terminal_gates,
+            })
+    return {
+        "generated_at": now_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "min_dwell_hours": min_dwell_hours,
+        "pending_total": len(pending),
+        "age_histogram_hours": histogram,
+        "blocked_by_gate": blocked_by,
+        "dwell_blocked_count": len(dwell_blocked),
+        "dwell_blocked": sorted(dwell_blocked, key=lambda d: -d["age_hours"]),
+        "terminal_gate_ids": sorted(TERMINAL_GATES),
+        "terminal_blocked_count": len(terminal_blocked),
+        "terminal_blocked": terminal_blocked,
+    }
 
 
 def report(queue: list[CandidateRule], *, raw_count: int | None = None, queue_path: Path | None = None) -> dict[str, Any]:
@@ -544,6 +823,11 @@ def main(argv: list[str] | None = None) -> int:
     h.add_argument("--fixtures", action="store_true")
     h.add_argument("--audit-dir", default="")
     h.add_argument("--out", default=str(DEFAULT_QUEUE))
+    h.add_argument(
+        "--candidate-state", default=str(CANDIDATE_STATE_PATH),
+        help="durable {signature: {first_seen, attempt_count}} store "
+             "for candidate age (Gate 5) and evidence count (Gate 4)",
+    )
 
     e = sub.add_parser("evaluate", help="Attach before/after eval evidence")
     e.add_argument("--queue", default=str(DEFAULT_QUEUE))
@@ -573,13 +857,22 @@ def main(argv: list[str] | None = None) -> int:
 
     rep = sub.add_parser("report", help="Dup rate + auto_promo stats")
     rep.add_argument("--queue", default=str(DEFAULT_QUEUE))
+    rep.add_argument("--patterns", default=str(FAILURE_PATTERNS))
+    rep.add_argument(
+        "--dwell-stats", action="store_true",
+        help="print pending-candidate age histogram + blocking-gate census",
+    )
 
     args = ap.parse_args(argv)
 
     if args.cmd == "harvest":
+        candidate_state_path = Path(args.candidate_state)
+        if args.fixtures and candidate_state_path == CANDIDATE_STATE_PATH:
+            candidate_state_path = FIXTURE_STATE_PATH
         report_h = harvest(
             use_fixtures=args.fixtures,
             audit_dir=Path(args.audit_dir) if args.audit_dir else None,
+            candidate_state_path=candidate_state_path,
         )
         save_queue(Path(args.out), report_h)
         print(
@@ -650,6 +943,7 @@ def main(argv: list[str] | None = None) -> int:
         qpath = Path(args.queue)
         cands = load_queue(qpath)
         cands = evaluate_queue(cands, patterns_path=Path(args.patterns))
+        blocked_by: dict[str, list[str]] = {}
         promoted = auto_promote(
             cands,
             patterns_path=Path(args.patterns),
@@ -657,22 +951,37 @@ def main(argv: list[str] | None = None) -> int:
             min_confidence=args.min_confidence,
             min_dwell_hours=args.min_dwell_hours,
             dry_run=args.dry_run,
+            blocked_by=blocked_by,
         )
         # Update queue file
         meta = json.loads(qpath.read_text(encoding="utf-8"))
         meta["candidates"] = [c.to_dict() for c in cands]
-        meta["auto_promotion_rate"] = auto_promotion_rate(qpath)
+        # From the just-promoted candidates: reading qpath back would report the
+        # pre-promotion state and pin the rate at 0.0 forever.
+        meta["auto_promotion_rate"] = auto_promotion_rate_of(cands)
         qpath.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         label = "[dry-run] " if args.dry_run else ""
         print(f"{label}promote: {len(promoted)} / {len(cands)} candidates promoted")
         for c in promoted:
             print(f"  {c.id} | {c.signature} | confidence={c.confidence}")
+        blocked_counts = {
+            gate: sum(gate in gates for gates in blocked_by.values())
+            for gate in sorted({gate for gates in blocked_by.values() for gate in gates})
+        }
+        if blocked_counts:
+            print(f"{label}blocked_by={json.dumps(blocked_counts)}")
         return 0
 
     if args.cmd == "report":
         qpath = Path(args.queue)
         meta = json.loads(qpath.read_text(encoding="utf-8"))
         cands = [CandidateRule.from_dict(x) for x in meta.get("candidates", [])]
+        if args.dwell_stats:
+            print(json.dumps(
+                dwell_stats(cands, patterns_path=Path(args.patterns)),
+                indent=2, ensure_ascii=False,
+            ))
+            return 0
         rep_d = report(cands, raw_count=int(meta.get("raw_count") or len(cands)), queue_path=qpath)
         print(json.dumps(rep_d, indent=2))
         return 0 if rep_d["duplicate_rate_ok"] and rep_d["auto_promotion_rate"] >= 0.0 else 1
