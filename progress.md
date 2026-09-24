@@ -3,6 +3,20 @@
 ## Status
 Completed
 
+## Sprint H — session-memory verify-startup 静默失败修复 (2026-09-24)
+
+**Goal**: 修 RSI 审计发现 #2：`session_memory.py verify-startup` 在 memory 缺失/空/过期时返回 exit 1/2 但 stdout 为空，Agent 无法察觉。
+
+**Result**: `feature/smem-verify-startup` 1 笔 commit `1ce04bd` (3 files, +165/-0)，fast-forward merge 到 main。
+
+| Commit | 内容 |
+|---|---|
+| `1ce04bd` | spec + impl + 3 RED tests；stderr 3 条消息（missing/empty/stale），pluralization 修正 |
+
+**GCL 纪律**: Critic R1 = `satisfied` + 1 NIT ("1 records" grammar) → R2 fix (spec + impl + test 同步改) → 14 passed (11 + 3 RED)，ruff clean。
+
+**验证**: `python3 scripts/session_memory.py verify-startup --path /tmp/missing.json` 退出 1 + stderr "memory file not found at ...; run 'session_memory.py record ...' to seed"。
+
 ## Sprint G — P0-2 CLI 弹性 (2026-09-24)
 
 **Goal**: 修 `governed_learning.py report --dwell-stats` 在队列文件缺失时 FileNotFoundError 崩溃，使 P0-2 "168h dwell 真实累积" 可观测。
