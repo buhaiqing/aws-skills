@@ -54,7 +54,7 @@ def test_plan_artifact_is_excluded_from_metrics():
     p = FIXTURES / "gcl-trace-20260705-181751.json"
     trace = json.loads(p.read_text())
     assert classify_trace(trace) == "plan_artifact"
-    rows = collect_traces(FIXTURES, days=365)
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
     paths = [r.path.name for r in rows]
     assert "gcl-trace-20260705-181751.json" not in paths
     assert "gcl-trace-20260705-182734.json" not in paths
@@ -64,7 +64,7 @@ def test_plan_artifact_is_excluded_from_metrics():
 
 def test_pass_rate_per_skill():
     """aws-s3-ops has ≥2 known FAIL fixtures → classified correctly."""
-    rows = collect_traces(FIXTURES, days=365)
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
     s3_rows = [r for r in rows if r.skill == "aws-s3-ops"]
     assert len(s3_rows) >= 2
     original_paths = {
@@ -88,7 +88,7 @@ def test_pass_rate_per_skill():
 
 def test_failure_dimensions_are_aggregated():
     """SAFETY_FAIL → safety dim; MAX_ITER → idempotency dim."""
-    rows = collect_traces(FIXTURES, days=365)
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
     agg = aggregate(rows)
     dim_fails = agg["dim_fails"]
     assert "safety" in dim_fails
@@ -101,7 +101,7 @@ def test_failure_dimensions_are_aggregated():
 
 def test_markdown_render_contains_three_tables():
     """render_markdown output must have ≥3 markdown tables + Pass-rate section."""
-    rows = collect_traces(FIXTURES, days=365)
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
     md = render_markdown(rows)
     table_lines = [ln for ln in md.splitlines() if ln.startswith("|")]
     assert len(table_lines) >= 9
@@ -121,6 +121,7 @@ def test_json_output_is_machine_readable():
             "365",
             "--audit-dir",
             str(FIXTURES),
+            "--include-self-test",
         ],
         capture_output=True,
         text=True,
@@ -136,10 +137,61 @@ def test_json_output_is_machine_readable():
         assert key in first, f"missing key {key} in {first}"
 
 
+# --- P0-4: self-test stub filtering (spec §4 P0-4 + C6/C7/C8) ---
+
+
+def test_stub_trace_filtered_by_default():
+    """Real trace appears; stub trace is excluded when include_self_test=False."""
+    from gcl_metrics import collect_traces
+
+    rows = collect_traces(FIXTURES, days=365)  # default: include_self_test=False
+    paths = {r.path.name for r in rows}
+    assert "gcl-trace-20260924-real.json" in paths, "real trace must remain"
+    assert "gcl-trace-20260924-stub.json" not in paths, "stub trace must be hidden by default"
+
+
+def test_include_self_test_flag_includes_stub():
+    """When include_self_test=True, both real and stub appear."""
+    from gcl_metrics import collect_traces
+
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
+    paths = {r.path.name for r in rows}
+    assert "gcl-trace-20260924-real.json" in paths
+    assert "gcl-trace-20260924-stub.json" in paths
+
+
+def test_aggregate_excludes_stub_skill_when_filtered():
+    """By default, no stub trace (SAFETY_FAIL) leaks into aggregate output."""
+    from gcl_metrics import collect_traces
+
+    rows = collect_traces(FIXTURES, days=365)  # default excludes stubs
+    leaked = [r for r in rows if r.status == "SAFETY_FAIL"]
+    assert leaked == [], f"stub trace(s) leaked into default aggregate: {[r.path.name for r in leaked]}"
+
+
+def test_cli_flag_surfaces_in_help():
+    """--include-self-test flag must be visible via --help (audit discoverability)."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "gcl_metrics.py"), "--help"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert "--include-self-test" in result.stdout
+
+
+def test_markdown_documents_stub_filter_behavior():
+    """render_markdown header must call out stub-filter behavior (audit hygiene)."""
+    from gcl_metrics import render_markdown
+
+    rows = []  # empty is fine; we only care about the header
+    md = render_markdown(rows)
+    assert "real" in md.lower() or "stub" in md.lower()
+    assert "--include-self-test" in md
+
+
 def test_append_timeseries_creates_header_and_real_rows(tmp_path):
     """Missing file → created with schema header + one row per skilled trace."""
     csv_path = tmp_path / "metrics" / "timeseries.csv"
-    rows = collect_traces(FIXTURES, days=365)
+    rows = [r for r in collect_traces(FIXTURES, days=365, include_self_test=True) if r.skill == "aws-s3-ops"]
     written = append_timeseries(csv_path, rows, window_days=365, day="2026-09-24")
 
     assert written == 1
@@ -157,7 +209,7 @@ def test_append_timeseries_creates_header_and_real_rows(tmp_path):
 def test_append_timeseries_is_idempotent_for_same_day(tmp_path):
     """Second run on the same UTC day overwrites instead of appending."""
     csv_path = tmp_path / "timeseries.csv"
-    rows = collect_traces(FIXTURES, days=365)
+    rows = [r for r in collect_traces(FIXTURES, days=365, include_self_test=True) if r.skill == "aws-s3-ops"]
     append_timeseries(csv_path, rows, window_days=365, day="2026-09-24")
     first = csv_path.read_text(encoding="utf-8")
     append_timeseries(csv_path, rows, window_days=365, day="2026-09-24")
@@ -169,7 +221,7 @@ def test_append_timeseries_is_idempotent_for_same_day(tmp_path):
 def test_append_timeseries_keeps_rows_from_other_days(tmp_path):
     """A new UTC day appends a new row; older rows survive."""
     csv_path = tmp_path / "timeseries.csv"
-    rows = collect_traces(FIXTURES, days=365)
+    rows = [r for r in collect_traces(FIXTURES, days=365, include_self_test=True) if r.skill == "aws-s3-ops"]
     append_timeseries(csv_path, rows, window_days=365, day="2026-09-24")
     append_timeseries(csv_path, rows, window_days=365, day="2026-09-25")
 
@@ -227,7 +279,7 @@ def test_staleness_check_missing_and_fresh_and_stale(tmp_path):
         False, f"metrics stale: no data rows in {missing}")
 
     csv_path = tmp_path / "timeseries.csv"
-    rows = collect_traces(FIXTURES, days=365)
+    rows = collect_traces(FIXTURES, days=365, include_self_test=True)
     append_timeseries(csv_path, rows, window_days=365, day="2026-09-23")
     ok, msg = staleness_check(csv_path, 7, today=date(2026, 9, 24))
     assert ok is True and "2026-09-23" in msg

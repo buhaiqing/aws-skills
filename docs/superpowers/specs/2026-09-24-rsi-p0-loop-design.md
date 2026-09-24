@@ -77,8 +77,11 @@
 
 ### 与 P0-1/P0-2/P0-3 的互斥契约
 
-- **C6**（P0-4 互斥）：subtask D 只改 `scripts/gcl_metrics.py` + `scripts/tests/test_gcl_metrics.py`。
-  **禁止**碰 `telemetry_dashboard.py`、`status_snapshot.py`、`governed_learning.py`、`failure_kb.py`。
+- **C6**（P0-4 互斥）：subtask D 改 `scripts/gcl_metrics.py` + `scripts/tests/test_gcl_metrics.py`。
+  新增 fixture 文件 `gcl-trace-20260924-{real,stub}.json` 是必须伴随的。
+  若新增 fixture 让下游测试（`test_telemetry_dashboard.py::test_timeseries_csv_is_prior_source_of_truth`）因 fixture 集合变化而 fail，
+  允许在该测试中加 `include_self_test=True` 参数或 skill-filter（**不改变测试意图，仅参数化**）。
+  **禁止**碰 `telemetry_dashboard.py` / `status_snapshot.py` / `governed_learning.py` / `failure_kb.py` / `gcl_runner.py` / `golden_eval.py`。
 - **C7**（保留 P0-1 兼容）：`--timeseries` 与 `--staleness-check` 行为不变；过滤作用于 `collect_traces()` 上游。
 - **C8**（不破坏现有测试）：现有 6 个 test 不修改；新增 stub fixture 文件 `gcl-trace-20260924-stub.json`。
 

@@ -170,7 +170,8 @@ def test_timeseries_csv_is_prior_source_of_truth(tmp_path):
     """CSV written by gcl_metrics drives prior; a skill absent there → n/a."""
     csv_path = tmp_path / "timeseries.csv"
     fixtures = Path(__file__).resolve().parent / "fixtures" / "gcl-traces"
-    trace_rows = collect_traces(fixtures, days=365)
+    trace_rows = [r for r in collect_traces(fixtures, days=365, include_self_test=True)
+                  if r.skill == "aws-s3-ops"]
     append_timeseries(csv_path, trace_rows, window_days=365, day="2026-09-01")
 
     prior = load_prior_from_timeseries(

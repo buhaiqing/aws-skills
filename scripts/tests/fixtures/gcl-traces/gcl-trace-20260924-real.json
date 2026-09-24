@@ -1,0 +1,35 @@
+{
+  "skill": "aws-iam-ops",
+  "request": "delete-user prod-automation",
+  "rubric_version": "v1",
+  "iterations": [
+    {
+      "iter": 1,
+      "generator": {
+        "command": "aws iam delete-user --user-name prod-automation",
+        "args": {"--user-name": "prod-automation"},
+        "exit_code": 0,
+        "result_excerpt": "{\"UserName\": \"prod-automation\"}",
+        "safety_confirm_token": "DELETE_USER"
+      },
+      "critic": {
+        "scores": {
+          "correctness": 1.0,
+          "safety": 0.5,
+          "idempotency": 1.0,
+          "traceability": 1.0,
+          "spec_compliance": 1.0
+        },
+        "suggestions": ["explicit confirmation token verified"],
+        "blocking": false
+      },
+      "decision": "PASS"
+    }
+  ],
+  "final": {
+    "status": "PASS",
+    "iter": 1,
+    "output": null,
+    "reason": "all dimensions above threshold"
+  }
+}

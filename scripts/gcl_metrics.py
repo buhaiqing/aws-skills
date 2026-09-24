@@ -58,8 +58,33 @@ def extract_final_status(trace: dict) -> str:
     return trace.get("final", {}).get("status", "OTHER")
 
 
-def collect_traces(audit_dir: Path, days: int = 30) -> list[TraceRow]:
-    """Walk audit_dir for gcl-trace-*.json, classify, build TraceRow list."""
+# P0-4: a self-test stub uses generator.command == "aws --self-test".
+# These are produced by `gcl_runner.py --self-test` for unit-test / CI
+# verification. They MUST NOT count toward production pass-rate — they
+# always emit safety=0 deterministically (see gcl_runner self-test path).
+SELF_TEST_COMMAND = "aws --self-test"
+
+
+def is_real_trace(trace: dict) -> bool:
+    """True iff the trace's last generator command was a real (non-stub) run."""
+    iters = trace.get("iterations", [])
+    if not iters:
+        return False
+    last_cmd = iters[-1].get("generator", {}).get("command", "")
+    return last_cmd != SELF_TEST_COMMAND
+
+
+def collect_traces(
+    audit_dir: Path,
+    days: int = 30,
+    include_self_test: bool = False,
+) -> list[TraceRow]:
+    """Walk audit_dir for gcl-trace-*.json, classify, build TraceRow list.
+
+    By default, self-test stub traces are excluded so dashboard pass-rates
+    reflect real production runs only. Pass `include_self_test=True` to
+    include stubs (debug / CI verification).
+    """
     rows: list[TraceRow] = []
     if not audit_dir.exists():
         return rows
@@ -70,6 +95,8 @@ def collect_traces(audit_dir: Path, days: int = 30) -> list[TraceRow]:
         except Exception:
             continue
         if classify_trace(trace) != "gcl":
+            continue
+        if not include_self_test and not is_real_trace(trace):
             continue
         iters = trace.get("iterations", [])
         last_critic = iters[-1].get("critic", {}).get("scores", {}) if iters else {}
@@ -117,6 +144,10 @@ def render_markdown(rows: list[TraceRow]) -> str:
     md.append("# GCL Metrics Report")
     md.append("")
     md.append(f"_Generated: {now}_")
+    md.append(
+        "_Traces shown = real runs only (self-test stubs excluded). "
+        "Pass `--include-self-test` to count stubs._"
+    )
     md.append(f"_Traces (last 30 days): {len(rows)}_")
     md.append("")
     md.append("## Overview by skill")
@@ -260,6 +291,12 @@ def main(argv: list[str] | None = None) -> int:
         help="exit 1 when the timeseries has no data or is older than --max-age-days",
     )
     ap.add_argument("--max-age-days", type=int, default=7)
+    ap.add_argument(
+        "--include-self-test",
+        action="store_true",
+        help="include self-test stub traces (generator.command == 'aws --self-test') "
+        "in the dashboard. Default: hidden, so pass-rate reflects real runs only.",
+    )
     args = ap.parse_args(argv)
 
     if args.staleness_check:
@@ -268,7 +305,11 @@ def main(argv: list[str] | None = None) -> int:
         print(msg)
         return 0 if ok else 1
 
-    rows = collect_traces(args.audit_dir, days=args.days)
+    rows = collect_traces(
+        args.audit_dir,
+        days=args.days,
+        include_self_test=args.include_self_test,
+    )
     if args.timeseries:
         written = append_timeseries(args.timeseries, rows, args.days)
         print(f"timeseries: {written} row(s) -> {args.timeseries}", file=sys.stderr)
