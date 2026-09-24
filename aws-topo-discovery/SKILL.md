@@ -25,8 +25,13 @@ metadata:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
     - AWS_DEFAULT_REGION
-    - AWS_SESSION_TOKEN
     - AWS_PROFILE
+  gcl:
+    enabled: true
+    class: optional
+    max_iter: 3
+    rubric_version: v1
+    rubric_ref: references/rubric.md
 ---
 
 > This skill follows the [Agent Skill OpenSpec](https://agentskills.io/specification).
@@ -63,7 +68,7 @@ Full criteria: [trigger-scope.md](references/trigger-scope.md). Features: [core-
 
 ## Quality Gate (GCL)
 
-Optional GCL (`max_iter=3`, read-only — Safety must = 1). Rubric: [gcl-rubric.md](references/gcl-rubric.md).
+Optional GCL (`max_iter=3`, read-only — Safety must = 1). Rubric: [rubric.md](references/rubric.md).
 
 ## Pre-flight → Execute → Validate → Recover
 
