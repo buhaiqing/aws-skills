@@ -562,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
                     evaluate_candidate as _gl_eval,
                     auto_promote as _gl_promote,
                 )
-                fp = REPO / "docs" / "failure-patterns.md"
+                fp = REPO / "docs" / "failure-patterns.jsonl"
                 _gl_cands = []
                 for r in results:
                     if not r.matched_status and r.scenario.get("expected_status") in ("SAFETY_FAIL", "MAX_ITER"):

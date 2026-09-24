@@ -10,6 +10,11 @@ import pytest
 
 import gcl_runner
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Captured at import: the autouse fixture below re-points this at a tmp file.
+_SHIPPED_REFLEXION_PATH = gcl_runner.REFLEXION_PATTERNS_PATH
+
 
 @pytest.fixture(autouse=True)
 def _isolate_reflexion(tmp_path, monkeypatch):
@@ -295,6 +300,47 @@ def test_critic_invocation_uses_restricted_environment(monkeypatch) -> None:
     gcl_runner._invoke_critic({}, ["critic"], "rubric")
 
     assert captured["AWS_EC2_METADATA_DISABLED"] == "true"
+
+
+def test_trust_boundary_error_records_canonical_jsonl(tmp_path, monkeypatch) -> None:
+    """P0-3: non-GCL failure lands in canonical .jsonl with source=gcl_trace."""
+    import failure_kb
+    from runtime_safety import load_failure_patterns
+
+    target = tmp_path / "failure-patterns.jsonl"
+    monkeypatch.setattr(gcl_runner, "REFLEXION_PATTERNS_PATH", target)
+
+    def generator(ctx: dict) -> dict:
+        raise RuntimeError("botocore NoCredentialError")
+
+    def critic(ctx: dict) -> dict:
+        raise AssertionError("critic must not run")
+
+    gcl_runner.run_with_callables(
+        "aws-s3-ops", "list buckets", "us-east-1", generator, critic,
+    )
+
+    rows = load_failure_patterns(target)  # real reader, writer's own output
+    assert [r["skill"] for r in rows] == ["aws-s3-ops"]
+    assert "NoCredentialError" in rows[0]["error"]
+    assert [r.source for r in failure_kb.load_jsonl(target)] == ["gcl_trace"]
+
+
+def test_reflexion_paths_default_to_canonical_jsonl() -> None:
+    """P0-3 DoD: CLI default write target is docs/failure-patterns.jsonl (C1).
+
+    Asserts the argparse *resolved default* (not the --help text, which can
+    drift from the real default) plus the shipped module constant.
+    """
+    # Parser default must be wired to the module constant, not a hardcoded .md.
+    # (--skill is required, so it is supplied; --failure-patterns is left out.)
+    default = Path(
+        gcl_runner._build_parser().parse_args(["--skill", "aws-s3-ops"]).failure_patterns
+    )
+    assert default == gcl_runner.REFLEXION_PATTERNS_PATH
+    # Constant as shipped (the autouse fixture re-points it at a tmp file).
+    assert _SHIPPED_REFLEXION_PATH == REPO_ROOT / "docs" / "failure-patterns.jsonl"
+    assert _SHIPPED_REFLEXION_PATH.suffix == ".jsonl"
 
 
 def test_trust_boundary_error_records_failure_pattern(tmp_path, monkeypatch) -> None:

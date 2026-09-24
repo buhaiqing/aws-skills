@@ -5,11 +5,13 @@ Real fixtures: scripts/tests/fixtures/gcl-traces/ (committed; audit-results is g
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from hypothesis import given, settings, HealthCheck
 from hypothesis import strategies as st
 
@@ -17,6 +19,11 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import failure_kb  # noqa: E402
+# Captured at import: runtime_safety/gcl_runner re-register a *copy* of
+# _reflexion in sys.modules (their exec'd loader), so a later `import
+# _reflexion` would not be the module whose globals _cli_main reads.
+import _reflexion as _reflexion_module  # noqa: E402
 from _reflexion import (  # noqa: E402
     FailurePattern,
     derive_from_error,
@@ -328,6 +335,73 @@ def test_derive_from_error_signature_truncates_error(error):
 
 
 # ---------------------------------------------------------------------------
+# P0-3: canonical .jsonl write path (writer → real reader round-trip)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("producer_source", "expected"), [
+    ("gcl", "gcl_trace"),
+    ("runtime_safety", "runtime_block"),
+    ("golden_eval", "governed_learning"),
+    ("some-unknown-tool", "runtime_block"),  # never falls back to "manual"
+])
+def test_append_or_increment_jsonl_translates_source(tmp_path, producer_source, expected):
+    """jsonl writes carry a failure_kb.SOURCES value, never "manual"."""
+    import failure_kb
+
+    target = tmp_path / "failure-patterns.jsonl"
+    pat = derive_from_error(
+        skill="aws-test-ops", command="aws test",
+        error=f"err-{producer_source}", source=producer_source,
+    )
+    append_or_increment(target, pat)
+    recs = failure_kb.load_jsonl(target)
+    assert len(recs) == 1
+    assert recs[0].source == expected
+
+
+def test_derive_from_trace_defaults_to_gcl_source():
+    trace = json.loads(SAFETY_FAIL_TRACE.read_text())
+    assert derive_from_trace(trace)[0].source == "gcl"
+    assert derive_from_trace(trace, source="golden_eval")[0].source == "golden_eval"
+
+
+def test_gcl_runner_on_fail_round_trips_through_runtime_safety_reader(tmp_path):
+    """P0-3 DoD: real writer (gcl_runner --on-fail) → real reader (runtime_safety).
+
+    The fixture IS the writer's own output — no hand-made parser is used for
+    the assertions, only runtime_safety.load_failure_patterns (the real
+    consumer) and failure_kb.load_jsonl (the loader it delegates to).
+    """
+    import failure_kb
+    from runtime_safety import load_failure_patterns
+
+    target = tmp_path / "failure-patterns.jsonl"
+    result = subprocess.run(
+        [
+            sys.executable, str(SCRIPTS_DIR / "gcl_runner.py"),
+            "--skill", "aws-s3-ops",
+            "--request", "delete bucket test",  # destructive → safety=0 → SAFETY_FAIL
+            "--self-test", "--no-prune", "--on-fail",
+            "--failure-patterns", str(target),
+        ],
+        capture_output=True, text=True, cwd=str(REPO), timeout=60,
+    )
+    assert target.exists(), f"stdout={result.stdout} stderr={result.stderr}"
+
+    written = failure_kb.load_jsonl(target)
+    assert written, "gcl_runner did not persist any record to the canonical jsonl"
+    assert all(r.source != "manual" for r in written)
+    assert [r.source for r in written] == ["gcl_trace"]
+
+    # Real reader must see exactly what the writer produced.
+    rows = load_failure_patterns(target)
+    assert len(rows) == len(written)
+    assert rows[0]["skill"] == written[0].skill == "aws-s3-ops"
+    assert rows[0]["error"] == written[0].error
+    assert rows[0]["count"] == str(written[0].count)
+
+
+# ---------------------------------------------------------------------------
 # record-failure CLI tests
 # ---------------------------------------------------------------------------
 
@@ -376,3 +450,107 @@ def test_record_failure_cli_requires_skill_and_error(tmp_path):
         capture_output=True, text=True, check=False, cwd=str(REPO),
     )
     assert result.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# P0-3: CLI default target = canonical .jsonl (C1)
+# ---------------------------------------------------------------------------
+
+def test_cli_default_target_is_canonical_jsonl(monkeypatch, tmp_path):
+    """record-failure without --path writes the canonical JSONL (C1)."""
+    assert _reflexion_module._DEFAULT_PATTERNS_PATH == (
+        REPO / "docs" / "failure-patterns.jsonl"
+    )
+    # Redirect the shipped default to tmp and let the CLI resolve it itself.
+    target = tmp_path / "failure-patterns.jsonl"
+    monkeypatch.setattr(_reflexion_module, "_DEFAULT_PATTERNS_PATH", target)
+
+    rc = _reflexion_module._cli_main([
+        "record-failure",
+        "--skill", "aws-default-ops", "--cmd", "aws default rm",
+        "--error", "AccessDenied", "--source", "runtime_safety",
+    ])
+    assert rc == 0
+    assert target.exists(), "CLI default did not reach the canonical jsonl"
+    recs = failure_kb.load_jsonl(target)
+    assert [r.skill for r in recs] == ["aws-default-ops"]
+    assert [r.source for r in recs] == ["runtime_block"]
+
+
+# ---------------------------------------------------------------------------
+# P0-3: rendered .md must not silently fork from the .jsonl (C1)
+# ---------------------------------------------------------------------------
+
+_MD_TABLE_SEP_RE = re.compile(r"^\|[\s\-|]+\|$")
+
+
+def _md_data_rows(md_text: str) -> list[str]:
+    """Table rows excluding header (line above separator) and separator lines."""
+    lines = md_text.splitlines()
+    sep_idx = {i for i, ln in enumerate(lines) if _MD_TABLE_SEP_RE.match(ln)}
+    header_idx = {i - 1 for i in sep_idx}
+    return [
+        ln for i, ln in enumerate(lines)
+        if ln.startswith("|") and i not in sep_idx and i not in header_idx
+    ]
+
+
+def test_render_failure_warns_without_blocking_persistence(tmp_path, capsys):
+    """A failed md re-render must WARN on stderr but still persist the jsonl."""
+    # md path is a directory → the real renderer exits non-zero.
+    (tmp_path / "failure-patterns.md").mkdir()
+    target = tmp_path / "failure-patterns.jsonl"
+
+    result = append_or_increment(
+        target,
+        derive_from_error(skill="aws-warn-ops", command="aws warn",
+                          error="Boom", source="runtime_safety"),
+    )
+    assert result == "appended", "render failure must not block persistence"
+    recs = failure_kb.load_jsonl(target)
+    assert [r.skill for r in recs] == ["aws-warn-ops"]
+    stderr = capsys.readouterr().err
+    assert "WARNING" in stderr and "failure-patterns.md" in stderr
+
+
+def test_renderer_output_row_count_matches_jsonl(tmp_path):
+    """One rendered table row per jsonl record; no unbalanced backticks."""
+    canonical = REPO / "docs" / "failure-patterns.jsonl"
+    md = tmp_path / "failure-patterns.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "_render_failure_patterns.py"),
+         "--jsonl", str(canonical), "--md", str(md)],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 0, f"stderr={result.stderr}"
+    records = failure_kb.load_jsonl(canonical)
+    assert records, "canonical jsonl unexpectedly empty"
+    rows = _md_data_rows(md.read_text(encoding="utf-8"))
+    assert len(rows) == len(records), (
+        f"md has {len(rows)} rows, jsonl has {len(records)} records — silent fork"
+    )
+    assert all(ln.count("`") % 2 == 0 for ln in rows), "unbalanced backticks in md"
+
+
+def test_committed_md_equals_fresh_render_of_canonical_jsonl(tmp_path):
+    """docs/failure-patterns.md must equal a fresh render of the jsonl (C1).
+
+    Byte-equality is the fork guard: any hand-edit of the md, or a jsonl write
+    that skipped re-rendering, makes this fail.
+    """
+    canonical = REPO / "docs" / "failure-patterns.jsonl"
+    committed_md = REPO / "docs" / "failure-patterns.md"
+    fresh_md = tmp_path / "failure-patterns.md"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "_render_failure_patterns.py"),
+         "--jsonl", str(canonical), "--md", str(fresh_md)],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 0, f"stderr={result.stderr}"
+
+    committed = committed_md.read_text(encoding="utf-8")
+    assert "docs/failure-patterns.jsonl" in committed, "md must declare canonical store"
+    assert committed == fresh_md.read_text(encoding="utf-8"), (
+        "committed md drifted from canonical jsonl — re-run "
+        "scripts/_render_failure_patterns.py"
+    )

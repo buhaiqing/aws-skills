@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 
 REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = REPO / "audit-results"
-REFLEXION_PATTERNS_PATH = REPO / "docs" / "failure-patterns.md"
+REFLEXION_PATTERNS_PATH = REPO / "docs" / "failure-patterns.jsonl"
 
 # Global state — lazily populated by _load_reflexion()
 _REFLEXION = None
@@ -528,7 +528,7 @@ def _load_reflexion():
 def _reflect_error(
     skill_name: str, command: str, exc: Exception, request: str,
 ) -> None:
-    """L4 #3 全覆盖: persist non-GCL execution failures into failure-patterns.md.
+    """L4 #3 全覆盖: persist non-GCL execution failures into failure-patterns.jsonl.
 
     Never masks the original error — every reflexion failure is swallowed.
     """
@@ -540,7 +540,7 @@ def _reflect_error(
             skill=skill_name,
             command=command,
             error=redact_sensitive(str(exc), request),
-            source="gcl-runner",
+            source="gcl",
         )
         rx.append_or_increment(REFLEXION_PATTERNS_PATH, pattern)
     except Exception:  # pragma: no cover — reflexion must never mask original
@@ -708,7 +708,7 @@ def run(
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="GCL Orchestrator (Phase 2)")
     ap.add_argument("--skill", required=True, help="e.g. aws-s3-ops")
     ap.add_argument("--request", required=False, default="(inspect-only)")
@@ -727,11 +727,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--print-critic", action="store_true",
                     help="Print the rendered Critic prompt (after skeleton merge) and exit")
     ap.add_argument("--on-fail", action="store_true", default=False,
-                    help="Append failure pattern to docs/failure-patterns.md on SAFETY_FAIL/MAX_ITER")
-    ap.add_argument("--failure-patterns", default=str(REPO / "docs" / "failure-patterns.md"),
-                    help="Path to failure-patterns.md (default: docs/failure-patterns.md)")
+                    help="Append failure pattern to docs/failure-patterns.jsonl "
+                         "(canonical store) on SAFETY_FAIL/MAX_ITER")
+    ap.add_argument("--failure-patterns", default=str(REFLEXION_PATTERNS_PATH),
+                    help="Path to canonical failure-patterns.jsonl "
+                         f"(default: docs/{REFLEXION_PATTERNS_PATH.name})")
     ap.add_argument("--no-prune", action="store_true",
                     help="Skip 30-day trace retention prune")
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = _build_parser()
     args = ap.parse_args(argv)
 
     if args.print_critic:
@@ -772,7 +779,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:
             print(f"reflexion: skipped ({e})", file=sys.stderr)
         else:
-            for pat in derive_from_trace(trace):
+            for pat in derive_from_trace(trace, source="gcl"):
                 result = append_or_increment(Path(args.failure_patterns), pat)
                 print(f"reflexion: {result} {pat.skill} | {pat.error}")
 

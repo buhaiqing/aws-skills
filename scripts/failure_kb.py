@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
@@ -85,7 +86,9 @@ def _next_id(existing: list[FailureRecord]) -> str:
 
 
 def _atomic_write(path: Path, records: list[FailureRecord]) -> None:
-    tmp = Path(str(path) + ".tmp")
+    # pid-suffixed tmp: concurrent writers (gcl_runner, CI) must not stomp
+    # each other's tmp file and drop updates.
+    tmp = Path(f"{path}.{os.getpid()}.tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
     content = "\n".join(json.dumps(r.to_dict(), ensure_ascii=False) for r in records)
     if content:

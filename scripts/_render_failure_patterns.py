@@ -42,13 +42,14 @@ _SECTIONS = [
         "columns": [
             ("Skill", "skill"),
             ("Command", "command"),
-            ("Error Pattern", "error"),
+            ("Error", "error"),
             ("Root Cause", "root_cause"),
             ("Fix", "fix"),
             ("Count", "count_fmt"),
+            ("Timestamp", "last_seen"),
         ],
-        "header": "| Skill | Command | Error Pattern | Root Cause | Fix | Count |",
-        "separator": "|-------|---------|---------------|------------|-----|-------|",
+        "header": "| Skill | Command | Error | Root Cause | Fix | Count | Timestamp |",
+        "separator": "|-------|---------|-------|------------|-----|-------|-----------|",
     },
     {
         "category": "query_miss",
@@ -137,10 +138,12 @@ def _cell(rec: FailureRecord, key: str, no_backtick: bool = False) -> str:
     if not val:
         return "—"
     if not no_backtick:
-        # jsonl stores `\`foo\`` as escaped sequences — unescape all \` pairs first,
-        # then strip any remaining leading/trailing backticks.
+        # jsonl stores `\`foo\`` as escaped sequences — unescape all \` pairs first.
         val = val.replace("\\`", "`")
-        val = val.strip("`")
+        # Drop a *pair* of wrapping backticks only. Stripping one-sided backticks
+        # would leave unbalanced markup (e.g. "Missing `--x`" → "Missing `--x").
+        if len(val) > 1 and val.startswith("`") and val.endswith("`"):
+            val = val[1:-1]
     # Escape pipe characters in cell content
     val = val.replace("|", "\\|")
     return val

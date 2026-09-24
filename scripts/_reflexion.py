@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Reflexion — auto-append GCL failure patterns to docs/failure-patterns.md.
+"""Reflexion — auto-append GCL failure patterns to docs/failure-patterns.jsonl.
+
+Canonical store is the JSONL; docs/failure-patterns.md is its rendered view.
 
 L4 dim #3: failures should be persisted automatically, not manually.
 
@@ -26,13 +28,33 @@ class FailurePattern:
     timestamp: str
     count: int = 1
     error_signature: str = field(default="")
+    # Producer token (gcl / runtime_safety / golden_eval); see _SOURCE_TO_KB.
+    source: str = ""
 
     def __post_init__(self) -> None:
         if not self.error_signature:
             self.error_signature = f"{self.skill}|{self.command}|{self.error[:50]}"
 
 
-def derive_from_trace(trace: dict) -> list[FailurePattern]:
+# Producer token → failure_kb.SOURCES value. Contract C4: only enum members,
+# no free strings, and never "manual" (that would hide real runtime failures).
+_SOURCE_TO_KB = {
+    "gcl": "gcl_trace",
+    "runtime_safety": "runtime_block",
+    "golden_eval": "governed_learning",
+    "governed_learning": "governed_learning",
+}
+# runtime_safety builds FailurePattern directly without declaring a source;
+# those writes are runtime blocks. Unknown tokens must also stay non-manual.
+_DEFAULT_KB_SOURCE = "runtime_block"
+
+# Canonical store (C1): the JSONL is authoritative, .md is only its rendering.
+_DEFAULT_PATTERNS_PATH = (
+    Path(__file__).resolve().parent.parent / "docs" / "failure-patterns.jsonl"
+)
+
+
+def derive_from_trace(trace: dict, source: str = "gcl") -> list[FailurePattern]:
     """Only emit patterns for SAFETY_FAIL / MAX_ITER with at least one dim < 1.0."""
     final = trace.get("final", {})
     status = final.get("status", "")
@@ -58,6 +80,7 @@ def derive_from_trace(trace: dict) -> list[FailurePattern]:
         root_cause=f"Critic scored {dim}={score} on iter {len(iters)}; final.status={status}",
         fix=f"Review rubric for {dim}; inspect generator output for {skill}",
         timestamp=now,
+        source=source,
     )]
 
 
@@ -164,22 +187,35 @@ def append_or_increment(path: Path, pattern: FailurePattern) -> str:
             count=pattern.count,
             first_seen=pattern.timestamp,
             last_seen=pattern.timestamp,
+            source=_SOURCE_TO_KB.get(pattern.source, _DEFAULT_KB_SOURCE),
         )
         result = failure_kb.append_or_increment(rec, path)
-        # Re-render MD from the updated JSONL (backward-compat: skip if renderer absent)
+        # Re-render MD from the updated JSONL (backward-compat: skip if renderer absent).
+        # A render failure must WARN loudly (md would silently drift from the
+        # canonical jsonl) but must never block pattern persistence.
+        import subprocess
+        import sys as _sys
         try:
-            import subprocess
-            import sys as _sys
             render_script = Path(__file__).parent / "_render_failure_patterns.py"
             if render_script.exists():
-                subprocess.run(
+                r = subprocess.run(
                     [_sys.executable, str(render_script),
                      "--jsonl", str(path),
                      "--md", str(path.with_suffix(".md"))],
-                    capture_output=True, timeout=30,
+                    capture_output=True, text=True, timeout=30,
                 )
-        except Exception:
-            pass  # Never let render failure block pattern persistence
+                if r.returncode != 0:
+                    print(
+                        f"WARNING: failure-patterns.md re-render failed "
+                        f"(exit {r.returncode}) for {path}; "
+                        f"jsonl is canonical, md is stale. {r.stderr.strip()}",
+                        file=_sys.stderr,
+                    )
+        except Exception as exc:  # Never let render failure block persistence
+            print(
+                f"WARNING: failure-patterns.md re-render skipped for {path}: {exc}",
+                file=_sys.stderr,
+            )
         return result
     if not path.exists():
         _atomic_write(path, _FRESH_HEADER + _format_row(pattern) + "\n")
@@ -368,6 +404,7 @@ def derive_from_error(
         root_cause=root_cause or f"recorded from {source}",
         fix=fix or "Inspect failure-patterns.md for remediation",
         timestamp=now,
+        source=source,
     )
 
 def _cli_main(argv: list[str] | None = None) -> int:
@@ -376,7 +413,8 @@ def _cli_main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("command", choices=["maintain", "record-failure"])
     ap.add_argument("path", nargs="?", default=None,
-                    help="Path to failure-patterns.md (default: REPO/docs/failure-patterns.md)")
+                    help="Path to canonical failure-patterns.jsonl "
+                         f"(default: docs/{_DEFAULT_PATTERNS_PATH.name})")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skill", default="", help="AWS skill name (record-failure)")
     ap.add_argument("--cmd", default="", help="Command that failed (record-failure)")
@@ -385,7 +423,7 @@ def _cli_main(argv: list[str] | None = None) -> int:
     ap.add_argument("--fix", default="", help="Suggested fix (record-failure)")
     ap.add_argument("--source", default="", help="Source: runtime_safety|gcl|golden_eval (record-failure)")
     args = ap.parse_args(argv)
-    target = Path(args.path) if args.path else Path(__file__).resolve().parent.parent / "docs" / "failure-patterns.md"
+    target = Path(args.path) if args.path else _DEFAULT_PATTERNS_PATH
 
     if args.command == "record-failure":
         if not args.skill or not args.error:
@@ -398,6 +436,7 @@ def _cli_main(argv: list[str] | None = None) -> int:
             root_cause=args.root_cause or f"recorded from {args.source or 'external'}",
             fix=args.fix or "Inspect failure-patterns.md for remediation",
             timestamp=now,
+            source=args.source,
         )
         if args.dry_run:
             print(f"DRY-RUN: would record {pat.error_signature}")
