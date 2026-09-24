@@ -15,7 +15,7 @@
 |---|---|
 | `{{skill.name}}` | `aws-aurora-ops` |
 | `{{skill.service}}` | `aurora` |
-| `{{skill.aws_cli_svc}}` | `aurora` |
+| `{{skill.aws_cli_svc}}` | `rds` |
 | `{{skill.max_iter}}` | `2` (from `metadata.gcl.max_iter` in SKILL.md frontmatter) |
 
 ## Hard rules (Critic template injection)
@@ -47,6 +47,8 @@
 | `delete-db-cluster-snapshot` | `confirm=DELETE_DB_CLUSTER_SNAPSHOT <snap-id>` |
 | prod cluster delete | `confirm=DELETE_PROD_CLUSTER <id>` |
 | `failover-db-cluster` | `confirm=FAILOVER_CLUSTER <cluster-id>` |
+| `backtrack-db-cluster` | `confirm=BACKTRACK <cluster-id> to <BacktrackTime>` |
+| `delete-db-instance` (cluster writer, `IsClusterWriter=true`) | `confirm=DELETE_WRITER <instance-id>` |
 
 ## Variable Convention (skill-specific deltas)
 > Common placeholders (`{{user.*}}`, `{{env.*}}`, `{{output.*}}`)
@@ -68,6 +70,8 @@
 |---|---|---|
 | 1.0.0 | 2026-06-13 | Initial templates for `aws-aurora-ops` |
 | 1.1.0 | 2026-07-31 | Added Confirmation Strings table; A5→A14 for skip-snapshot rule |
+| 1.2.0 | 2026-09-10 | `aws_cli_svc` corrected `aurora` → `rds` (Aurora is driven by the `rds` CLI namespace) |
+| 1.3.0 | 2026-09-10 | Confirmation Strings extended with the backtrack and writer-delete tokens now enforced by `rubric.md` |
 
 ---
 

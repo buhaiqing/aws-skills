@@ -39,8 +39,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SKELETON = REPO / "aws-skill-generator" / "references" / "prompt-skeletons.md"
 
-# aws-<svc>-ops -> aws <svc> cli namespace (mirrors scripts/gcl_runner.py overrides)
+# aws-<svc>-ops -> aws <svc> cli namespace (mirrors scripts/_gen_rubric.py overrides)
 CLI_OVERRIDES = {
+    "aws-aurora-ops": "rds",
     "aws-vpc-ops": "ec2",
     "aws-elb-ops": "elbv2",
     "aws-waf-ops": "wafv2",

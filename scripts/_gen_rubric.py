@@ -15,6 +15,9 @@ cases** for each service, not in the boilerplate.
 import sys
 from pathlib import Path
 
+# Marker present in an unfilled template; used to gate overwrites.
+_FILL_MARKER = '<!-- LLM_FILL'
+
 TEMPLATE = '''# {service} Ops Rubric (GCL)
 
 > Concrete instantiation of the **Generator-Critic-Loop** rubric defined in
@@ -45,6 +48,8 @@ TEMPLATE = '''# {service} Ops Rubric (GCL)
 
 <!-- LLM_FILL_SAFETY -->
 
+## Loop parameters
+
 | Parameter | Value | Source |
 |---|---|---|
 | `max_iterations` | **{max_iter}** | `gcl-spec.md` §10 (Phase 1 default) |
@@ -66,6 +71,7 @@ def _aws_cli_svc(skill_dir: str) -> str:
         'aws-kms-ops': 'kms',
         'aws-s3-ops': 's3',
         'aws-rds-ops': 'rds',
+        'aws-aurora-ops': 'rds',
         'aws-dynamodb-ops': 'dynamodb',
         'aws-lambda-ops': 'lambda',
         'aws-elasticache-ops': 'elasticache',
@@ -98,6 +104,8 @@ def main():
                     help="Call DashScope LLM to fill Operation-specific overrides + Safety special cases")
     ap.add_argument("--recommended", action="store_true",
                     help="Use max_iterations=3 instead of 2")
+    ap.add_argument("--force", action="store_true",
+                    help="Overwrite an existing rubric that has already been filled")
     args = ap.parse_args()
 
     skill_dir = args.skill_dir
@@ -107,6 +115,13 @@ def main():
     max_iter = 3 if args.recommended else 2
     out = Path(skill_dir) / 'references' / 'rubric.md'
     out.parent.mkdir(parents=True, exist_ok=True)
+    if out.is_file() and not args.force and _FILL_MARKER not in out.read_text():
+        print(
+            f"refusing to overwrite filled rubric: {out} "
+            "(pass --force to regenerate)",
+            file=sys.stderr,
+        )
+        return 1
 
     rubric = TEMPLATE.format(
         skill=skill_dir,
@@ -149,7 +164,8 @@ def main():
     out.write_text(rubric)
     note = " (LLM-filled)" if args.llm_fill else " (TODO: fill overrides + safety special cases)"
     print(f"OK  wrote {out}{note}")
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
