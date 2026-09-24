@@ -2,9 +2,9 @@
 id: F-006
 severity: P2
 title: 10-patch sequence creates overlapping file diffs
-status: open
+status: fixed
 added: 2026-07-26
-closed:
+closed: 2026-09-24
 phase: l4-98-consolidation
 ---
 

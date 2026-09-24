@@ -128,3 +128,25 @@ python3 -m pytest scripts/tests/test_xxx.py -q
 ```
 
 全绿再继续。任何测试失败都立即修，不留到最后一并处理。
+
+## §23.8 多 phase patch 合并策略（ponytail: 默认按需 consolidated patch）
+
+**触发**：连续 N 笔 commit 改同一 changelog / TODO / maturity-model 文件 → 后续 phase 必须用 consolidated mega-patch，否则中间 commit 的 git history 制造 8-10× diff churn（详见 F-006）。
+
+**规则**：
+- 同一 sprint / phase 的 changelog / progress.md / maturity-model.md 更新**只在最后 1 笔 commit 写**，中间 commit 不碰这些 shared 文件。
+- 每个 phase 单笔 patch 仍可写（archival 价值），但合并阶段必须出 `*-consolidated.patch` 作为 canonical artifact 单独 ship。
+- sprint 跨度大 (>5 笔 commit) 时，**强制**在最后一个 phase commit 之前生成 consolidated patch。
+
+**反例**（F-006 实证）：
+```
+AGENTS.md (8 patches: l3-p1 → p3-4)
+TODO.md (10 patches: ALL of them)
+docs/agentic-maturity-model.md (10 patches: ALL of them)
+docs/superpowers/findings/F-005-*.md (2 patches)
+scripts/golden_eval.py (2 patches: p2-2 + p2-3)
+```
+
+**教训**：F-006 在 2026-07-26 首次记录，60+ 天 open。最终处置：WONTFIX-as-DOCUMENTED（按本节规则预防）。
+
+> **状态**：F-006 closed 2026-09-24 (per §23.8 rule codification).
