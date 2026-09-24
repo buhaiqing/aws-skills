@@ -118,7 +118,10 @@ for f in $CHANGED; do
             ;;
         scripts/gcl_runner.py)
             if [ -f "$SCRIPTS_DIR/gcl_runner.py" ]; then
-                if ! python3 "$SCRIPTS_DIR/gcl_runner.py" --self-test --no-prune >/dev/null 2>&1; then
+                # F-008 (2026-09-24): gcl_runner.py --self-test requires --skill.
+                # Smoke-test uses aws-s3-ops as a no-op skill dir (the trace
+                # is auto-pruned in 30 days via gcl_runner._prune_old_traces).
+                if ! python3 "$SCRIPTS_DIR/gcl_runner.py" --self-test --no-prune --skill aws-s3-ops >/dev/null 2>&1; then
                     FAIL_REASONS+=("gcl_runner.py --self-test failed")
                     FAIL=1
                 fi
