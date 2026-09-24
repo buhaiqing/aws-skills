@@ -25,8 +25,17 @@ Slices are vertical: each one is independently demoable end-to-end
 | # | State | Commit |
 |---|-------|--------|
 | 1–3 | done | `d10ebda` |
-| 4 | done (uncommitted → pending) | — |
-| spec/plan | backfilled 2026-09-06 | — |
+| 4 | done | `c9a4882` |
+| spec/plan | backfilled 2026-09-06 | `c9a4882` |
+| branch → main | merged (HEAD = main HEAD) | `c9a4882` |
+| worktree cleanup | `.worktrees/infer-latency-sla` removed | `2026-09-24` |
+
+## Closure (2026-09-24)
+
+- Branch `feature/infer-latency-sla` is at `c9a4882` = `main` HEAD → no merge action needed.
+- Worktree removed; accidentally-staged `D aws-topo-discovery/references/gcl-rubric.md` restored in worktree before removal.
+- Branch ref retained in repo for history (`git branch --list feature/infer-latency-sla` still resolves).
+- `rsi-p0-loop` worktree remains active for the in-flight P0-4 stub-filter work.
 
 ## Known gaps
 
