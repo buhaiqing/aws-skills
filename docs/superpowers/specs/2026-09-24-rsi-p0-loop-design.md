@@ -61,10 +61,32 @@
 - 回归 md：`_render_failure_patterns.py` 重新渲染 `docs/failure-patterns.md` 并提交。
 - 测试（**测试保真硬要求**）：round-trip 断言 —— 经 `gcl_runner --on-fail` 写入后，用**真实读取方** `runtime_safety.load_failure_patterns()` 能读到该记录，且 `source != "manual"`。禁止用自造解析断言。
 
+### P0-4 自检 stub 过滤（owner: subtask D — 单文件 scope）
+
+> **背景**：RSI 评审（2026-09-24）发现 `audit-results/gcl-trace-*.json` 中 100% 是 `aws --self-test` stub 跑出来的，
+> `gcl_metrics.py` 不区分 stub 与真实 run，导致 dashboard 报「iam 0/64」「s3 0/41」实为 stub 计数。
+
+- `gcl_metrics.py` 新增 `is_real_trace(trace)` 谓词：
+  `last_iteration.generator.command == "aws --self-test"` → **非真实 trace**，默认从 `collect_traces` 排除。
+- `collect_traces(audit_dir, days, include_self_test=False)` 接受 `include_self_test` 入参；
+  CLI 加 `--include-self-test` flag，**默认隐藏**（callers use `_SELF_TEST_DEFAULT=False`）。
+- `render_markdown` 在文档头部注明「traces shown = real runs only; use --include-self-test to count stubs」。
+- 测试（`test_gcl_metrics.py`）：
+  - 自造 1 真 trace + 1 stub trace → 默认只见 1 条；`--include-self-test` 见 2 条；
+  - 自造混合 audit-dir → `aggregate(by_skill)` 不含 stub skill。
+
+### 与 P0-1/P0-2/P0-3 的互斥契约
+
+- **C6**（P0-4 互斥）：subtask D 只改 `scripts/gcl_metrics.py` + `scripts/tests/test_gcl_metrics.py`。
+  **禁止**碰 `telemetry_dashboard.py`、`status_snapshot.py`、`governed_learning.py`、`failure_kb.py`。
+- **C7**（保留 P0-1 兼容）：`--timeseries` 与 `--staleness-check` 行为不变；过滤作用于 `collect_traces()` 上游。
+- **C8**（不破坏现有测试）：现有 6 个 test 不修改；新增 stub fixture 文件 `gcl-trace-20260924-stub.json`。
+
 ## 5. 验收（DoD）
 
-- `ruff check scripts/` 0 error；`pytest scripts/tests/ -q` 全绿（含新增用例）。
+- `ruff check scripts/` 0 error；`pytest scripts/tests/ -q` 全绿（含新增用例 + 现有 6 个不动）。
 - P0-1：`docs/metrics/timeseries.csv` 存在且 schema 正确；无 prior 时 dashboard Δ 显示 `n/a`。
 - P0-2：同一 signature 二次 harvest 后 `created_at` 不变；first-seen 跨进程保留。
 - P0-3：round-trip 测试通过（`gcl_runner` 写 → `runtime_safety` 读），新记录 `source != manual`。
+- P0-4：`audit-results/gcl-trace-2026-09-24-*.json` 当前 100% 是 stub；过滤后 `python3 scripts/gcl_metrics.py` 报「0 real traces」；`--include-self-test` 报「107 stub traces」；fixture 混合测试通过。
 - 三个子任务各自原子 commit；`git status` 干净。
