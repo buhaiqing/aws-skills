@@ -974,6 +974,25 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "report":
         qpath = Path(args.queue)
+        if not qpath.exists():
+            # Empty-state response (queue not yet produced by `harvest`).
+            # Return exit 0 — absence of data is a legitimate state, not an error.
+            # Keys mirror `dwell_stats()` populated output (lines 785-798) so
+            # downstream consumers (dashboards, CI scripts) can read a fixed
+            # schema whether the queue is empty or populated (C3).
+            empty = {
+                "generated_at": _now(),
+                "pending_total": 0,
+                "age_histogram_hours": {},
+                "blocked_by_gate": {},
+                "dwell_blocked_count": 0,
+                "terminal_gate_ids": sorted(TERMINAL_GATES),
+                "terminal_blocked_count": 0,
+                "min_dwell_hours": MIN_DWELL_HOURS,
+                "note": f"queue not found at {qpath}; run 'harvest' first",
+            }
+            print(json.dumps(empty, indent=2, ensure_ascii=False))
+            return 0
         meta = json.loads(qpath.read_text(encoding="utf-8"))
         cands = [CandidateRule.from_dict(x) for x in meta.get("candidates", [])]
         if args.dwell_stats:

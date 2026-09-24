@@ -1002,3 +1002,48 @@ def test_auto_promote_library_dedup(tmp_path, sig_in_lib):
     promoted = auto_promote([cand], patterns_path=patterns)
     if sig_in_lib:
         assert len(promoted) == 0, "in-library must not promote"
+
+# --- P0-2 CLI resilience: report on missing queue file ---
+
+def test_report_dwell_stats_handles_missing_queue_file(tmp_path, capsys):
+    """report --dwell-stats must return empty-state JSON, not crash, when queue file is absent.
+
+    Empty-state schema must match dwell_stats() populated output (C3).
+    """
+    from governed_learning import main
+
+    missing = tmp_path / "audit-results" / "governed-learning" / "queue.json"
+    rc = main(["report", "--dwell-stats", "--queue", str(missing)])
+    captured = capsys.readouterr()
+    assert rc == 0, f"expected exit 0, got {rc}; stderr={captured.err}"
+    out = json.loads(captured.out)
+    for k in ("pending_total", "age_histogram_hours", "blocked_by_gate",
+              "dwell_blocked_count", "terminal_gate_ids",
+              "terminal_blocked_count", "min_dwell_hours", "note"):
+        assert k in out, f"empty-state missing key: {k}"
+    assert out["pending_total"] == 0
+    assert out["age_histogram_hours"] == {}
+    assert "run 'harvest' first" in out["note"]
+
+
+def test_report_default_handles_missing_queue_file(tmp_path, capsys):
+    """report (without --dwell-stats) must also handle missing queue, not crash.
+
+    Returns the same fixed-shape empty envelope as report --dwell-stats so
+    dashboards can consume a single schema (C3 enforcement).
+    """
+    from governed_learning import main
+
+    missing = tmp_path / "no-such-queue.json"
+    rc = main(["report", "--queue", str(missing)])
+    captured = capsys.readouterr()
+    assert rc == 0, f"expected exit 0, got {rc}; stderr={captured.err}"
+    out = json.loads(captured.out)
+    # Empty-state schema must match  populated keys (C3).
+    for k in ("pending_total", "age_histogram_hours", "blocked_by_gate",
+              "dwell_blocked_count", "terminal_gate_ids",
+              "terminal_blocked_count", "min_dwell_hours", "note"):
+        assert k in out, f"empty-state missing key: {k}"
+    assert out["pending_total"] == 0
+    assert out["age_histogram_hours"] == {}
+    assert "run 'harvest' first" in out["note"]
