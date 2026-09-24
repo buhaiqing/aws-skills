@@ -320,15 +320,33 @@ def main(argv: list[str] | None = None) -> int:
             if last_session_file.exists():
                 current_session = last_session_file.read_text().strip()
         if not p.exists():
+            print(
+                f"memory file not found at {p}; "
+                f"run 'session_memory.py record --scope ... --summary ...' to seed",
+                file=sys.stderr,
+            )
             if args.required:
                 return 2
             return 1
         records = load_memory(p)
         if not records:
+            print(
+                f"memory file at {p} is empty (0 records); "
+                f"run 'session_memory.py record' to seed",
+                file=sys.stderr,
+            )
             return 1
         for rec in records:
             if rec.source_session == current_session:
                 return 0
+        n = len(records)
+        noun = "record" if n == 1 else "records"
+        print(
+            f"memory file at {p} has {n} {noun} but none from "
+            f"current session ({current_session or 'unset'}); stale; "
+            f"run 'session_memory.py record' to refresh",
+            file=sys.stderr,
+        )
         return 1
     if args.cmd == "render":
         records = load_memory(Path(args.path))

@@ -184,6 +184,52 @@ def test_verify_startup_missing_file_no_required(tmp_path, monkeypatch):
     assert proc.returncode == 1
 
 
+
+def test_verify_startup_missing_file_prints_to_stderr(tmp_path):
+    """Missing memory file: verify-startup must print actionable stderr (RSI fix)."""
+    target = tmp_path / 'nonexistent.json'
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / 'session_memory.py'),
+         'verify-startup', '--path', str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 1
+    assert 'memory file not found' in proc.stderr
+    assert 'session_memory.py record' in proc.stderr
+
+
+def test_verify_startup_empty_records_prints_to_stderr(tmp_path):
+    """Empty memory file: verify-startup must report 0 records + seed hint."""
+    target = tmp_path / 'conventions.json'
+    target.write_text('{"version": "1.0.0", "records": []}')
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / 'session_memory.py'),
+         'verify-startup', '--path', str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 1
+    assert 'is empty' in proc.stderr
+    assert '0 records' in proc.stderr
+
+
+def test_verify_startup_stale_records_prints_to_stderr(tmp_path, monkeypatch):
+    """Records exist but none from current session: report stale + count."""
+    monkeypatch.setenv('OMC_SESSION_ID', 'current-session-XYZ')
+    rec = MemoryRecord(id='mem-stale', timestamp='2026-01-01T00:00:00+00:00',
+                       scope='convention', summary='old memory', detail='',
+                       confidence=0.5, source_session='stale-session-ABC', tags=[])
+    target = tmp_path / 'conventions.json'
+    save_memory([rec], target)
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / 'session_memory.py'),
+         'verify-startup', '--path', str(target)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert proc.returncode == 1
+    assert 'stale' in proc.stderr
+    assert '1 record' in proc.stderr
+    assert 'current-session-XYZ' in proc.stderr
+
 def test_verify_startup_missing_file_required(tmp_path, monkeypatch):
     """File missing with --required flag → exit 2."""
     target = tmp_path / "nonexistent.json"
