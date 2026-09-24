@@ -3,6 +3,20 @@
 ## Status
 Completed
 
+## Sprint G — P0-2 CLI 弹性 (2026-09-24)
+
+**Goal**: 修 `governed_learning.py report --dwell-stats` 在队列文件缺失时 FileNotFoundError 崩溃，使 P0-2 "168h dwell 真实累积" 可观测。
+
+**Result**: `feature/p0-2-cli` 1 笔 commit `0c25edc` (3 files, +145/-0), fast-forward merge 到 main。
+
+| Commit | 内容 |
+|---|---|
+| `0c25edc` | spec + impl + tests；empty-state schema 镜像 `dwell_stats()` 弹出态 (C3) |
+
+**GCL 纪律**: Round 1 Critic 报 `partially_satisfied` (MAJOR: C3 schema divergence) → Round 2 修复 spec 与 impl 同源对齐 → 58 passed (56 + 2 RED)，ruff clean。
+
+**验证**: `python3 scripts/governed_learning.py report --dwell-stats` 在 fresh checkout 退出 0 + JSON (含 `note` + `pending_total` 等 7 个 schema keys)；`harvest` 后再跑同一命令 → populated schema 一致。
+
 ## Sprint F — RSI P0 三段闭环 + P0-4 stub 过滤 (2026-09-24)
 
 **Goal**: 闭合审计发现的 3 段数据环（metrics / 晋升 / 回写）+ dashboard stub 计数修复。
