@@ -29,8 +29,14 @@ FILL_MARKER = re.compile(r"<!-- ?LLM_FILL|<!-- TODO")
 
 
 def _rubric_files() -> list[Path]:
+    # Filter relative to REPO: the old `".worktrees" not in p.parts` check
+    # matched EVERY path when this test runs inside a worktree (REPO itself
+    # lives under <main>/.worktrees/<name>/), yielding RUBRICS=[] — pytest
+    # then called ids=_id with its NotSet sentinel and crashed collection
+    # with AttributeError. Relative parts keep main-repo semantics intact.
     return sorted(
-        p for p in REPO.glob("*/references/rubric.md") if ".worktrees" not in p.parts
+        p for p in REPO.glob("*/references/rubric.md")
+        if ".worktrees" not in p.relative_to(REPO).parts
     )
 
 

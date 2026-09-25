@@ -250,17 +250,38 @@ def scan_stale_maturity(
     recent_text = "\n".join(recent_text_parts)
 
     findings: list[Finding] = []
+    in_legend = False
     for i, line in enumerate(head.splitlines(), 1):
+        # O3 (2026-09-24): only scan table rows; track legend sections so
+        # the §2 status-symbol table (icon definitions) is never treated
+        # as a scannable item.
+        if line.lstrip().startswith("#"):
+            in_legend = "图例" in line
+            continue
+        if not line.startswith("|") or in_legend:
+            continue
         if "⚠️" not in line:
             continue
         idx = line.find("⚠️")
-        kw = line[idx + len("⚠️"):].strip(" |:-").strip()[:30].strip() or "(empty)"
+        # Identifier: prefer the item name (cells BEFORE ⚠️, name-first
+        # layout like '| **M1 满窗 telemetry 基线** | ⚠️ | warm-up |');
+        # fall back to the status text (icon-first layout used by old
+        # fixtures '| ⚠️ | **Active item** … |'). *-stripped so markdown
+        # bold never blocks substring matching.
+        name_part = line[:idx].strip(" |:-").replace("*", "").strip()
+        status_part = line[idx + len("⚠️"):].strip(" |:-").replace("*", "").strip()
+        ident = (name_part or status_part)[:60]
+        kw = ident[:30] or "(empty)"
         # Per Fix #1 spec §4.1: "30-day changelog silence = treat ⚠️ as Gap".
-        # Section-level heuristic: if ANY changelog activity exists within
-        # threshold window, the model is considered maintained (avoids noisy
-        # kw-substring matches where changelog wording differs from item text).
+        # O3 item-level fix: section-level skip hid specific ⚠️ items —
+        # §6.3 M1 满窗 stayed ⚠️ because the section had *other* changelog
+        # rows. Now: section active → flag only if THIS item's identifier
+        # is absent from the recent changelog window.
         if recent_text.strip():
-            continue
+            hay = recent_text.replace("*", "").lower()
+            if ident.lower() in hay or kw.lower() in hay:
+                continue   # item addressed in window → fresh
+            # fall through: section busy but this item untouched → flag
         findings.append(Finding(
             id=f"maturity-stale-{i:03d}",
             severity="P1",
@@ -312,8 +333,15 @@ def _cli(argv: list[str]) -> int:
     p_scan.add_argument("--threshold-days", type=int, default=30)
     p_scan.add_argument("--as-of", default=None, help="ISO date; default=today")
 
+    p_rf = sub.add_parser("check-reflexion-freshness",
+                          help="Exit 1 if failure-patterns.jsonl newest last_seen is older than --days (O3).")
+    p_rf.add_argument("--patterns", default="docs/failure-patterns.jsonl")
+    p_rf.add_argument("--days", type=int, default=7)
+    p_rf.add_argument("--as-of", default=None, help="ISO date; default=today")
+
     args = p.parse_args(argv)
-    repo = Path(args.repo).resolve()
+    # check-reflexion-freshness declares no --repo (reads only --patterns)
+    repo = Path(getattr(args, "repo", ".")).resolve()
     if args.cmd == "record":
         fid = record_finding(
             repo=repo,
@@ -368,6 +396,58 @@ def _cli(argv: list[str]) -> int:
             f"\nTotal stale: {len(findings)} "
             f"(threshold={args.threshold_days}d, as_of={as_of or 'today'})"
         )
+        return 0
+    if args.cmd == "check-reflexion-freshness":
+        import json
+
+        p_path = Path(args.patterns)
+        as_of_rf = date.fromisoformat(args.as_of) if args.as_of else date.today()
+        if not p_path.exists():
+            print(
+                f"missing: {p_path}; run 'gcl_runner --on-fail' or "
+                f"runtime_safety to seed",
+                file=sys.stderr,
+            )
+            return 1
+        rows = []
+        for ln_no, ln in enumerate(
+            p_path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if not ln.strip():
+                continue
+            try:
+                rows.append(json.loads(ln))
+            except json.JSONDecodeError as exc:
+                print(
+                    f"malformed JSONL: {p_path}:{ln_no}: {exc.msg}; "
+                    f"reflexion write path is corrupt",
+                    file=sys.stderr,
+                )
+                return 1
+        if not rows:
+            print(
+                f"empty: {p_path}; 0 rows; run 'gcl_runner --on-fail' to seed",
+                file=sys.stderr,
+            )
+            return 1
+        last_seens = [r["last_seen"][:10] for r in rows if r.get("last_seen")]
+        if not last_seens:
+            print(
+                f"no last_seen in {len(rows)} rows; check reflexion writes",
+                file=sys.stderr,
+            )
+            return 1
+        newest = max(last_seens)
+        age = (as_of_rf - date.fromisoformat(newest)).days
+        if age > args.days:
+            print(
+                f"stale: {p_path} newest last_seen {newest} "
+                f"({age}d old > {args.days}d); reflexion has not appended — "
+                f"check gcl_runner --on-fail wiring",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"fresh: {len(rows)} rows, newest {newest} ({age}d <= {args.days}d)")
         return 0
     return 2
 

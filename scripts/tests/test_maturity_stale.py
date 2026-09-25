@@ -30,7 +30,7 @@ def test_scan_returns_empty_when_no_stale(tmp_path: Path):
         "| ⚠️ | **Active item** mentioned recently |\n"
         "\n"
         "## Changelog\n\n"
-        "| 2026-08-22 | **Active item** referenced today |\n",
+        "| 2026-08-22 | **Active item** mentioned recently |\n",
         encoding="utf-8",
     )
     findings = scan_stale_maturity(model, threshold_days=30, as_of=date(2026, 8, 22))
@@ -69,7 +69,7 @@ def test_scan_threshold_parameterization(tmp_path: Path):
         "| ⚠️ | **21-day-old item** |\n"
         "\n"
         "## Changelog\n\n"
-        "| 2026-08-01 | last mention |\n",
+        "| 2026-08-01 | **21-day-old item** last mention |\n",
         encoding="utf-8",
     )
     # 2026-08-22 - 2026-08-01 = 21 days since last mention
@@ -96,3 +96,35 @@ def test_scan_real_maturity_model_runs():
         assert f.severity == "P1"
         assert f.kind == "MATURITY_STALE"
         assert f.status == "open"
+
+def test_scan_flags_item_stale_when_section_active(tmp_path: Path):
+    """Section HAS recent changelog rows, but the specific ⚠️ item kw absent → flagged (item-level, O3 fix)."""
+    model = tmp_path / "model.md"
+    model.write_text(
+        "# Maturity\n\n"
+        "## 6. L4\n\n"
+        "| **M1 满窗 telemetry 基线** | ⚠️ | warm-up in progress |\n"
+        "| **Other item** | ✅ | done |\n\n"
+        "## 11. Changelog\n\n"
+        "| 2026-08-25 | v37 — Other item shipped (no mention of M1 满窗) |\n",
+        encoding="utf-8",
+    )
+    findings = scan_stale_maturity(model, threshold_days=30, as_of=date(2026, 9, 24))
+    # Section has recent activity (2026-08-25 within 30d) — old logic skipped ALL.
+    # New: kw "M1 满窗 telemetry 基线" absent from changelog → must flag.
+    assert len(findings) == 1, f"expected 1 item-level stale finding, got {len(findings)}: {findings}"
+    assert "M1 满窗" in findings[0].title or "满窗" in findings[0].title
+
+
+def test_scan_item_fresh_when_kw_in_recent_changelog(tmp_path: Path):
+    """Section active AND item kw present in recent changelog → not flagged."""
+    model = tmp_path / "model.md"
+    model.write_text(
+        "# Maturity\n\n"
+        "| **M1 满窗 telemetry 基线** | ⚠️ | warm-up |\n\n"
+        "## 11. Changelog\n\n"
+        "| 2026-09-20 | v40 — M1 满窗 telemetry 基线 addressed |\n",
+        encoding="utf-8",
+    )
+    findings = scan_stale_maturity(model, threshold_days=30, as_of=date(2026, 9, 24))
+    assert findings == [], f"kw present in recent changelog must not flag: {findings}"
