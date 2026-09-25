@@ -32,7 +32,9 @@ from governed_learning import (  # noqa: E402
     auto_promote,
     auto_promotion_rate,
     blocking_gate,
+    build_eval_evidence,
     compute_confidence,
+    file_sha256,
     dwell_stats,
     evaluate_candidate,
     evaluate_queue,
@@ -45,6 +47,7 @@ from governed_learning import (  # noqa: E402
     reject_candidate,
     report,
     save_queue,
+    validate_eval_evidence,
 )
 
 
@@ -57,6 +60,12 @@ def _fresh_patterns(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return p
+
+
+def _eval_artifact(tmp_path: Path) -> Path:
+    artifact = tmp_path / "golden-results.json"
+    artifact.write_text('{"results": [{"id": "golden", "matched_status": true}]}', encoding="utf-8")
+    return artifact
 
 
 def _make_candidate(
@@ -89,7 +98,16 @@ def _make_candidate(
         created_at=created,
     )
     cand.before_eval = {"gap": gap, "signature_in_library": not gap, "at": created}
-    cand.after_eval = {"no_regression": no_regression, "covered": True, "regressions": [], "at": created}
+    artifact = _eval_artifact(tmp_path)
+    regressions = [] if no_regression else ["regression-1"]
+    cand.after_eval = {
+        "covered": True,
+        "regressions": regressions,
+        "no_regression": no_regression,
+        "at": created,
+        **build_eval_evidence(artifact, producer="golden_eval", run_id="run-test"),
+    }
+    cand.after_eval["no_regression"] = no_regression
     return cand
 
 
@@ -140,6 +158,74 @@ def test_fixture_harvest_dedupe_under_10pct():
     assert len(h.candidates) == h.unique_count
 
 
+def test_eval_evidence_round_trip_uses_raw_bytes(tmp_path):
+    artifact = _eval_artifact(tmp_path)
+    evidence = build_eval_evidence(artifact, producer="golden_eval", run_id="run-1")
+    assert evidence["artifact_path"] == str(artifact)
+    assert evidence["artifact_sha256"] == file_sha256(artifact)
+    assert evidence["artifact_sha256"] == __import__("hashlib").sha256(artifact.read_bytes()).hexdigest()
+    assert evidence["generated_at"] and evidence["producer"] == "golden_eval"
+    assert evidence["run_id"] == "run-1"
+    cand = _make_candidate(tmp_path)
+    cand.after_eval.update(evidence)
+    assert validate_eval_evidence(cand) is True
+
+
+def test_eval_evidence_fails_closed(tmp_path):
+    artifact = _eval_artifact(tmp_path)
+    cand = _make_candidate(tmp_path)
+    assert validate_eval_evidence(cand) is True
+
+    for key in ("artifact_path", "artifact_sha256", "generated_at", "producer", "run_id"):
+        broken = _make_candidate(tmp_path)
+        broken.after_eval.pop(key)
+        assert validate_eval_evidence(broken) is False
+        assert blocking_gate(broken, lib=set(), now=datetime.now(timezone.utc))
+
+    artifact.unlink()
+    assert validate_eval_evidence(cand) is False
+
+    artifact.write_text('{"tampered": true}', encoding="utf-8")
+    assert validate_eval_evidence(cand) is False
+
+    invalid = _make_candidate(tmp_path)
+    invalid.after_eval["artifact_sha256"] = "not-a-sha256"
+    assert validate_eval_evidence(invalid) is False
+
+
+def test_evaluate_requires_regression_fixture(tmp_path):
+    cand = _make_candidate(tmp_path)
+    before_evidence = dict(cand.after_eval)
+    evaluated = evaluate_candidate(cand, patterns_path=_fresh_patterns(tmp_path))
+    assert evaluated.status == "needs_eval"
+    assert evaluated.after_eval["no_regression"] is False
+    assert "fixture required" in evaluated.after_eval["regressions"]
+    assert before_evidence["artifact_sha256"]  # old evidence is never treated as valid
+
+    fixture_candidate = _make_candidate(tmp_path)
+    evaluated = evaluate_candidate(
+        fixture_candidate,
+        patterns_path=_fresh_patterns(tmp_path),
+        regression_fixture=[{"id": "fixture-1", "ok": True}],
+    )
+    assert evaluated.status == "pending"  # fixture is independent; artifact binding is explicit
+
+
+def test_evaluate_records_failed_regression_id(tmp_path):
+    cand = CandidateRule(
+        id="c", signature="s", skill="a", command="b", error="e", root_cause="r",
+        fix="f", source_status="MAX_ITER",
+    )
+    evaluated = evaluate_candidate(
+        cand,
+        patterns_path=_fresh_patterns(tmp_path),
+        regression_fixture=[{"id": "regression-9", "ok": False}],
+    )
+    assert evaluated.after_eval["regressions"] == ["regression-9"]
+    assert evaluated.after_eval["no_regression"] is False
+    assert evaluated.status == "needs_eval"
+
+
 def test_evaluate_before_after_gap(tmp_path):
     patterns = _fresh_patterns(tmp_path)
     cand = CandidateRule(
@@ -155,7 +241,7 @@ def test_evaluate_before_after_gap(tmp_path):
     out = evaluate_candidate(cand, patterns_path=patterns)
     assert out.before_eval["gap"] is True
     assert out.after_eval["covered"] is True
-    assert out.after_eval["no_regression"] is True
+    assert out.after_eval["no_regression"] is False
 
 
 def test_approve_requires_approver_and_eval(tmp_path):
@@ -176,7 +262,8 @@ def test_approve_requires_approver_and_eval(tmp_path):
     with pytest.raises(ValueError, match="before/after"):
         approve_candidate(cand, approver="alice", patterns_path=patterns, approvals_path=approvals)
 
-    cand = evaluate_candidate(cand, patterns_path=patterns)
+    cand = evaluate_candidate(cand, patterns_path=patterns, regression_fixture=[{"id": "real", "ok": True}])
+    cand.after_eval.update(build_eval_evidence(_eval_artifact(tmp_path), "test", "approve"))
     approved = approve_candidate(
         cand, approver="alice", patterns_path=patterns, approvals_path=approvals,
     )
@@ -389,7 +476,7 @@ def test_auto_promote_rate_with_real_queue(tmp_path):
     q = tmp_path / "queue.json"
     save_queue(q, all_cands)
     rate = auto_promotion_rate(q)
-    assert rate == 0.5
+    assert rate == 0.0  # evaluate has no independent regression fixture
 
 
 def test_cli_promote_dry_run(tmp_path):
@@ -409,7 +496,7 @@ def test_cli_promote_dry_run(tmp_path):
     )
     assert r.returncode == 0, r.stderr + r.stdout
     assert "dry-run" in r.stdout
-    assert "1 / 1" in r.stdout
+    assert "0 / 1" in r.stdout
 
 
 def test_candidate_rule_backward_compat():
@@ -632,7 +719,8 @@ def test_approve_writes_governed_learning_source(tmp_path):
     """Promoted KB records are attributed to governed_learning, not runtime_block."""
     jsonl = tmp_path / "failure-patterns.jsonl"
     cand = _make_candidate(tmp_path, confidence=0.98, attempt_count=5, created_days_ago=30)
-    cand = evaluate_candidate(cand, patterns_path=jsonl)
+    cand = evaluate_candidate(cand, patterns_path=jsonl, regression_fixture=[{"id": "real", "ok": True}])
+    cand.after_eval.update(build_eval_evidence(_eval_artifact(tmp_path), "test", "approve"))
     approve_candidate(
         cand, approver="alice", patterns_path=jsonl,
         approvals_path=tmp_path / "approvals.jsonl",
@@ -677,15 +765,14 @@ def test_e2e_real_pipeline_promotes_one_candidate(tmp_path):
     solo = cands[FIXTURE_SOLO_SIGNATURE]
     assert solo.attempt_count >= MIN_ATTEMPT_COUNT
     assert solo.confidence >= MIN_CONFIDENCE
-    assert solo.status == "approved"
+    assert solo.status == "needs_eval"  # no independent regression fixture supplied
 
     promoted = [c for c in cands.values() if c.approval and c.approval.get("approver") == "system:auto"]
-    assert len(promoted) == 1, f"expected exactly 1 promotion, got {len(promoted)}"
-    assert f"1 / {len(cands)}" in out
-    # The CLI must persist the post-promotion rate, not the pre-promotion 0.0.
-    assert json.loads(queue.read_text())["auto_promotion_rate"] == pytest.approx(1 / len(cands))
-    assert auto_promotion_rate(queue) > 0.0
-    assert {r.source for r in failure_kb.load_jsonl(library) if r.error_signature == FIXTURE_SOLO_SIGNATURE} == {"governed_learning"}
+    assert len(promoted) == 0, f"missing evidence must block promotion, got {len(promoted)}"
+    assert f"0 / {len(cands)}" in out
+    assert json.loads(queue.read_text())["auto_promotion_rate"] == 0.0
+    assert auto_promotion_rate(queue) == 0.0
+    assert {r.source for r in failure_kb.load_jsonl(library) if r.error_signature == FIXTURE_SOLO_SIGNATURE} == set()
 
 
 def test_age_hours_invalid_created_at_returns_zero():
