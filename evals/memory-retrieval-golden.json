@@ -1,0 +1,10 @@
+[
+  {"id":"aws-default-region","query":"Which AWS region is the default?","relevant_ids":["aws-region"],"irrelevant_ids":["unknown-record","no-production-aws"]},
+  {"id":"s3-versioning-rule","query":"What is required for production S3 buckets?","relevant_ids":["s3-versioning"],"irrelevant_ids":["aws-region","unknown-record"]},
+  {"id":"ec2-owner-tags","query":"Which tags belong on EC2 instances?","relevant_ids":["ec2-tags"],"irrelevant_ids":["s3-versioning","unknown-record"]},
+  {"id":"iam-policy-scope","query":"How restrictive should IAM policies be?","relevant_ids":["iam-least-privilege"],"irrelevant_ids":["ec2-tags","unknown-record"]},
+  {"id":"verbose-python-tests","query":"How should Python tests be run?","relevant_ids":["pytest-command"],"irrelevant_ids":["ruff-scope","unknown-record"]},
+  {"id":"scoped-ruff-lint","query":"Should Ruff check the full repository?","relevant_ids":["ruff-scope"],"irrelevant_ids":["pytest-command","unknown-record"]},
+  {"id":"completion-evidence","query":"What must happen before saying work is complete?","relevant_ids":["evidence-before-claims"],"irrelevant_ids":["token-economy","unknown-record"]},
+  {"id":"credential-path-resolution","query":"How are credential paths resolved?","relevant_ids":["credentials-relative"],"irrelevant_ids":["worktree-isolation","unknown-record"]}
+]

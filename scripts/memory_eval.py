@@ -35,6 +35,8 @@ _SCOPE_BOOST: dict[str, float] = {"convention": 1.2, "repo-fact": 1.1}
 CONFIDENCE_FLOOR = 0.3
 # Confidence above this after gate → auto-derive eligible
 AUTO_DERIVE_THRESHOLD = 0.6
+MIN_CASES = 8
+_CASE_FIELDS = frozenset({"id", "query", "relevant_ids", "irrelevant_ids"})
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,8 @@ class EvalCase:
 
     query: str
     relevant_ids: list[str] = field(default_factory=list)
+    id: str = ""
+    irrelevant_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -57,6 +61,7 @@ class RetrievalMetrics:
     hit_rate: float = 0.0      # fraction of cases with ≥1 relevant in top-k
     precision_at_k: float = 0.0  # avg (relevant_in_top_k / k)
     mrr: float = 0.0           # mean reciprocal rank of first relevant
+    irrelevant_leakage_rate: float = 0.0
     cases_total: int = 0
     cases_with_hit: int = 0
 
@@ -117,6 +122,52 @@ def retrieve(
 
 
 # ---------------------------------------------------------------------------
+# Labeled cases
+# ---------------------------------------------------------------------------
+
+
+def load_eval_cases(path: Path, minimum: int = MIN_CASES) -> list[EvalCase]:
+    """Load strictly validated, independently labeled retrieval cases."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid cases file: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ValueError("cases must be a JSON list")
+    if len(raw) < minimum:
+        raise ValueError(f"at least {minimum} labeled cases required")
+
+    cases: list[EvalCase] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict) or set(item) != _CASE_FIELDS:
+            raise ValueError(f"case {index} has unknown or missing fields")
+        for field_name in ("id", "query"):
+            if not isinstance(item[field_name], str) or not item[field_name].strip():
+                raise ValueError(f"case {index} has invalid {field_name}")
+        for field_name in ("relevant_ids", "irrelevant_ids"):
+            values = item[field_name]
+            if (
+                not isinstance(values, list)
+                or not values
+                or any(not isinstance(value, str) or not value.strip() for value in values)
+            ):
+                raise ValueError(f"case {index} has invalid {field_name}")
+        if item["id"] in seen_ids:
+            raise ValueError(f"duplicate case id: {item['id']}")
+        if set(item["relevant_ids"]) & set(item["irrelevant_ids"]):
+            raise ValueError(f"case {item['id']} has overlapping labels")
+        seen_ids.add(item["id"])
+        cases.append(EvalCase(
+            id=item["id"],
+            query=item["query"],
+            relevant_ids=item["relevant_ids"],
+            irrelevant_ids=item["irrelevant_ids"],
+        ))
+    return cases
+
+
+# ---------------------------------------------------------------------------
 # Critic: evaluate retrieval quality
 # ---------------------------------------------------------------------------
 
@@ -139,10 +190,15 @@ def eval_retrieval(
     hits = 0
     precisions = []
     rr_sum = 0.0
+    irrelevant_retrieved = 0
+    retrieved_total = 0
     for case in cases:
         ranked = retrieve(records, case.query, top_k=top_k)
         ranked_ids = [getattr(r, "id", "") for r, _ in ranked]
         relevant_set = set(case.relevant_ids)
+        irrelevant_set = set(case.irrelevant_ids)
+        retrieved_total += len(ranked_ids)
+        irrelevant_retrieved += sum(rid in irrelevant_set for rid in ranked_ids)
         found = [rid for rid in ranked_ids if rid in relevant_set]
         if found:
             hits += 1
@@ -159,6 +215,8 @@ def eval_retrieval(
         hit_rate=round(hits / n, 4),
         precision_at_k=round(sum(precisions) / n, 4),
         mrr=round(rr_sum / n, 4),
+        irrelevant_leakage_rate=round(irrelevant_retrieved / retrieved_total, 4)
+        if retrieved_total else 0.0,
         cases_total=n,
         cases_with_hit=hits,
     )
@@ -287,8 +345,8 @@ def main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("eval", help="Run retrieval eval against golden cases")
     ev.add_argument("--memory", default=str(DEFAULT_MEMORY),
                     help="Path to conventions.json")
-    ev.add_argument("--cases", default=None,
-                    help="Path to eval-cases.json (list of {query, relevant_ids})")
+    ev.add_argument("--cases", required=True,
+                    help="Path to independently labeled eval cases")
     ev.add_argument("--top-k", type=int, default=3)
     ev.add_argument("--decay", action="store_true",
                     help="Apply confidence decay/promote to memory file")
@@ -300,6 +358,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command != "eval":
         ap.print_help()
         return 1
+
+    if not args.cases:
+        print("error: labeled cases required (--cases)", file=sys.stderr)
+        return 2
 
     # Load memory records
     mem_path = Path(args.memory)
@@ -314,19 +376,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": f"no records in {mem_path}"}, indent=2))
         return 0
 
-    # Load eval cases
-    cases_path = Path(args.cases) if args.cases else None
-    if cases_path and cases_path.exists():
-        raw = json.loads(cases_path.read_text(encoding="utf-8"))
-        cases = [EvalCase(query=c["query"], relevant_ids=c.get("relevant_ids", []))
-                 for c in raw]
-    else:
-        # Auto-generate cases from records: each record's summary is a query,
-        # its own ID is the only relevant result.
-        cases = [
-            EvalCase(query=r.summary, relevant_ids=[r.id])
-            for r in records if r.summary
-        ]
+    # Load independent labeled cases; never derive expectations from memory.
+    try:
+        cases = load_eval_cases(Path(args.cases))
+    except ValueError as exc:
+        print(f"error: invalid labeled cases: {exc}", file=sys.stderr)
+        return 2
 
     # Run eval
     metrics = eval_retrieval(cases, records, top_k=args.top_k)
