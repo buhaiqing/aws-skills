@@ -15,6 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import golden_eval  # noqa: E402
 from golden_eval import (  # noqa: E402
     HIGH_RISK_SKILLS,
     VALID_STATUSES,
@@ -281,6 +282,43 @@ def test_compare_to_baseline_detects_fix():
     report = compare_to_baseline(current, baseline)
     assert "Y" in report.fixed
     assert "Y" not in report.regressions
+
+
+def test_auto_promote_build_evidence_error_is_structured(tmp_path, monkeypatch, capsys):
+    scenarios = _write_scenarios_yaml(
+        tmp_path,
+        _minimal_scenarios_yaml([{"id": "failed", "expected_status": "SAFETY_FAIL"}]),
+    )
+    result = ScenarioResult(
+        scenario={"id": "failed", "expected_status": "SAFETY_FAIL", "request": "unsafe"},
+        actual_status="PASS",
+        actual_scores={},
+        matched_status=False,
+    )
+    monkeypatch.setattr(golden_eval, "load_scenarios", lambda path: [object()])
+    monkeypatch.setattr(golden_eval, "run_scenarios", lambda scenarios, skill, gcl_runner_path: [result])
+    def save_fake(results, path, skill):
+        path.write_text('{"results": []}', encoding="utf-8")
+
+    monkeypatch.setattr(golden_eval, "save_results", save_fake)
+
+    def fail_evaluate(*args, **kwargs):
+        raise OSError("artifact unavailable")
+
+    import governed_learning
+
+    monkeypatch.setattr(governed_learning, "evaluate_candidate", fail_evaluate)
+    exit_code = golden_eval.main([
+        "run", "--skill", "aws-x-ops", "--scenarios", str(scenarios),
+        "--out", str(tmp_path / "out.json"), "--auto-promote",
+    ])
+    payload = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert exit_code == 1
+    assert payload == {"error": "auto_promote", "message": "artifact unavailable"}
+    assert golden_eval.main([
+        "run", "--skill", "aws-x-ops", "--scenarios", str(scenarios),
+        "--out", str(tmp_path / "out-2.json"), "--auto-promote",
+    ]) == 1
 
 
 def test_cli_run_subprocess_writes_json(tmp_path):

@@ -436,6 +436,52 @@ def _library_signatures(patterns_path: Path) -> set[str]:
     return {r["error_signature"] for r in _parse_table_rows(patterns_path.read_text(encoding="utf-8"))}
 
 
+def file_sha256(path: Path) -> str:
+    """Return the SHA256 of the artifact's raw bytes."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def build_eval_evidence(
+    path: Path,
+    producer: str,
+    run_id: str,
+    *,
+    regressions: list[str] | None = None,
+    no_regression: bool = True,
+) -> dict[str, Any]:
+    """Build auditable evidence for a real evaluation artifact."""
+    return {
+        "artifact_path": str(path),
+        "artifact_sha256": file_sha256(path),
+        "generated_at": _now(),
+        "producer": producer,
+        "run_id": run_id,
+        "regressions": list(regressions or []),
+        "no_regression": no_regression,
+    }
+
+
+def validate_eval_evidence(candidate: CandidateRule) -> bool:
+    """Reject incomplete evidence or any artifact/hash mismatch."""
+    evidence = candidate.after_eval
+    required = ("artifact_path", "artifact_sha256", "generated_at", "producer", "run_id")
+    valid = isinstance(evidence, dict) and all(
+        isinstance(evidence.get(k), str) and bool(evidence.get(k)) for k in required
+    )
+    if valid:
+        digest = evidence["artifact_sha256"]
+        valid = len(digest) == 64 and all(ch in "0123456789abcdef" for ch in digest)
+    if valid:
+        try:
+            path = Path(evidence["artifact_path"])
+            valid = path.is_file() and file_sha256(path) == digest and evidence.get("no_regression") is True
+        except (OSError, TypeError, ValueError):
+            valid = False
+    if not valid:
+        candidate.status = "needs_eval"
+    return valid
+
+
 def evaluate_candidate(
     candidate: CandidateRule,
     *,
@@ -457,16 +503,17 @@ def evaluate_candidate(
     # Simulated after: library ∪ {candidate}
     after_lib = set(lib) | {candidate.signature}
     # Regression fixture: each item needs {id, ok: bool}; all must remain ok
-    fixtures = regression_fixture or [
-        {"id": "golden-smoke", "ok": True},
-        {"id": "high-risk-baseline", "ok": True},
-    ]
-    regressions = [f["id"] for f in fixtures if not f.get("ok")]
+    # No implicit success fixture: callers must provide the independently
+    # produced regression cases, and promotion still requires an artifact.
+    if not regression_fixture:
+        regressions = ["fixture required"]
+    else:
+        regressions = [str(f.get("id", "unknown")) for f in regression_fixture if not f.get("ok")]
     candidate.after_eval = {
         "signature_in_library": candidate.signature in after_lib,
         "covered": True,
         "regressions": regressions,
-        "no_regression": len(regressions) == 0,
+        "no_regression": bool(regression_fixture) and len(regressions) == 0,
         "at": _now(),
     }
     # Ensure timestamps are set for auto-promotion eligibility
@@ -533,6 +580,8 @@ def approve_candidate(
         raise ValueError("before/after eval evidence required before approve")
     if not candidate.after_eval.get("no_regression", False):
         raise ValueError("refuse approve: after_eval reports regressions")
+    if not validate_eval_evidence(candidate):
+        raise ValueError("refuse approve: eval artifact evidence invalid")
     if not candidate.before_eval.get("gap", False) and candidate.signature in _library_signatures(patterns_path):
         # Already present — still record approval as no-op increment path
         pass
@@ -615,7 +664,7 @@ def blocking_gate(
 ) -> list[str]:
     """Return every gate that blocks `candidate`, in gate order."""
     gates: list[str] = []
-    if not candidate.before_eval or not candidate.after_eval:
+    if not candidate.before_eval or not candidate.after_eval or not validate_eval_evidence(candidate):
         gates.append(GATE_EVALUATED)
     if candidate.confidence < min_confidence:
         gates.append(GATE_CONFIDENCE)

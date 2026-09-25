@@ -38,17 +38,26 @@ class Snapshot:
     # header only, so folding this in would make the whole snapshot red until
     # someone runs `make metrics`.
     metrics: dict = field(default_factory=lambda: {
-        "max_age_days": METRICS_MAX_AGE_DAYS, "ok": True,
+        "max_age_days": METRICS_MAX_AGE_DAYS, "ok": False,
     })
 
     @property
-    def all_ok(self) -> bool:
+    def harness_ok(self) -> bool:
         return bool(
             self.pytest["ok"]
             and self.ruff["ok"]
             and self.composite_lint["ok"]
             and self.self_review["ok"]
         )
+
+    @property
+    def all_ok(self) -> bool:
+        """Backward-compatible alias for harness health only."""
+        return self.harness_ok
+
+    @property
+    def rsi_ready(self) -> bool:
+        return self.harness_ok and self.metrics["ok"]
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, ensure_ascii=False)
@@ -59,10 +68,11 @@ class Snapshot:
         c = self.composite_lint
         s = self.self_review
         m = self.metrics
-        badge = "🟢 ALL GREEN" if self.all_ok else "🔴 GATE RED"
+        harness_badge = "🟢 HARNESS GREEN" if self.harness_ok else "🔴 GATE RED · HARNESS RED"
+        rsi_badge = "🟢 RSI READY" if self.rsi_ready else "🔴 RSI NOT READY"
         return (
             "# Harness Health Snapshot (auto-generated)\n\n"
-            f"> Generated: **{self.generated_at}** · {badge}\n"
+            f"> Generated: **{self.generated_at}** · {harness_badge} · {rsi_badge}\n"
             "> This file is produced by `make snapshot` (`scripts/status_snapshot.py`).\n"
             "> Do not edit by hand — it is overwritten on every run.\n\n"
             "## Live Evidence\n\n"
@@ -169,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         # default: human-readable markdown to stdout
         print(snap.to_markdown())
 
-    return 0 if snap.all_ok else 1
+    return 0 if snap.rsi_ready else 1
 
 
 if __name__ == "__main__":

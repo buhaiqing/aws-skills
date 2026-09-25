@@ -1,0 +1,78 @@
+name: RSI shadow loop
+"on":
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      trace_run_id:
+        description: "Existing workflow run containing the real trace artifact"
+        required: false
+        type: string
+      trace_artifact_name:
+        description: "Artifact name containing gcl-trace-*.json"
+        required: false
+        type: string
+        default: "rsi-real-traces"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test shadow loop contracts
+        run: pytest -v scripts/tests/test_learning_outcomes.py scripts/tests/test_rsi_shadow_workflow.py
+      - name: Evaluate labeled memory golden
+        run: |
+          python3 scripts/memory_eval.py eval \
+            --cases evals/memory-retrieval-golden.json \
+            --memory scripts/tests/fixtures/memory-conventions.json
+      - name: Download real trace artifact
+        if: ${{ (inputs.trace_run_id != '' || vars.RSI_TRACE_RUN_ID != '') && (inputs.trace_artifact_name != '' || vars.RSI_TRACE_ARTIFACT_NAME != '') }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.trace_artifact_name || vars.RSI_TRACE_ARTIFACT_NAME }}
+          run-id: ${{ inputs.trace_run_id || vars.RSI_TRACE_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: incoming-traces
+      - name: Harvest and evaluate real trace candidates in shadow mode
+        if: ${{ (inputs.trace_run_id != '' || vars.RSI_TRACE_RUN_ID != '') && (inputs.trace_artifact_name != '' || vars.RSI_TRACE_ARTIFACT_NAME != '') }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit-results/real-traces audit-results/rsi-shadow-loop
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import shutil
+          import sys
+          sys.path.insert(0, "scripts")
+          from gcl_metrics import is_real_trace
+          source = pathlib.Path("incoming-traces")
+          target = pathlib.Path("audit-results/real-traces")
+          for path in source.rglob("gcl-trace-*.json"):
+              try:
+                  trace = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError):
+                  continue
+              if is_real_trace(trace):
+                  shutil.copy2(path, target / path.name)
+          PY
+          python3 scripts/gcl_metrics.py --audit-dir audit-results/real-traces --out audit-results/rsi-shadow-loop/real-metrics.md
+          python3 scripts/governed_learning.py harvest --audit-dir audit-results/real-traces --out audit-results/rsi-shadow-loop/queue.json
+          python3 scripts/governed_learning.py evaluate --queue audit-results/rsi-shadow-loop/queue.json --out audit-results/rsi-shadow-loop/queue.json
+          python3 scripts/learning_outcomes.py record-queue --queue audit-results/rsi-shadow-loop/queue.json --ledger audit-results/rsi-shadow-loop/outcomes.jsonl
+          python3 scripts/learning_outcomes.py report --ledger audit-results/rsi-shadow-loop/outcomes.jsonl
+      - name: Record no-input shadow outcome
+        if: ${{ (inputs.trace_run_id == '' && vars.RSI_TRACE_RUN_ID == '') || (inputs.trace_artifact_name == '' && vars.RSI_TRACE_ARTIFACT_NAME == '') }}
+        run: |
+          mkdir -p audit-results/rsi-shadow-loop
+          printf '%s\n' "no real trace artifact configured; shadow loop skipped" > audit-results/rsi-shadow-loop/summary.txt
+      - name: Upload outcome artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsi-shadow-outcomes
+          path: audit-results/rsi-shadow-loop/

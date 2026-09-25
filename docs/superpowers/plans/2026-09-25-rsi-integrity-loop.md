@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-25-rsi-integrity-loop-design.md`
 
+**Execution status (2026-09-25):** Tasks 1–5 implemented and GCL-reviewed. Three independent Critics identified fail-open contracts; targeted fixes now enforce non-empty real commands, fail-closed readiness/evidence, structured auto-promote errors, conflict-safe outcome IDs, and scheduled memory evaluation. Final deterministic gates and merge remain.
+
 ## Global Constraints
 
 - 不执行或修改 AWS 资源。

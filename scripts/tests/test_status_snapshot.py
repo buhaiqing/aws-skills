@@ -95,6 +95,38 @@ def test_snapshot_all_ok_false_when_any_red():
     assert "GATE RED" in snap.to_markdown()
 
 
+def test_snapshot_separates_harness_green_from_stale_rsi_metrics():
+    snap = ss.Snapshot(
+        generated_at="2026-09-25",
+        pytest={"passed": 1, "failed": 0, "error": 0, "ok": True},
+        ruff={"errors": 0, "ok": True},
+        composite_lint={"ok": True},
+        self_review={"stale_p0": 0, "ok": True},
+        metrics={"max_age_days": 7, "ok": False},
+    )
+
+    assert snap.all_ok is True
+    assert snap.harness_ok is True
+    assert snap.rsi_ready is False
+    md = snap.to_markdown()
+    assert "ALL GREEN" not in md
+    assert "HARNESS GREEN" in md
+    assert "RSI NOT READY" in md
+
+
+def test_snapshot_main_fails_when_rsi_metrics_stale(monkeypatch):
+    snap = ss.Snapshot(
+        generated_at="2026-09-25",
+        pytest={"passed": 1, "failed": 0, "error": 0, "ok": True},
+        ruff={"errors": 0, "ok": True},
+        composite_lint={"ok": True},
+        self_review={"stale_p0": 0, "ok": True},
+        metrics={"max_age_days": 7, "ok": False},
+    )
+    monkeypatch.setattr(ss, "build_snapshot", lambda: snap)
+    assert ss.main([]) == 1
+
+
 def test_snapshot_all_ok_true_when_green():
     snap = ss.Snapshot(
         generated_at="2026-07-27",
@@ -105,7 +137,9 @@ def test_snapshot_all_ok_true_when_green():
     )
     assert snap.all_ok is True
     md = snap.to_markdown()
-    assert "ALL GREEN" in md
+    assert "ALL GREEN" not in md
+    assert "HARNESS GREEN" in md
+    assert "RSI NOT READY" in md
     assert "auto-generated" in md
 
 

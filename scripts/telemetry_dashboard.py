@@ -22,14 +22,16 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
+from collections.abc import Sequence
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from gcl_metrics import read_timeseries
+from gcl_metrics import is_real_trace, read_timeseries
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_AUDIT_DIR = REPO / "audit-results"
@@ -107,8 +109,10 @@ def _trace_timestamp(trace: dict, path: Path) -> datetime | None:
         return None
 
 
-def load_signals(audit_dir: Path) -> list[SignalSlice]:
-    """Walk audit-results/ and unify all telemetry sources into SignalSlice."""
+def load_signals(
+    audit_dir: Path, golden_files: Sequence[Path] | None = None,
+) -> list[SignalSlice]:
+    """Load real traces and only explicitly selected Golden artifacts."""
     audit_dir = Path(audit_dir)
     signals: list[SignalSlice] = []
 
@@ -119,7 +123,7 @@ def load_signals(audit_dir: Path) -> list[SignalSlice]:
         except (json.JSONDecodeError, OSError):
             continue
         # Skip plan artifacts (no `iterations` key, or no final.status)
-        if "iterations" not in trace:
+        if "iterations" not in trace or not is_real_trace(trace):
             continue
         final = trace.get("final") or {}
         status = final.get("status", "OTHER")
@@ -146,33 +150,37 @@ def load_signals(audit_dir: Path) -> list[SignalSlice]:
             source="gcl-trace", fail_dim=fail_dim,
         ))
 
-    # Source 2: golden/*.json (golden_eval results)
-    golden_dir = audit_dir / "golden"
-    if golden_dir.exists():
-        for p in sorted(golden_dir.glob("*.json")):
-            try:
-                payload = json.loads(p.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+    # Source 2: explicitly selected golden_eval artifacts.
+    seen_golden: set[tuple[str, str, str]] = set()
+    for p in golden_files or ():
+        try:
+            payload = json.loads(Path(p).read_text(encoding="utf-8"))
+            ts = datetime.fromtimestamp(Path(p).stat().st_mtime, tz=timezone.utc)
+        except (json.JSONDecodeError, OSError):
+            continue
+        file_skill = payload.get("skill") or ""
+        for r in payload.get("results", []):
+            scenario = r.get("scenario") or {}
+            scenario_id = str(scenario.get("id", "?"))
+            skill_name = file_skill or scenario_id.split("-")[0]
+            run_id = payload.get("run_id") or r.get("run_id")
+            if run_id:
+                identity = (skill_name, scenario_id, str(run_id))
+            else:
+                content = json.dumps(
+                    r, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                ).encode("utf-8")
+                identity = (skill_name, scenario_id, hashlib.sha256(content).hexdigest())
+            if identity in seen_golden:
                 continue
-            # Top-level skill (recorded at golden_eval.save_results time).
-            # Fall back to scenario id prefix for older JSON without `skill`.
-            ts = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            file_skill = payload.get("skill") or ""
-            for r in payload.get("results", []):
-                scenario = r.get("scenario") or {}
-                # Prefer file-level skill; else fall back to id prefix
-                if file_skill:
-                    skill_name = file_skill
-                else:
-                    sid = str(scenario.get("id", "?"))
-                    skill_name = sid.split("-")[0]
-                signals.append(SignalSlice(
-                    skill=skill_name,
-                    status="PASS" if r.get("matched_status") else "MISMATCH",
-                    timestamp=ts,
-                    source="golden",
-                    scenario_id=str(scenario.get("id")),
-                ))
+            seen_golden.add(identity)
+            signals.append(SignalSlice(
+                skill=skill_name,
+                status="PASS" if r.get("matched_status") else "MISMATCH",
+                timestamp=ts,
+                source="golden",
+                scenario_id=scenario_id,
+            ))
 
     # Source 3: failure-patterns.md (reflexion — count rows with count>=3)
     fp = audit_dir.parent / "docs" / "failure-patterns.md"
@@ -399,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Output path; '-' for stdout")
     dash_p.add_argument("--timeseries", default=None,
                         help="CSV of historical pass-rates (prior source of truth)")
+    dash_p.add_argument("--golden-file", action="append", default=[],
+                        type=Path, help="Explicit Golden artifact; repeatable")
 
     alert_p = sub.add_parser("alert",
                              help="CI alert: exit 1 if any skill regressed")
@@ -408,10 +418,12 @@ def main(argv: list[str] | None = None) -> int:
                          help="Pass-rate drop that triggers alert (default 0.05)")
     alert_p.add_argument("--timeseries", default=None,
                          help="CSV of historical pass-rates (prior source of truth)")
+    alert_p.add_argument("--golden-file", action="append", default=[],
+                         type=Path, help="Explicit Golden artifact; repeatable")
 
     args = ap.parse_args(argv)
     audit_dir = Path(args.audit_dir)
-    signals = load_signals(audit_dir)
+    signals = load_signals(audit_dir, golden_files=args.golden_file)
     now = datetime.now(timezone.utc)
     prior = None
     if args.timeseries:

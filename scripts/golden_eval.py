@@ -560,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
                 from governed_learning import (
                     candidate_from_parts as _cfp,
                     evaluate_candidate as _gl_eval,
+                    build_eval_evidence as _gl_evidence,
                     auto_promote as _gl_promote,
                 )
                 fp = REPO / "docs" / "failure-patterns.jsonl"
@@ -576,12 +577,33 @@ def main(argv: list[str] | None = None) -> int:
                             source=f"golden_eval:{r.scenario.get('id', '?')}",
                         ))
                 if _gl_cands:
-                    _gl_cands = [_gl_eval(c, patterns_path=fp) for c in _gl_cands]
+                    artifact = Path(args.out)
+                    fixture = [
+                        {"id": r.scenario.get("id", "?"), "ok": r.matched_status}
+                        for r in results
+                    ]
+                    regressions = [
+                        str(item["id"]) for item in fixture if not item["ok"]
+                    ]
+                    evidence = _gl_evidence(
+                        artifact,
+                        producer="golden_eval",
+                        run_id=str(artifact),
+                        regressions=regressions,
+                        no_regression=not regressions,
+                    )
+                    _gl_cands = [
+                        _gl_eval(c, patterns_path=fp, regression_fixture=fixture)
+                        for c in _gl_cands
+                    ]
+                    for c in _gl_cands:
+                        c.after_eval.update(evidence)
                     _gl_promoted = _gl_promote(_gl_cands, patterns_path=fp)
                     if _gl_promoted:
                         print(f"auto-promote: {len(_gl_promoted)} candidate(s) promoted from golden eval")
-            except Exception:
-                pass  # non-fatal
+            except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+                print(json.dumps({"error": "auto_promote", "message": str(exc)}))
+                return 1
 
         return _emit_run_summary(results)
 
