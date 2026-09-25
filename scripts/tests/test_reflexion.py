@@ -554,3 +554,73 @@ def test_committed_md_equals_fresh_render_of_canonical_jsonl(tmp_path):
         "committed md drifted from canonical jsonl — re-run "
         "scripts/_render_failure_patterns.py"
     )
+
+# --- O3: check-reflexion-freshness CLI ---
+
+def _write_patterns_jsonl(path: Path, last_seen_dates):
+    rows = [
+        json.dumps({
+            "skill": f"svc{i}", "command": "cmd", "error": "err",
+            "root_cause": "rc", "fix": "fx", "timestamp": "2026-01-01T00:00:00Z",
+            "count": 1, "last_seen": d, "error_signature": f"svc{i}|cmd|err",
+            "source": "gcl_trace",
+        })
+        for i, d in enumerate(last_seen_dates)
+    ]
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def test_check_reflexion_freshness_stale(tmp_path):
+    """Newest last_seen older than --days → exit 1 + stderr 'stale'."""
+    p = tmp_path / "failure-patterns.jsonl"
+    _write_patterns_jsonl(p, ["2026-09-14"])  # 10 days before as-of
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "self_review.py"),
+         "check-reflexion-freshness", "--patterns", str(p),
+         "--days", "7", "--as-of", "2026-09-24"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 1, f"stderr={result.stderr}"
+    assert "stale" in result.stderr
+
+
+def test_check_reflexion_freshness_fresh(tmp_path):
+    """Newest last_seen within --days → exit 0."""
+    p = tmp_path / "failure-patterns.jsonl"
+    _write_patterns_jsonl(p, ["2026-09-22"])  # 2 days before as-of
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "self_review.py"),
+         "check-reflexion-freshness", "--patterns", str(p),
+         "--days", "7", "--as-of", "2026-09-24"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 0, f"stderr={result.stderr}"
+    assert "fresh" in result.stdout
+
+
+def test_check_reflexion_freshness_missing_file(tmp_path):
+    """Missing JSONL → exit 1 + stderr 'missing'."""
+    p = tmp_path / "absent.jsonl"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "self_review.py"),
+         "check-reflexion-freshness", "--patterns", str(p),
+         "--days", "7", "--as-of", "2026-09-24"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 1
+    assert "missing" in result.stderr
+
+def test_check_reflexion_freshness_malformed_jsonl(tmp_path):
+    """Corrupt line in JSONL → exit 1 + clean stderr (no traceback), R2 fix."""
+    p = tmp_path / "failure-patterns.jsonl"
+    p.write_text('{"skill": "svc", "last_seen": "2026-09-22"}\nNOT-JSON\n',
+                 encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "self_review.py"),
+         "check-reflexion-freshness", "--patterns", str(p),
+         "--days", "7", "--as-of", "2026-09-24"],
+        capture_output=True, text=True, check=False, cwd=str(REPO),
+    )
+    assert result.returncode == 1
+    assert "malformed JSONL" in result.stderr
+    assert "Traceback" not in result.stderr, "must fail closed with clean message"
