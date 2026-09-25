@@ -42,13 +42,22 @@ class Snapshot:
     })
 
     @property
-    def all_ok(self) -> bool:
+    def harness_ok(self) -> bool:
         return bool(
             self.pytest["ok"]
             and self.ruff["ok"]
             and self.composite_lint["ok"]
             and self.self_review["ok"]
         )
+
+    @property
+    def all_ok(self) -> bool:
+        """Backward-compatible alias for harness health only."""
+        return self.harness_ok
+
+    @property
+    def rsi_ready(self) -> bool:
+        return self.harness_ok and self.metrics["ok"]
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, ensure_ascii=False)
@@ -59,10 +68,11 @@ class Snapshot:
         c = self.composite_lint
         s = self.self_review
         m = self.metrics
-        badge = "🟢 ALL GREEN" if self.all_ok else "🔴 GATE RED"
+        harness_badge = "🟢 HARNESS GREEN" if self.harness_ok else "🔴 GATE RED · HARNESS RED"
+        rsi_badge = "🟢 RSI READY" if self.rsi_ready else "🔴 RSI NOT READY"
         return (
             "# Harness Health Snapshot (auto-generated)\n\n"
-            f"> Generated: **{self.generated_at}** · {badge}\n"
+            f"> Generated: **{self.generated_at}** · {harness_badge} · {rsi_badge}\n"
             "> This file is produced by `make snapshot` (`scripts/status_snapshot.py`).\n"
             "> Do not edit by hand — it is overwritten on every run.\n\n"
             "## Live Evidence\n\n"

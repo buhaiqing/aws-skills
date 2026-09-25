@@ -36,21 +36,68 @@ def _make_signal(skill: str, status: str, days_ago: int,
     )
 
 
-def test_load_signals_parses_real_audit_results():
-    """Real audit-results/: distinguishes real traces from plan artifacts.
+def test_load_signals_excludes_self_test_traces(tmp_path):
+    real = {
+        "skill": "aws-real-ops",
+        "iterations": [{"generator": {"command": "aws s3api list-buckets"}}],
+        "final": {"status": "PASS"},
+    }
+    stub = {
+        "skill": "aws-stub-ops",
+        "iterations": [{"generator": {"command": "aws --self-test"}}],
+        "final": {"status": "PASS"},
+    }
+    (tmp_path / "gcl-trace-20260925-010101.json").write_text(json.dumps(real))
+    (tmp_path / "gcl-trace-20260925-010102.json").write_text(json.dumps(stub))
 
-    Uses the actual repo's audit-results/ as fixture. Must read ≥1 PASS,
-    ≥1 SAFETY_FAIL, and ignore the 2 plan_artifacts.
-    """
+    assert {s.skill for s in load_signals(tmp_path)} == {"aws-real-ops"}
+
+
+def _write_golden(path: Path, run_id: str | None, scenario_id: str = "s3-list"):
+    payload = {
+        "skill": "aws-x-ops",
+        "run_id": run_id,
+        "results": [{"scenario": {"id": scenario_id}, "matched_status": True}],
+    }
+    path.write_text(json.dumps(payload))
+
+
+def test_load_signals_requires_explicit_golden_files(tmp_path):
+    golden = tmp_path / "golden"
+    golden.mkdir()
+    _write_golden(golden / "aws-x-ops-current.json", "run-1")
+    _write_golden(golden / "aws-x-ops-baseline.json", "run-0")
+
+    assert load_signals(tmp_path) == []
+
+
+def test_load_signals_deduplicates_explicit_golden_by_run_id(tmp_path):
+    first = tmp_path / "first.json"
+    duplicate = tmp_path / "duplicate.json"
+    different = tmp_path / "different.json"
+    _write_golden(first, "run-1")
+    _write_golden(duplicate, "run-1")
+    _write_golden(different, "run-2", "s3-write")
+
+    signals = load_signals(tmp_path, golden_files=[first, duplicate, different])
+    assert [s.scenario_id for s in signals] == ["s3-list", "s3-write"]
+
+
+def test_load_signals_deduplicates_golden_without_run_id_by_content(tmp_path):
+    first = tmp_path / "first.json"
+    duplicate = tmp_path / "duplicate.json"
+    _write_golden(first, None)
+    _write_golden(duplicate, None)
+
+    signals = load_signals(tmp_path, golden_files=[first, duplicate])
+    assert [s.scenario_id for s in signals] == ["s3-list"]
+
+
+def test_load_signals_does_not_treat_stub_audit_results_as_real():
     audit_dir = REPO / "audit-results"
     if not audit_dir.exists():
-        return  # skip if no audit-results in clone
-    signals = load_signals(audit_dir)
-    statuses = {s.status for s in signals}
-    # We expect at minimum some PASS and some SAFETY_FAIL given fixture mix
-    assert "PASS" in statuses or "SAFETY_FAIL" in statuses, (
-        f"no recognizable signals found; statuses={statuses}"
-    )
+        return
+    assert load_signals(audit_dir) == []
 
 
 def test_compute_dashboard_per_skill_pass_rate():
