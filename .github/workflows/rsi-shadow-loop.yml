@@ -1,0 +1,28 @@
+name: RSI shadow loop
+"on":
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test shadow ledger
+        run: pytest -v scripts/tests/test_learning_outcomes.py scripts/tests/test_rsi_shadow_workflow.py
+      - name: Harvest real trace shadow artifacts
+        run: |
+          mkdir -p audit-results/rsi-shadow-loop
+          python3 scripts/learning_outcomes.py verify --ledger audit-results/rsi-shadow-loop/outcomes.jsonl || true
+          # Shadow mode only: existing harnesses produce artifacts without mutating AWS or rules.
+          python3 scripts/gcl_runner.py --self-test > audit-results/rsi-shadow-loop/real-trace.log
+      - name: Upload outcome artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsi-shadow-outcomes
+          path: audit-results/rsi-shadow-loop/
