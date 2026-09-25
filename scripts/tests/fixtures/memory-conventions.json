@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-09-25T00:00:00Z",
+  "records": [
+    {"id":"aws-region","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"AWS default region us-east-1","detail":"Use us-east-1 unless service constraints require otherwise","confidence":1.0,"source_session":"fixture","tags":["aws","region"]},
+    {"id":"s3-versioning","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"S3 buckets require versioning","detail":"Enable versioning for production buckets","confidence":1.0,"source_session":"fixture","tags":["s3","storage"]},
+    {"id":"ec2-tags","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"EC2 instances require owner tags","detail":"Tag every instance with owner and cost-center","confidence":1.0,"source_session":"fixture","tags":["ec2","tags"]},
+    {"id":"iam-least-privilege","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"IAM policies follow least privilege","detail":"Grant only actions required by the workload","confidence":1.0,"source_session":"fixture","tags":["iam","security"]},
+    {"id":"pytest-command","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Python tests require verbose output","detail":"Run pytest with -v","confidence":1.0,"source_session":"fixture","tags":["python","testing"]},
+    {"id":"ruff-scope","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Ruff checks only changed Python files","detail":"Use scoped ruff checks during surgical edits","confidence":1.0,"source_session":"fixture","tags":["python","lint"]},
+    {"id":"evidence-before-claims","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Verify evidence before completion claims","detail":"Run the requested command and inspect its result","confidence":1.0,"source_session":"fixture","tags":["workflow","testing"]},
+    {"id":"credentials-relative","timestamp":"2026-09-25T00:00:00Z","scope":"repo-fact","summary":"Credentials use repository-relative paths","detail":"Resolve credential files from REPO_ROOT","confidence":1.0,"source_session":"fixture","tags":["credentials","paths"]},
+    {"id":"no-production-aws","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Never modify production AWS resources","detail":"Evaluation and tests are local only","confidence":1.0,"source_session":"fixture","tags":["aws","safety"]},
+    {"id":"token-economy","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Token efficiency is a release gate","detail":"Measure token use before declaring completion","confidence":1.0,"source_session":"fixture","tags":["tokens","workflow"]},
+    {"id":"worktree-isolation","timestamp":"2026-09-25T00:00:00Z","scope":"convention","summary":"Feature work uses an isolated worktree","detail":"Develop each feature in a dedicated Git worktree","confidence":1.0,"source_session":"fixture","tags":["git","workflow"]},
+    {"id":"unknown-record","timestamp":"2026-09-25T00:00:00Z","scope":"repo-fact","summary":"Unrelated local documentation convention","detail":"Not relevant to operational retrieval cases","confidence":0.2,"source_session":"fixture","tags":["docs"]}
+  ]
+}

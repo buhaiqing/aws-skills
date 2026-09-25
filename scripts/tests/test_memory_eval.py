@@ -8,12 +8,14 @@ Property invariants:
 """
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
@@ -24,9 +26,13 @@ from memory_eval import (  # noqa: E402
     CONFIDENCE_FLOOR,
     EvalCase,
     GateResult,
+    MIN_CASES,
     RetrievalMetrics,
     eval_retrieval,
     gcl_gate_memory,
+    load_eval_cases,
+    main,
+    report,
     retrieve,
 )
 
@@ -191,6 +197,82 @@ def test_auto_derive_eligibility():
         1 for g in results2 if g.new_confidence >= AUTO_DERIVE_THRESHOLD
     )
     assert eligible2 >= 1
+
+
+# ---------------------------------------------------------------------------
+# Labeled golden contract
+# ---------------------------------------------------------------------------
+
+
+def _case(index: int, **overrides) -> dict:
+    case = {
+        "id": f"case-{index}",
+        "query": f"aws region {index}",
+        "relevant_ids": [f"mem-{index}"],
+        "irrelevant_ids": [f"mem-{index + MIN_CASES}"],
+    }
+    case.update(overrides)
+    return case
+
+
+def _write_cases(tmp_path: Path, cases: list[dict]) -> Path:
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps(cases), encoding="utf-8")
+    return path
+
+
+def test_golden_has_at_least_eight_unique_independent_cases():
+    cases = load_eval_cases(REPO / "evals/memory-retrieval-golden.json")
+    assert len(cases) >= MIN_CASES
+    assert len({case.id for case in cases}) == len(cases)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda case: case.pop("id"),
+    lambda case: case.pop("query"),
+    lambda case: case.pop("relevant_ids"),
+    lambda case: case.pop("irrelevant_ids"),
+    lambda case: case.update(extra=True),
+    lambda case: case.update(relevant_ids=[]),
+    lambda case: case.update(query=""),
+])
+def test_loader_rejects_invalid_schema(tmp_path, mutate):
+    cases = [_case(i) for i in range(MIN_CASES)]
+    mutate(cases[0])
+    with pytest.raises(ValueError):
+        load_eval_cases(_write_cases(tmp_path, cases))
+
+
+def test_loader_rejects_duplicate_ids_and_insufficient_sample(tmp_path):
+    cases = [_case(i) for i in range(MIN_CASES)]
+    cases[-1]["id"] = cases[0]["id"]
+    with pytest.raises(ValueError, match="duplicate"):
+        load_eval_cases(_write_cases(tmp_path, cases))
+    with pytest.raises(ValueError, match="at least"):
+        load_eval_cases(_write_cases(tmp_path, cases[:-1]))
+
+
+def test_loader_rejects_malformed_json_and_non_list(tmp_path):
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_eval_cases(malformed)
+    with pytest.raises(ValueError):
+        load_eval_cases(_write_cases(tmp_path, {"cases": []}))
+
+
+def test_irrelevant_leakage_is_reported_separately():
+    records = [_rec("relevant", "aws region convention"), _rec("irrelevant", "aws region detail")]
+    case = EvalCase(id="leak", query="aws region", relevant_ids=["relevant"], irrelevant_ids=["irrelevant"])
+    output = report(eval_retrieval([case], records, top_k=2), gcl_gate_memory(records, [case], top_k=2))
+    assert output["retrieval"]["irrelevant_leakage_rate"] == 0.5
+
+
+def test_cli_requires_labeled_cases(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["eval", "--memory", str(REPO / "scripts/tests/fixtures/memory-conventions.json")])
+    assert exc.value.code == 2
+    assert "--cases" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
