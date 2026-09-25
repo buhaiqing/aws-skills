@@ -57,6 +57,10 @@ def test_report_counts_chain_and_delta_and_rollback_rate():
     assert report["post_deploy_delta"] == 4
     assert report["rollback_rate"] == 1.0
 
+    without_rollback = build_report(events[:5])
+    assert without_rollback["complete_chains"] == 1
+    assert without_rollback["rollback_rate"] == 0.0
+
 
 def test_report_rejects_missing_delta_and_out_of_order_chain():
     with pytest.raises(ValueError):

@@ -9,7 +9,8 @@ from collections import Counter
 from pathlib import Path
 
 EVENT_TYPES = frozenset({"candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured", "rollback_recorded"})
-CHAIN = ("candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured", "rollback_recorded")
+CORE_CHAIN = ("candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured")
+ROLLBACK_EVENT = "rollback_recorded"
 
 
 def _validate(event: dict) -> None:
@@ -92,12 +93,14 @@ def build_report(events: list[dict]) -> dict:
         candidate_id = event["candidate_id"]
         event_type = event["event_type"]
         prior = seen.setdefault(candidate_id, set())
-        if event_type in CHAIN[1:] and not set(CHAIN[:CHAIN.index(event_type)]).issubset(prior):
+        if event_type in CORE_CHAIN[1:] and not set(CORE_CHAIN[:CORE_CHAIN.index(event_type)]).issubset(prior):
             raise ValueError("candidate event chain is out of order")
+        if event_type == ROLLBACK_EVENT and not set(CORE_CHAIN).issubset(prior):
+            raise ValueError("candidate rollback is out of order")
         prior.add(event_type)
     complete = {
         candidate_id for candidate_id in candidates
-        if set(CHAIN).issubset(seen.get(candidate_id, set()))
+        if set(CORE_CHAIN).issubset(seen.get(candidate_id, set()))
     }
     measured = [e for e in events if e["event_type"] == "post_deploy_measured"]
     rolled = {e["candidate_id"] for e in events if e["event_type"] == "rollback_recorded"}
