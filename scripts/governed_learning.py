@@ -465,16 +465,21 @@ def validate_eval_evidence(candidate: CandidateRule) -> bool:
     """Reject incomplete evidence or any artifact/hash mismatch."""
     evidence = candidate.after_eval
     required = ("artifact_path", "artifact_sha256", "generated_at", "producer", "run_id")
-    if not isinstance(evidence, dict) or any(not isinstance(evidence.get(k), str) or not evidence[k] for k in required):
-        return False
-    digest = evidence["artifact_sha256"]
-    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
-        return False
-    try:
-        path = Path(evidence["artifact_path"])
-        return path.is_file() and file_sha256(path) == digest and evidence.get("no_regression") is True
-    except (OSError, TypeError, ValueError):
-        return False
+    valid = isinstance(evidence, dict) and all(
+        isinstance(evidence.get(k), str) and bool(evidence.get(k)) for k in required
+    )
+    if valid:
+        digest = evidence["artifact_sha256"]
+        valid = len(digest) == 64 and all(ch in "0123456789abcdef" for ch in digest)
+    if valid:
+        try:
+            path = Path(evidence["artifact_path"])
+            valid = path.is_file() and file_sha256(path) == digest and evidence.get("no_regression") is True
+        except (OSError, TypeError, ValueError):
+            valid = False
+    if not valid:
+        candidate.status = "needs_eval"
+    return valid
 
 
 def evaluate_candidate(
@@ -500,7 +505,7 @@ def evaluate_candidate(
     # Regression fixture: each item needs {id, ok: bool}; all must remain ok
     # No implicit success fixture: callers must provide the independently
     # produced regression cases, and promotion still requires an artifact.
-    if regression_fixture is None:
+    if not regression_fixture:
         regressions = ["fixture required"]
     else:
         regressions = [str(f.get("id", "unknown")) for f in regression_fixture if not f.get("ok")]
@@ -508,7 +513,7 @@ def evaluate_candidate(
         "signature_in_library": candidate.signature in after_lib,
         "covered": True,
         "regressions": regressions,
-        "no_regression": regression_fixture is not None and len(regressions) == 0,
+        "no_regression": bool(regression_fixture) and len(regressions) == 0,
         "at": _now(),
     }
     # Ensure timestamps are set for auto-promotion eligibility

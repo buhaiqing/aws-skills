@@ -180,6 +180,7 @@ def test_eval_evidence_fails_closed(tmp_path):
         broken = _make_candidate(tmp_path)
         broken.after_eval.pop(key)
         assert validate_eval_evidence(broken) is False
+        assert broken.status == "needs_eval"
         assert blocking_gate(broken, lib=set(), now=datetime.now(timezone.utc))
 
     artifact.unlink()
@@ -201,6 +202,11 @@ def test_evaluate_requires_regression_fixture(tmp_path):
     assert evaluated.after_eval["no_regression"] is False
     assert "fixture required" in evaluated.after_eval["regressions"]
     assert before_evidence["artifact_sha256"]  # old evidence is never treated as valid
+
+    empty_candidate = _make_candidate(tmp_path)
+    empty_evaluated = evaluate_candidate(empty_candidate, patterns_path=_fresh_patterns(tmp_path), regression_fixture=[])
+    assert empty_evaluated.status == "needs_eval"
+    assert empty_evaluated.after_eval["no_regression"] is False
 
     fixture_candidate = _make_candidate(tmp_path)
     evaluated = evaluate_candidate(

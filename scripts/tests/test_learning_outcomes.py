@@ -23,6 +23,16 @@ def test_append_is_idempotent_and_append_only(tmp_path):
     assert [json.loads(line)["event_id"] for line in path.read_text().splitlines()] == ["a", "b"]
 
 
+def test_duplicate_event_id_with_different_payload_fails_closed(tmp_path):
+    path = tmp_path / "outcomes.jsonl"
+    append_event(path, event("a", "candidate_proposed"))
+    with pytest.raises(ValueError, match="event_id conflict"):
+        append_event(path, event("a", "candidate_evaluated"))
+    assert verify_ledger(path)
+    path.write_text(path.read_text() + path.read_text().splitlines()[0] + "\n")
+    assert not verify_ledger(path)
+
+
 def test_malformed_event_fails_closed(tmp_path):
     path = tmp_path / "outcomes.jsonl"
     with pytest.raises(ValueError):

@@ -601,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
                     _gl_promoted = _gl_promote(_gl_cands, patterns_path=fp)
                     if _gl_promoted:
                         print(f"auto-promote: {len(_gl_promoted)} candidate(s) promoted from golden eval")
-            except (OSError, ValueError, TypeError, KeyError) as exc:
+            except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
                 print(json.dumps({"error": "auto_promote", "message": str(exc)}))
                 return 1
 

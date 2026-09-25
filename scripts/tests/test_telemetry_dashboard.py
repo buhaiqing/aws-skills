@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from gcl_metrics import append_timeseries, collect_traces  # noqa: E402
+from gcl_metrics import append_timeseries, collect_traces, is_real_trace  # noqa: E402
 from telemetry_dashboard import (  # noqa: E402
     SignalSlice,
     load_signals,
@@ -25,6 +25,13 @@ from telemetry_dashboard import (  # noqa: E402
     detect_regressions,
     render_markdown,
 )
+
+
+def test_real_trace_requires_nonempty_command():
+    assert not is_real_trace({"iterations": [{"generator": {}}]})
+    assert not is_real_trace({"iterations": [{"generator": {"command": ""}}]})
+    assert not is_real_trace({"iterations": [{"generator": {"command": "aws --self-test"}}]})
+    assert is_real_trace({"iterations": [{"generator": {"command": "pytest -q"}}]})
 
 
 def _make_signal(skill: str, status: str, days_ago: int,

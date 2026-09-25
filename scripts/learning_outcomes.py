@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 EVENT_TYPES = frozenset({"candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured", "rollback_recorded"})
-CHAIN = ("candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured")
+CHAIN = ("candidate_proposed", "candidate_evaluated", "promotion_recorded", "deployment_observed", "post_deploy_measured", "rollback_recorded")
 
 
 def _validate(event: dict) -> None:
@@ -35,6 +35,8 @@ def append_event(path: Path, event: dict) -> bool:
             except json.JSONDecodeError as exc:
                 raise ValueError("malformed ledger") from exc
             if existing.get("event_id") == event["event_id"]:
+                if existing != event:
+                    raise ValueError(f"event_id conflict: {event['event_id']}")
                 return False
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
@@ -43,8 +45,13 @@ def append_event(path: Path, event: dict) -> bool:
 
 def verify_ledger(path: Path) -> bool:
     try:
+        seen: set[str] = set()
         for line in path.read_text().splitlines():
-            _validate(json.loads(line))
+            event = json.loads(line)
+            _validate(event)
+            if event["event_id"] in seen:
+                return False
+            seen.add(event["event_id"])
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return False
     return True
@@ -72,8 +79,12 @@ def record_queue(queue_path: Path, ledger_path: Path) -> int:
 
 
 def build_report(events: list[dict]) -> dict:
+    seen_ids: set[str] = set()
     for event in events:
         _validate(event)
+        if event["event_id"] in seen_ids:
+            raise ValueError(f"duplicate event_id: {event['event_id']}")
+        seen_ids.add(event["event_id"])
     counts = Counter(e["event_type"] for e in events)
     candidates = {e["candidate_id"] for e in events if e["event_type"] == "candidate_proposed"}
     seen: dict[str, set[str]] = {}

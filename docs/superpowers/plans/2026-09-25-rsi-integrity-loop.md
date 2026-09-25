@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-25-rsi-integrity-loop-design.md`
 
-**Execution status (2026-09-25):** Tasks 1–4 implemented and integrated; Task 5 final contract sync and GCL verification in progress. Critic harness returned empty output, so the main Agent performed the evidence-based review and fixed the discovered blockers before final verification.
+**Execution status (2026-09-25):** Tasks 1–5 implemented and GCL-reviewed. Three independent Critics identified fail-open contracts; targeted fixes now enforce non-empty real commands, fail-closed readiness/evidence, structured auto-promote errors, conflict-safe outcome IDs, and scheduled memory evaluation. Final deterministic gates and merge remain.
 
 ## Global Constraints
 

@@ -71,7 +71,7 @@ def is_real_trace(trace: dict) -> bool:
     if not iters:
         return False
     last_cmd = iters[-1].get("generator", {}).get("command", "")
-    return last_cmd != SELF_TEST_COMMAND
+    return isinstance(last_cmd, str) and bool(last_cmd.strip()) and last_cmd.strip() != SELF_TEST_COMMAND
 
 
 def collect_traces(

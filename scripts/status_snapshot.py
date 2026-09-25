@@ -38,7 +38,7 @@ class Snapshot:
     # header only, so folding this in would make the whole snapshot red until
     # someone runs `make metrics`.
     metrics: dict = field(default_factory=lambda: {
-        "max_age_days": METRICS_MAX_AGE_DAYS, "ok": True,
+        "max_age_days": METRICS_MAX_AGE_DAYS, "ok": False,
     })
 
     @property

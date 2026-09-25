@@ -15,6 +15,7 @@ name: RSI shadow loop
         default: "rsi-real-traces"
 permissions:
   contents: read
+  actions: read
 jobs:
   shadow:
     runs-on: ubuntu-latest
@@ -25,6 +26,11 @@ jobs:
           python-version: "3.12"
       - name: Test shadow loop contracts
         run: pytest -v scripts/tests/test_learning_outcomes.py scripts/tests/test_rsi_shadow_workflow.py
+      - name: Evaluate labeled memory golden
+        run: |
+          python3 scripts/memory_eval.py eval \
+            --cases evals/memory-retrieval-golden.json \
+            --memory scripts/tests/fixtures/memory-conventions.json
       - name: Download real trace artifact
         if: ${{ (inputs.trace_run_id != '' || vars.RSI_TRACE_RUN_ID != '') && (inputs.trace_artifact_name != '' || vars.RSI_TRACE_ARTIFACT_NAME != '') }}
         uses: actions/download-artifact@v4

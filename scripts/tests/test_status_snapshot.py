@@ -139,7 +139,7 @@ def test_snapshot_all_ok_true_when_green():
     md = snap.to_markdown()
     assert "ALL GREEN" not in md
     assert "HARNESS GREEN" in md
-    assert "RSI READY" in md
+    assert "RSI NOT READY" in md
     assert "auto-generated" in md
 
 
