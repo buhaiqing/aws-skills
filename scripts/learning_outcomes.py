@@ -19,6 +19,10 @@ def _validate(event: dict) -> None:
         raise ValueError("unknown event_type")
     if not isinstance(event.get("candidate_id"), str) or not event["candidate_id"]:
         raise ValueError("candidate_id is required")
+    if event["event_type"] == "post_deploy_measured":
+        delta = event.get("delta")
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)):
+            raise ValueError("post_deploy delta must be numeric")
 
 
 def append_event(path: Path, event: dict) -> bool:
@@ -46,32 +50,65 @@ def verify_ledger(path: Path) -> bool:
     return True
 
 
+def record_queue(queue_path: Path, ledger_path: Path) -> int:
+    """Record proposed/evaluated events for a harvested candidate queue."""
+    payload = json.loads(queue_path.read_text(encoding="utf-8"))
+    candidates = payload.get("candidates", []) if isinstance(payload, dict) else []
+    recorded = 0
+    for candidate in candidates:
+        candidate_id = str(candidate.get("id", ""))
+        if not candidate_id:
+            raise ValueError("candidate id is required")
+        for event_type in ("candidate_proposed", "candidate_evaluated"):
+            event = {
+                "event_id": f"{event_type}:{candidate_id}",
+                "event_type": event_type,
+                "candidate_id": candidate_id,
+                "status": candidate.get("status", "unknown"),
+            }
+            if append_event(ledger_path, event):
+                recorded += 1
+    return recorded
+
+
 def build_report(events: list[dict]) -> dict:
     for event in events:
         _validate(event)
     counts = Counter(e["event_type"] for e in events)
     candidates = {e["candidate_id"] for e in events if e["event_type"] == "candidate_proposed"}
-    complete = {e["candidate_id"] for e in events if e["event_type"] in CHAIN[1:]}
-    complete &= candidates
+    seen: dict[str, set[str]] = {}
+    for event in events:
+        candidate_id = event["candidate_id"]
+        event_type = event["event_type"]
+        prior = seen.setdefault(candidate_id, set())
+        if event_type in CHAIN[1:] and not set(CHAIN[:CHAIN.index(event_type)]).issubset(prior):
+            raise ValueError("candidate event chain is out of order")
+        prior.add(event_type)
+    complete = {
+        candidate_id for candidate_id in candidates
+        if set(CHAIN).issubset(seen.get(candidate_id, set()))
+    }
     measured = [e for e in events if e["event_type"] == "post_deploy_measured"]
     rolled = {e["candidate_id"] for e in events if e["event_type"] == "rollback_recorded"}
     return {
         "event_counts": dict(counts),
         "candidate_count": len(candidates),
-        "complete_chains": sum(all(any(e["candidate_id"] == cid and e["event_type"] == kind for e in events) for kind in CHAIN) for cid in complete),
-        "post_deploy_delta": sum(e.get("delta", 0) for e in measured),
-        "rollback_rate": (len(rolled) / len(complete)) if complete else 0.0,
+        "complete_chains": len(complete),
+        "post_deploy_delta": sum(e["delta"] for e in measured),
+        "rollback_rate": (len(rolled & complete) / len(complete)) if complete else 0.0,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("record", "report", "verify"):
+    for name in ("record", "record-queue", "report", "verify"):
         child = sub.add_parser(name)
         child.add_argument("--ledger", type=Path, default=Path("audit-results/rsi-shadow-loop/outcomes.jsonl"))
         if name == "record":
             child.add_argument("event", help="JSON event")
+        if name == "record-queue":
+            child.add_argument("--queue", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "record":
         try:
@@ -79,6 +116,14 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, json.JSONDecodeError) as exc:
             print(json.dumps({"error": str(exc)}), file=sys.stderr)
             return 1
+        return 0
+    if args.command == "record-queue":
+        try:
+            recorded = record_queue(args.queue, args.ledger)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+            return 1
+        print(json.dumps({"recorded": recorded}))
         return 0
     if args.command == "report":
         if not verify_ledger(args.ledger):

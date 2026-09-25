@@ -441,7 +441,14 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def build_eval_evidence(path: Path, producer: str, run_id: str) -> dict[str, Any]:
+def build_eval_evidence(
+    path: Path,
+    producer: str,
+    run_id: str,
+    *,
+    regressions: list[str] | None = None,
+    no_regression: bool = True,
+) -> dict[str, Any]:
     """Build auditable evidence for a real evaluation artifact."""
     return {
         "artifact_path": str(path),
@@ -449,8 +456,8 @@ def build_eval_evidence(path: Path, producer: str, run_id: str) -> dict[str, Any
         "generated_at": _now(),
         "producer": producer,
         "run_id": run_id,
-        "regressions": [],
-        "no_regression": True,
+        "regressions": list(regressions or []),
+        "no_regression": no_regression,
     }
 
 

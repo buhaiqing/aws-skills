@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         # default: human-readable markdown to stdout
         print(snap.to_markdown())
 
-    return 0 if snap.all_ok else 1
+    return 0 if snap.rsi_ready else 1
 
 
 if __name__ == "__main__":

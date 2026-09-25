@@ -244,6 +244,22 @@ def test_evaluate_before_after_gap(tmp_path):
     assert out.after_eval["no_regression"] is False
 
 
+def test_eval_evidence_preserves_regressions(tmp_path):
+    from governed_learning import build_eval_evidence
+
+    artifact = tmp_path / "eval.json"
+    artifact.write_text('{"status":"FAIL"}', encoding="utf-8")
+    evidence = build_eval_evidence(
+        artifact,
+        producer="golden_eval",
+        run_id="run-1",
+        regressions=["scenario-x"],
+        no_regression=False,
+    )
+    assert evidence["regressions"] == ["scenario-x"]
+    assert evidence["no_regression"] is False
+
+
 def test_approve_requires_approver_and_eval(tmp_path):
     patterns = _fresh_patterns(tmp_path)
     approvals = tmp_path / "approvals.jsonl"

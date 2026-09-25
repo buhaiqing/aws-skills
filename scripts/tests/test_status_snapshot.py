@@ -114,6 +114,19 @@ def test_snapshot_separates_harness_green_from_stale_rsi_metrics():
     assert "RSI NOT READY" in md
 
 
+def test_snapshot_main_fails_when_rsi_metrics_stale(monkeypatch):
+    snap = ss.Snapshot(
+        generated_at="2026-09-25",
+        pytest={"passed": 1, "failed": 0, "error": 0, "ok": True},
+        ruff={"errors": 0, "ok": True},
+        composite_lint={"ok": True},
+        self_review={"stale_p0": 0, "ok": True},
+        metrics={"max_age_days": 7, "ok": False},
+    )
+    monkeypatch.setattr(ss, "build_snapshot", lambda: snap)
+    assert ss.main([]) == 1
+
+
 def test_snapshot_all_ok_true_when_green():
     snap = ss.Snapshot(
         generated_at="2026-07-27",

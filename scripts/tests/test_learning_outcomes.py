@@ -48,6 +48,23 @@ def test_report_counts_chain_and_delta_and_rollback_rate():
     assert report["rollback_rate"] == 1.0
 
 
+def test_report_rejects_missing_delta_and_out_of_order_chain():
+    with pytest.raises(ValueError):
+        build_report([
+            event("1", "candidate_proposed"),
+            event("2", "candidate_evaluated"),
+            event("3", "promotion_recorded"),
+            event("4", "deployment_observed"),
+            event("5", "post_deploy_measured"),
+        ])
+    with pytest.raises(ValueError):
+        build_report([
+            event("1", "candidate_proposed"),
+            event("2", "candidate_evaluated"),
+            event("3", "post_deploy_measured", delta=1),
+        ])
+
+
 def test_cli_verify_empty_ledger(tmp_path):
     path = tmp_path / "outcomes.jsonl"
     path.touch()

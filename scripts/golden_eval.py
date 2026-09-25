@@ -578,11 +578,20 @@ def main(argv: list[str] | None = None) -> int:
                         ))
                 if _gl_cands:
                     artifact = Path(args.out)
-                    evidence = _gl_evidence(artifact, producer="golden_eval", run_id=str(artifact))
                     fixture = [
                         {"id": r.scenario.get("id", "?"), "ok": r.matched_status}
                         for r in results
                     ]
+                    regressions = [
+                        str(item["id"]) for item in fixture if not item["ok"]
+                    ]
+                    evidence = _gl_evidence(
+                        artifact,
+                        producer="golden_eval",
+                        run_id=str(artifact),
+                        regressions=regressions,
+                        no_regression=not regressions,
+                    )
                     _gl_cands = [
                         _gl_eval(c, patterns_path=fp, regression_fixture=fixture)
                         for c in _gl_cands

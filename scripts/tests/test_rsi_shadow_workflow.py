@@ -18,5 +18,11 @@ def test_workflow_is_scheduled_shadow_and_safe():
     text = WORKFLOW.read_text().lower()
     assert "real trace" in text
     assert "outcomes.jsonl" in text
+    assert "actions/download-artifact" in text
+    assert "governed_learning.py harvest" in text
+    assert "learning_outcomes.py record-queue" in text
+    assert "gcl_metrics.py" in text
+    assert "gcl_runner.py --self-test" not in text
+    assert "|| true" not in text
     for forbidden in ("git push", "approve --approver", "auto_promote", "failure-patterns"):
         assert forbidden not in text

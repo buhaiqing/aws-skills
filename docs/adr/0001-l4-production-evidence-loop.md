@@ -161,7 +161,7 @@ Request
 
 ### Milestone 4 — Governed Learning
 
-**Target**: 失败经验自动产生、离线验证、人工批准后生效。
+**Target**: 失败经验自动产生、真实 artifact 离线验证；默认只进入 shadow proposal，批准策略明确后才允许写回。
 
 #### Progress (2026-07-31)
 
@@ -169,14 +169,11 @@ Request
 
 - Spec/Plan: `docs/superpowers/specs/2026-07-31-adr-m4-governed-learning-design.md` + `plans/2026-07-31-adr-m4-governed-learning.md`
 - `scripts/governed_learning.py` — harvest / dedupe / evaluate / approve / reject / report
-- 候选源：`SAFETY_FAIL` | `MAX_ITER` | `BLOCKED` | `COMPENSATION_FAIL`；长期写入 **仅** `approve --approver`
-- Fixture harvest：raw=12 unique=11 **dup_rate=8%**；`auto_promotion_rate=0%`
-- CI：`test_governed_learning.py` + harvest/evaluate/report 接入 `golden-high-risk.yml`
-
-**STILL OPEN**
-
-- 生产审计目录持续 harvest（CI 使用 `--fixtures`；live `gcl-trace-*` 可选 `--audit-dir`）
-- AUTO_HEAL 扩大（仍受 M1 满窗基线约束；本里程碑不解锁）
+- 候选源：`SAFETY_FAIL` | `MAX_ITER` | `BLOCKED` | `COMPENSATION_FAIL`；默认 shadow，不写长期资产
+- Eval evidence：原始 artifact bytes SHA256 + producer/run_id；缺失、篡改或 regression 非空均 fail closed
+- Scheduled shadow loop：仅消费配置的 real-trace artifact，过滤 stub，harvest/evaluate 后记录 append-only outcome ledger
+- `status_snapshot` 将 harness health 与 RSI readiness 分离；metrics stale 时 readiness exit 1
+- Auto-promotion 代码路径保留但不由 scheduled shadow workflow 调用；需显式策略与人工/系统批准
 
 - 从 `SAFETY_FAIL`, `MAX_ITER`, `BLOCKED`, compensation failure 生成候选 failure pattern。
 - 自动去重、最小化并关联资源类型和场景证据。
@@ -187,7 +184,9 @@ Request
 
 - [x] 候选规则重复率 <10%（fixture = 8%）。
 - [x] 规则提升必须有 before/after eval 证据（无 evidence → approve 拒绝）。
-- [x] 自动晋升率保持 0%；所有长期规则均可追溯到批准记录（`approvals.jsonl`）。
+- [x] 规则提升必须有真实 eval artifact + SHA256；无 evidence、hash 不匹配或 regression 非空均拒绝
+- [x] Scheduled shadow loop 不写长期规则、不 push、不修改 AWS；ledger event 可幂等重放
+- [ ] 真实生产 trace artifact source 已持续接入并形成 30 天 promotion effectiveness 基线
 
 ## Metrics and SLOs
 
