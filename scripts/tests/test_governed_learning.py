@@ -5,6 +5,7 @@ import inspect
 import json
 import subprocess
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,6 +47,7 @@ from governed_learning import (  # noqa: E402
     main,
     reject_candidate,
     report,
+    save_candidate_state,
     save_queue,
     validate_eval_evidence,
 )
@@ -1167,10 +1169,6 @@ def test_save_candidate_state_concurrent_unique_temp(tmp_path):
     Each call now uses a unique temp name in ``path.parent``, so concurrent
     writes cannot clobber each other.
     """
-    import threading
-
-    from governed_learning import save_candidate_state
-
     target = tmp_path / "candidate-state.json"
     errors: list[Exception] = []
     written: dict[int, dict] = {}
@@ -1203,3 +1201,6 @@ def test_save_candidate_state_concurrent_unique_temp(tmp_path):
     #     (last writer wins; never a torn/corrupted file).
     final = json.loads(target.read_text(encoding="utf-8"))
     assert final in written.values(), f"final state not a valid write: {final}"
+
+    # (c) no orphaned temp files left behind in the target directory.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["candidate-state.json"]

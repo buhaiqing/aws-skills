@@ -184,17 +184,20 @@ def save_candidate_state(
         dir=path.parent, prefix=path.stem + ".", suffix=".tmp"
     )
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh = os.fdopen(fd, "w", encoding="utf-8")
+    except BaseException:
+        # fdopen never took ownership, so close the descriptor ourselves.
+        os.close(fd)
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+    try:
+        with fh:
             fh.write(
                 json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
             )
-        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
         raise
 
 
