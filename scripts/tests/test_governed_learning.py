@@ -5,6 +5,7 @@ import inspect
 import json
 import subprocess
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,6 +47,7 @@ from governed_learning import (  # noqa: E402
     main,
     reject_candidate,
     report,
+    save_candidate_state,
     save_queue,
     validate_eval_evidence,
 )
@@ -1156,3 +1158,49 @@ def test_report_default_handles_missing_queue_file(tmp_path, capsys):
     assert out["pending_total"] == 0
     assert out["age_histogram_hours"] == {}
     assert "run 'harvest' first" in out["note"]
+
+
+def test_save_candidate_state_concurrent_unique_temp(tmp_path):
+    """Concurrent save_candidate_state must not raise or corrupt the file.
+
+    Regression for the fixed-temp-name bug: all writers shared one
+    ``candidate-state.json.tmp``; a racing ``os.replace`` consumed another
+    writer's temp file, raising FileNotFoundError and dropping that write.
+    Each call now uses a unique temp name in ``path.parent``, so concurrent
+    writes cannot clobber each other.
+    """
+    target = tmp_path / "candidate-state.json"
+    errors: list[Exception] = []
+    written: dict[int, dict] = {}
+
+    def writer(idx: int) -> None:
+        # Each thread writes a distinct, identifiable state.
+        state = {
+            f"sig-{idx}": {
+                "first_seen": "2026-01-01T00:00:00Z",
+                "attempt_count": idx,
+            }
+        }
+        written[idx] = state
+        try:
+            for _ in range(100):
+                save_candidate_state(state, path=target)
+        except Exception as exc:  # noqa: BLE001 - surface any writer failure
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # (a) no writer raised (the broken code throws FileNotFoundError here).
+    assert not errors, f"concurrent writes raised: {errors[:3]}"
+
+    # (b) final file parses and equals exactly one thread's written state
+    #     (last writer wins; never a torn/corrupted file).
+    final = json.loads(target.read_text(encoding="utf-8"))
+    assert final in written.values(), f"final state not a valid write: {final}"
+
+    # (c) no orphaned temp files left behind in the target directory.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["candidate-state.json"]

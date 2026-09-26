@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -171,14 +172,33 @@ def save_candidate_state(
     state: dict[str, dict[str, Any]],
     path: Path = CANDIDATE_STATE_PATH,
 ) -> None:
-    """Atomically persist first_seen + attempt_count in a single replace."""
+    """Atomically persist first_seen + attempt_count in a single replace.
+
+    Each call writes to a unique temp file inside ``path.parent`` (same
+    filesystem, so ``os.replace`` stays atomic). A fixed temp name would let
+    concurrent writers clobber each other's in-flight file and raise
+    FileNotFoundError on ``os.replace``.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(
-        json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
+    fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent, prefix=path.stem + ".", suffix=".tmp"
     )
-    os.replace(tmp_path, path)
+    try:
+        fh = os.fdopen(fd, "w", encoding="utf-8")
+    except BaseException:
+        # fdopen never took ownership, so close the descriptor ourselves.
+        os.close(fd)
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+    try:
+        with fh:
+            fh.write(
+                json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+        os.replace(tmp_path, path)
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
 
 def compute_confidence(candidate: CandidateRule) -> float:
